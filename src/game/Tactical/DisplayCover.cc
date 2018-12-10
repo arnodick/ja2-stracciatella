@@ -413,6 +413,10 @@ void DisplayRangeToTarget(SOLDIERTYPE const* const s, INT16 const sTargetGridNo)
 		ScreenMsg(FONT_MCOLOR_LTYELLOW, MSG_INTERFACE,
 				zNewTacticalMessages[TCTL_MSG__RANGE_TO_TARGET_AND_GUN_RANGE],
 				GCM->getWeapon(s->inv[HANDPOS].usItem)->usRange / 10, usRange);
+
+		const wchar_t *test = L"ASH LOVES DAWN";
+		ScreenMsg(FONT_MCOLOR_LTYELLOW, MSG_INTERFACE,
+			test);
 	}
 	else
 	{
