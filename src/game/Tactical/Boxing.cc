@@ -66,7 +66,7 @@ void ExitBoxing(void)
 			// if necessary, revive boxer so he can leave ring
 			if (s->bLife > 0 && (s->bLife < OKLIFE || s->bBreath < OKBREATH))
 			{
-				s->bLife = __max(OKLIFE * 2, s->bLife);
+				s->bLife = std::max(OKLIFE * 2, int(s->bLife));
 				if (s->bBreath < 100)
 				{
 					// deduct -ve BPs to grant some BPs back (properly)
@@ -128,16 +128,16 @@ void TriggerEndOfBoxingRecord( SOLDIERTYPE * pSoldier )
 		switch( gTacticalStatus.bBoxingState )
 		{
 			case WON_ROUND:
-				AddHistoryToPlayersLog( HISTORY_WON_BOXING, pSoldier->ubProfile, GetWorldTotalMin(), gWorldSectorX, gWorldSectorY );
+				AddHistoryToPlayersLog(HISTORY_WON_BOXING, pSoldier->ubProfile, GetWorldTotalMin(), gWorldSector);
 				TriggerNPCRecord( DARREN, 23 );
 				break;
 			case LOST_ROUND:
 				// log as lost
-				AddHistoryToPlayersLog( HISTORY_LOST_BOXING, pSoldier->ubProfile, GetWorldTotalMin(), gWorldSectorX, gWorldSectorY );
+				AddHistoryToPlayersLog(HISTORY_LOST_BOXING, pSoldier->ubProfile, GetWorldTotalMin(), gWorldSector);
 				TriggerNPCRecord( DARREN, 24 );
 				break;
 			case DISQUALIFIED:
-				AddHistoryToPlayersLog( HISTORY_DISQUALIFIED_BOXING, pSoldier->ubProfile, GetWorldTotalMin(), gWorldSectorX, gWorldSectorY );
+				AddHistoryToPlayersLog(HISTORY_DISQUALIFIED_BOXING, pSoldier->ubProfile, GetWorldTotalMin(), gWorldSector);
 				break;
 		}
 	}
@@ -304,10 +304,10 @@ static void PickABoxer()
 			RESETTIMECOUNTER(boxer->AICounter, 0);
 			gfBoxerFought[i] = TRUE;
 			// Improve stats based on the # of rests these guys have had
-			boxer->bStrength  = __min(100, boxer->bStrength  + gubBoxersRests * 5);
-			boxer->bDexterity = __min(100, boxer->bDexterity + gubBoxersRests * 5);
-			boxer->bAgility   = __min(100, boxer->bAgility   + gubBoxersRests * 5);
-			boxer->bLifeMax   = __min(100, boxer->bLifeMax   + gubBoxersRests * 5);
+			boxer->bStrength  = std::min(100, boxer->bStrength  + gubBoxersRests * 5);
+			boxer->bDexterity = std::min(100, boxer->bDexterity + gubBoxersRests * 5);
+			boxer->bAgility   = std::min(100, boxer->bAgility   + gubBoxersRests * 5);
+			boxer->bLifeMax   = std::min(100, boxer->bLifeMax   + gubBoxersRests * 5);
 			// Give the 3rd boxer martial arts
 			if (i == NUM_BOXERS - 1 && boxer->ubBodyType == REGMALE)
 			{
@@ -386,7 +386,7 @@ void BoxingMovementCheck( SOLDIERTYPE * pSoldier )
 		// boxer stepped out of the ring!
 		BoxingPlayerDisqualified( pSoldier, BOXER_OUT_OF_RING );
 		// add the history record here.
-		AddHistoryToPlayersLog( HISTORY_DISQUALIFIED_BOXING, pSoldier->ubProfile, GetWorldTotalMin(), gWorldSectorX, gWorldSectorY );
+		AddHistoryToPlayersLog(HISTORY_DISQUALIFIED_BOXING, pSoldier->ubProfile, GetWorldTotalMin(), gWorldSector);
 		// make not a boxer any more
 		pSoldier->uiStatusFlags &= ~(SOLDIER_BOXER);
 		pSoldier->uiStatusFlags &= (~SOLDIER_PCUNDERAICONTROL);

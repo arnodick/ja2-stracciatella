@@ -13,6 +13,11 @@
 #include "ContentManager.h"
 #include "GameInstance.h"
 
+#include <string_theory/format>
+#include <string_theory/string>
+
+#include <algorithm>
+
 #define FLOR_GALLERY_TITLE_FONT			FONT10ARIAL
 #define FLOR_GALLERY_TITLE_COLOR		FONT_MCOLOR_WHITE
 
@@ -72,18 +77,18 @@ static GUIButtonRef guiGalleryButton[FLOR_GALLERY_NUMBER_FLORAL_BUTTONS];
 
 //Next Previous buttons
 static BUTTON_PICS* guiFloralGalleryButtonImage;
-static void BtnFloralGalleryNextButtonCallback(GUI_BUTTON *btn, INT32 reason);
-static void BtnFloralGalleryBackButtonCallback(GUI_BUTTON *btn, INT32 reason);
+static void BtnFloralGalleryNextButtonCallback(GUI_BUTTON *btn, UINT32 reason);
+static void BtnFloralGalleryBackButtonCallback(GUI_BUTTON *btn, UINT32 reason);
 GUIButtonRef guiFloralGalleryButton[2];
 
 
 void EnterInitFloristGallery()
 {
-	memset( &FloristGallerySubPagesVisitedFlag, 0, 4);
+	std::fill_n(FloristGallerySubPagesVisitedFlag, 4, 0);
 }
 
 
-static GUIButtonRef MakeButton(const wchar_t* text, INT16 x, GUI_CALLBACK click)
+static GUIButtonRef MakeButton(const ST::string& text, INT16 x, GUI_CALLBACK click)
 {
 	const INT16 shadow_col = FLORIST_BUTTON_TEXT_SHADOW_COLOR;
 	GUIButtonRef const btn = CreateIconAndTextButton(guiFloralGalleryButtonImage, text, FLORIST_BUTTON_TEXT_FONT, FLORIST_BUTTON_TEXT_UP_COLOR, shadow_col, FLORIST_BUTTON_TEXT_DOWN_COLOR, shadow_col, x, FLOR_GALLERY_BUTTON_Y, MSYS_PRIORITY_HIGH, click);
@@ -167,9 +172,9 @@ void RenderFloristGallery()
 static void ChangingFloristGallerySubPage(UINT8 ubSubPageNumber);
 
 
-static void BtnFloralGalleryNextButtonCallback(GUI_BUTTON *btn, INT32 reason)
+static void BtnFloralGalleryNextButtonCallback(GUI_BUTTON *btn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		if (gubCurFlowerIndex + 3 <= FLOR_GALLERY_NUMBER_FLORAL_IMAGES)
 			gubCurFlowerIndex += 3;
@@ -180,9 +185,9 @@ static void BtnFloralGalleryNextButtonCallback(GUI_BUTTON *btn, INT32 reason)
 }
 
 
-static void BtnFloralGalleryBackButtonCallback(GUI_BUTTON *btn, INT32 reason)
+static void BtnFloralGalleryBackButtonCallback(GUI_BUTTON *btn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		if (gubCurFlowerIndex != 0)
 		{
@@ -201,9 +206,9 @@ static void BtnFloralGalleryBackButtonCallback(GUI_BUTTON *btn, INT32 reason)
 }
 
 
-static void BtnGalleryFlowerButtonCallback(GUI_BUTTON *btn, INT32 reason)
+static void BtnGalleryFlowerButtonCallback(GUI_BUTTON *btn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		guiCurrentlySelectedFlower = btn->GetUserData();
 		guiCurrentLaptopMode = LAPTOP_MODE_FLORIST_ORDERFORM;
@@ -216,7 +221,6 @@ static void InitFlowerButtons(void)
 {
 	UINT16 i,j, count;
 	UINT16 usPosY;
-	char		sTemp[40];
 
 	if( (FLOR_GALLERY_NUMBER_FLORAL_IMAGES - gubCurFlowerIndex) >= 3 )
 		gubCurNumberOfFlowers = 3;
@@ -230,7 +234,7 @@ static void InitFlowerButtons(void)
 	for(i=0; i<gubCurNumberOfFlowers; i++)
 	{
 		// load the handbullet graphic and add it
-		sprintf(sTemp, LAPTOPDIR "/flower_%d.sti", count);
+		ST::string sTemp = ST::format(LAPTOPDIR "/flower_{}.sti", count);
 		guiFlowerImages[i] = AddVideoObjectFromFile(sTemp);
 		count++;
 	}
@@ -252,7 +256,7 @@ static void InitFlowerButtons(void)
 	}
 
 	//if its the first page, display the 'back' text  in place of the 'prev' text on the top left button
-	wchar_t const* const text = gubCurFlowerIndex == 0 ?
+	ST::string text = gubCurFlowerIndex == 0 ?
 		sFloristGalleryText[FLORIST_GALLERY_HOME] :
 		sFloristGalleryText[FLORIST_GALLERY_PREV];
 	guiFloralGalleryButton[0]->SpecifyText(text);
@@ -296,27 +300,25 @@ static BOOLEAN DisplayFloralDescriptions(void)
 	{
 		{
 			//Display Flower title
-			wchar_t sTemp[FLOR_GALLERY_TEXT_TITLE_SIZE];
 			uiStartLoc = FLOR_GALLERY_TEXT_TOTAL_SIZE * (i + gubCurFlowerIndex);
-			GCM->loadEncryptedString(FLOR_GALLERY_TEXT_FILE, sTemp, uiStartLoc, FLOR_GALLERY_TEXT_TITLE_SIZE);
+			ST::string sTemp = GCM->loadEncryptedString(FLOR_GALLERY_TEXT_FILE, uiStartLoc, FLOR_GALLERY_TEXT_TITLE_SIZE);
 			DrawTextToScreen(sTemp, FLOR_GALLERY_FLOWER_TITLE_X, usPosY + FLOR_GALLERY_FLOWER_TITLE_OFFSET_Y, 0, FLOR_GALLERY_FLOWER_TITLE_FONT, FLOR_GALLERY_FLOWER_TITLE_COLOR, FONT_MCOLOR_BLACK, LEFT_JUSTIFIED);
 		}
 
 		{
 			//Display Flower Price
-			wchar_t sTemp[FLOR_GALLERY_TEXT_PRICE_SIZE];
+			ST::string sTemp;
 			uiStartLoc += FLOR_GALLERY_TEXT_TITLE_SIZE;
-			GCM->loadEncryptedString(FLOR_GALLERY_TEXT_FILE, sTemp, uiStartLoc, FLOR_GALLERY_TEXT_PRICE_SIZE);
-			swscanf( sTemp, L"%hu", &usPrice);
-			swprintf(sTemp, lengthof(sTemp), L"$%d.00 %ls", usPrice, pMessageStrings[MSG_USDOLLAR_ABBREVIATION]);
+			sTemp = GCM->loadEncryptedString(FLOR_GALLERY_TEXT_FILE, uiStartLoc, FLOR_GALLERY_TEXT_PRICE_SIZE);
+			sscanf(sTemp.c_str(), "%hu", &usPrice);
+			sTemp = ST::format("${}.00 {}", usPrice, pMessageStrings[MSG_USDOLLAR_ABBREVIATION]);
 			DrawTextToScreen(sTemp, FLOR_GALLERY_FLOWER_TITLE_X, usPosY + FLOR_GALLERY_FLOWER_PRICE_OFFSET_Y, 0, FLOR_GALLERY_FLOWER_PRICE_FONT, FLOR_GALLERY_FLOWER_PRICE_COLOR, FONT_MCOLOR_BLACK, LEFT_JUSTIFIED);
 		}
 
 		{
 			//Display Flower Desc
-			wchar_t sTemp[FLOR_GALLERY_TEXT_DESC_SIZE];
 			uiStartLoc += FLOR_GALLERY_TEXT_PRICE_SIZE;
-			GCM->loadEncryptedString(FLOR_GALLERY_TEXT_FILE, sTemp, uiStartLoc, FLOR_GALLERY_TEXT_DESC_SIZE);
+			ST::string sTemp = GCM->loadEncryptedString(FLOR_GALLERY_TEXT_FILE, uiStartLoc, FLOR_GALLERY_TEXT_DESC_SIZE);
 			DisplayWrappedString(FLOR_GALLERY_FLOWER_TITLE_X, usPosY + FLOR_GALLERY_FLOWER_DESC_OFFSET_Y, FLOR_GALLERY_DESC_WIDTH, 2, FLOR_GALLERY_FLOWER_DESC_FONT, FLOR_GALLERY_FLOWER_DESC_COLOR, sTemp, FONT_MCOLOR_BLACK, LEFT_JUSTIFIED);
 		}
 
@@ -331,18 +333,15 @@ static void ChangingFloristGallerySubPage(UINT8 ubSubPageNumber)
 {
 	fLoadPendingFlag = TRUE;
 
-	//there are 3 flowers per page
-	if( ubSubPageNumber == FLOR_GALLERY_NUMBER_FLORAL_IMAGES )
-		ubSubPageNumber = 4;
-	else
-		ubSubPageNumber = ubSubPageNumber / 3;
+	//there are 3 flowers per page, 4 pages in total
+	UINT8 ubPageNumber = std::min(ubSubPageNumber / 3, 3);
 
-	if (!FloristGallerySubPagesVisitedFlag[ubSubPageNumber])
+	if (!FloristGallerySubPagesVisitedFlag[ubPageNumber])
 	{
 		fConnectingToSubPage = TRUE;
 		fFastLoadFlag = FALSE;
 
-		FloristGallerySubPagesVisitedFlag[ ubSubPageNumber ] = TRUE;
+		FloristGallerySubPagesVisitedFlag[ubPageNumber] = TRUE;
 	}
 	else
 	{

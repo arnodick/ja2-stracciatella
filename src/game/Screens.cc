@@ -1,4 +1,3 @@
-#include "AniViewScreen.h"
 #include "Auto_Resolve.h"
 #include "Credits.h"
 #include "EditScreen.h"
@@ -11,7 +10,6 @@
 #include "LoadScreen.h"
 #include "MainMenuScreen.h"
 #include "MapScreen.h"
-#include "MapUtility.h"
 #include "MessageBoxScreen.h"
 #include "Options_Screen.h"
 #include "Quest_Debug_System.h"
@@ -28,13 +26,13 @@ Screens const GameScreens[] =
 	{ NULL,                 ErrorScreenHandle,           NULL                     }, // Title Screen
 	{ NULL,                 InitScreenHandle,            NULL                     }, // Title Screen
 	{ MainGameScreenInit,   MainGameScreenHandle,        MainGameScreenShutdown   },
-	{ NULL,                 AniEditScreenHandle,         NULL                     },
+	{ NULL,                 NULL,                        NULL                     }, // was AniEditScreen
 	{ NULL,                 PalEditScreenHandle,         NULL                     },
 	{ NULL,                 DebugScreenHandle,           NULL                     },
 	{ MapScreenInit,        MapScreenHandle,             MapScreenShutdown        },
 	{ LaptopScreenInit,     LaptopScreenHandle,          LaptopScreenShutdown     },
 	{ NULL,                 LoadSaveScreenHandle,        NULL                     },
-	{ NULL,                 MapUtilScreenHandle,         NULL                     },
+	{ NULL,                 NULL,                        NULL                     }, // was MapUtilityScreen
 	{ NULL,                 FadeScreenHandle,            NULL                     },
 	{ NULL,                 MessageBoxScreenHandle,      MessageBoxScreenShutdown },
 	{ NULL,                 MainMenuScreenHandle,        NULL                     },

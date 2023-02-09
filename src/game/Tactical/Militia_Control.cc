@@ -1,11 +1,13 @@
-#include "Soldier_Control.h"
 #include "Militia_Control.h"
-#include "Town_Militia.h"
-#include "Soldier_Init_List.h"
 #include "Campaign_Types.h"
 #include "Overhead.h"
+#include "Overhead_Types.h"
+#include "Soldier_Control.h"
+#include "Soldier_Create.h"
+#include "Soldier_Init_List.h"
 #include "StrategicMap.h"
-#include "PreBattle_Interface.h"
+#include "Town_Militia.h"
+#include <stdexcept>
 
 
 BOOLEAN gfStrategicMilitiaChangesMade = FALSE;
@@ -27,7 +29,7 @@ void ResetMilitia()
 
 static void RemoveMilitiaFromTactical(void)
 {
-	FOR_EACH_IN_TEAM(i, MILITIA_TEAM) TacticalRemoveSoldier(*i);
+	TrashAllSoldiers(MILITIA_TEAM);
 	FOR_EACH_SOLDIERINITNODE(curr)
 	{
 		if( curr->pBasicPlacement->bTeam == MILITIA_TEAM )
@@ -42,14 +44,14 @@ void PrepareMilitiaForTactical()
 	SECTORINFO *pSector;
 	//INT32 i;
 	UINT8 ubGreen, ubRegs, ubElites;
-	if( gbWorldSectorZ > 0 )
+	if (gWorldSector.z > 0)
 		return;
 
 	// Do we have a loaded sector?
-	if ( gWorldSectorX ==0 && gWorldSectorY == 0 )
+	if (gWorldSector.x == 0 && gWorldSector.y == 0)
 		return;
 
-	pSector = &SectorInfo[ SECTOR( gWorldSectorX, gWorldSectorY ) ];
+	pSector = &SectorInfo[gWorldSector.AsByte()];
 	ubGreen = pSector->ubNumberOfCivsAtLevel[ GREEN_MILITIA ];
 	ubRegs = pSector->ubNumberOfCivsAtLevel[ REGULAR_MILITIA ];
 	ubElites = pSector->ubNumberOfCivsAtLevel[ ELITE_MILITIA ];
@@ -72,7 +74,9 @@ void HandleMilitiaPromotions()
 		if (s.ubMilitiaKills == 0) continue;
 
 		UINT8 militia_rank = SoldierClassToMilitiaRank(s.ubSoldierClass);
-		UINT8 const promotions   = CheckOneMilitiaForPromotion(gWorldSectorX, gWorldSectorY, militia_rank, s.ubMilitiaKills);
+		if (militia_rank >= MAX_MILITIA_LEVELS)      throw std::logic_error("invalid militia rank");
+
+		UINT8 const promotions   = CheckOneMilitiaForPromotion(gWorldSector, militia_rank, s.ubMilitiaKills);
 		if (promotions != 0)
 		{
 			if (militia_rank == ELITE_MILITIA) {

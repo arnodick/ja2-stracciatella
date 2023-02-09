@@ -29,7 +29,6 @@
 #include "Soldier_Profile_Type.h"
 #include "SmokeEffects.h"
 #include "LightEffects.h"
-#include "Air_Raid.h"
 #include "Meanwhile.h"
 #include "SkillCheck.h"
 #include "AIInternals.h"
@@ -41,12 +40,18 @@
 #include "NPC.h"
 #include "Debug.h"
 #include "Items.h"
-#include "slog/slog.h"
+#include "Logger.h"
 
 // for that single policy check :|
 #include "GamePolicy.h"
 #include "ContentManager.h"
 #include "GameInstance.h"
+
+#include <string_theory/format>
+#include <string_theory/string>
+
+#include <algorithm>
+#include <iterator>
 
 static SOLDIERTYPE* gOutOfTurnOrder[MAXMERCS];
 UINT8 gubOutOfTurnPersons = 0;
@@ -71,7 +76,7 @@ extern SightFlags gubSightFlags;
 
 void ClearIntList( void )
 {
-	memset(gOutOfTurnOrder, 0, sizeof(gOutOfTurnOrder));
+	std::fill(std::begin(gOutOfTurnOrder), std::end(gOutOfTurnOrder), nullptr);
 	gubOutOfTurnPersons = 0;
 }
 
@@ -207,6 +212,9 @@ void EndTurn( UINT8 ubNextTeam )
 		// Loop through all mercs and set to moved
 		FOR_EACH_IN_TEAM(s, gTacticalStatus.ubCurrentTeam)
 		{
+			// Only do this for mercs that are actually in this sector
+			if (!s->bInSector) continue;
+
 			s->bMoved = TRUE;
 			// Cancel merc movement if continue path was not used
 			const INT16 sAPCost = PtsToMoveDirection(s, s->ubPathingData[0]);
@@ -282,8 +290,8 @@ static void EndTurnEvents(void)
 	// decay bomb timers and maybe set some off!
 	DecayBombTimers();
 
-	DecaySmokeEffects( GetWorldTotalSeconds( ) );
-	DecayLightEffects( GetWorldTotalSeconds( ) );
+	DecaySmokeEffects(GetWorldTotalSeconds(), true);
+	DecayLightEffects(GetWorldTotalSeconds(), true);
 
 	// decay AI warning values from corpses
 	DecayRottingCorpseAIWarnings();
@@ -296,17 +304,11 @@ void BeginTeamTurn( UINT8 ubTeam )
 	{
 		if ( ubTeam > LAST_TEAM )
 		{
-			if ( HandleAirRaidEndTurn( ubTeam ) )
-			{
-				// End turn!!
-				ubTeam = OUR_TEAM;
-				gTacticalStatus.ubCurrentTeam = OUR_TEAM;
-				EndTurnEvents();
-			}
-			else
-			{
-				break;
-			}
+			// End turn!!
+			ubTeam = OUR_TEAM;
+			gTacticalStatus.ubCurrentTeam = OUR_TEAM;
+			EndTurnEvents();
+
 		}
 		else if (!IsTeamActive(ubTeam))
 		{
@@ -400,9 +402,12 @@ void DisplayHiddenInterrupt( SOLDIERTYPE * pSoldier )
 
 	// Stop our guy....
 	SOLDIERTYPE* const latest = LatestInterruptGuy();
-	AdjustNoAPToFinishMove(latest, TRUE);
-	// Stop him from going to prone position if doing a turn while prone
-	latest->fTurningFromPronePosition = FALSE;
+	if (latest)
+	{
+		AdjustNoAPToFinishMove(latest, TRUE);
+		// Stop him from going to prone position if doing a turn while prone
+		latest->fTurningFromPronePosition = FALSE;
+	}
 
 	// get rid of any old overlay message
 	const MESSAGE_TYPES msg =
@@ -436,7 +441,7 @@ void DisplayHiddenTurnbased( SOLDIERTYPE * pActingSoldier )
 	CommonEnterCombatModeCode( );
 
 	SetSoldierAsUnderAiControl( pActingSoldier );
-	SLOGD(DEBUG_TAG_AI, "Giving AI control to %d", pActingSoldier->ubID);
+	SLOGD("Giving AI control to {}", pActingSoldier->ubID);
 	pActingSoldier->fTurnInProgress = TRUE;
 	gTacticalStatus.uiTimeSinceMercAIStart = GetJA2Clock();
 
@@ -507,7 +512,7 @@ static void StartInterrupt(void)
 	// display everyone on int queue!
 	for (INT32 cnt = gubOutOfTurnPersons; cnt > 0; --cnt)
 	{
-		SLOGD(DEBUG_TAG_TEAMTURN, "STARTINT: Q position %d: %d", cnt, gOutOfTurnOrder[cnt]->ubID);
+		SLOGD("STARTINT: Q position {}: {}", cnt, gOutOfTurnOrder[cnt]->ubID);
 	}
 
 	gTacticalStatus.fInterruptOccurred = TRUE;
@@ -521,14 +526,13 @@ static void StartInterrupt(void)
 	if (first_interrupter->bTeam == OUR_TEAM)
 	{
 		// start interrupts for everyone on our side at once
-		wchar_t sTemp[ 255 ];
 		UINT8   ubInterrupters = 0;
 
 		// build string for display of who gets interrupt
 		while( 1 )
 		{
 			Interrupter->bMoved = FALSE;
-			SLOGD(DEBUG_TAG_TEAMTURN, "INTERRUPT: popping %d off of the interrupt queue", Interrupter->ubID);
+			SLOGD("INTERRUPT: popping {} off of the interrupt queue", Interrupter->ubID);
 
 			REMOVE_LATEST_INTERRUPT_GUY();
 			// now LatestInterruptGuy() is the guy before the previous
@@ -544,7 +548,7 @@ static void StartInterrupt(void)
 			}
 		}
 
-		wcscpy( sTemp, g_langRes->Message[ STR_INTERRUPT_FOR ] );
+		ST::string sTemp = g_langRes->Message[STR_INTERRUPT_FOR];
 
 		// build string in separate loop here, want to linearly process squads...
 		for (INT32 iSquad = 0; iSquad < NUMBER_OF_SQUADS; ++iSquad)
@@ -561,21 +565,26 @@ static void StartInterrupt(void)
 				{
 					// flush... display string, then clear it (we could have 20 names!)
 					// add comma to end, we know we have another person after this...
-					wcscat( sTemp, L", " );
+					sTemp += ", ";
 					ScreenMsg( FONT_MCOLOR_LTYELLOW, MSG_INTERFACE, sTemp );
-					wcscpy( sTemp, L"" );
+					sTemp = ST::null;
 					ubInterrupters = 1;
 				}
 
 				if ( ubInterrupters > 1 )
 				{
-					wcscat( sTemp, L", " );
+					sTemp += ", ";
 				}
-				wcscat(sTemp, s->name);
+				sTemp += s->name;
 			}
 		}
 
-		SLOGD(DEBUG_TAG_TEAMTURN, "INTERRUPT: starting interrupt for %d", first_interrupter->ubID);
+		if (!sTemp.empty())
+		{
+			ScreenMsg(FONT_MCOLOR_LTYELLOW, MSG_INTERFACE, sTemp);
+		}
+
+		SLOGD("INTERRUPT: starting interrupt for {}", first_interrupter->ubID);
 
 		// Select guy....
 		SelectSoldier(first_interrupter, SELSOLDIER_ACKNOWLEDGE | SELSOLDIER_FORCE_RESELECT);
@@ -615,7 +624,7 @@ static void StartInterrupt(void)
 		{
 			Interrupter->bMoved = FALSE;
 
-			SLOGD(DEBUG_TAG_TEAMTURN, "INTERRUPT: popping %d off of the interrupt queue", Interrupter->ubID);
+			SLOGD("INTERRUPT: popping {} off of the interrupt queue", Interrupter->ubID);
 
 			REMOVE_LATEST_INTERRUPT_GUY();
 			// now LatestInterruptGuy() is the guy before the previous
@@ -654,7 +663,7 @@ static void StartInterrupt(void)
 
 		gTacticalStatus.ubCurrentTeam  = pSoldier->bTeam;
 
-		SLOGD(DEBUG_TAG_TEAMTURN, "Interrupt ( could be hidden )" );
+		SLOGD("Interrupt ( could be hidden )" );
 
 		StartNPCAI(*pSoldier);
 	}
@@ -676,7 +685,7 @@ static void EndInterrupt(BOOLEAN fMarkInterruptOccurred)
 
 	for (INT32 cnt = gubOutOfTurnPersons; cnt > 0; --cnt)
 	{
-		SLOGD(DEBUG_TAG_TEAMTURN, "ENDINT: Q position %d: %d", cnt, gOutOfTurnOrder[cnt]->ubID);
+		SLOGD("ENDINT: Q position {}: {}", cnt, gOutOfTurnOrder[cnt]->ubID);
 	}
 
 	// ATE: OK, now if this all happended on one frame, we may not have to stop
@@ -714,7 +723,7 @@ static void EndInterrupt(BOOLEAN fMarkInterruptOccurred)
 	else
 	{
 		SOLDIERTYPE* const interrupted = LatestInterruptGuy();
-		SLOGD(DEBUG_TAG_TEAMTURN, "INTERRUPT: interrupt over, %d's team regains control", interrupted->ubID);
+		SLOGD("INTERRUPT: interrupt over, {}'s team regains control", interrupted->ubID);
 
 		FOR_EACH_SOLDIER(s)
 		{
@@ -1141,7 +1150,7 @@ INT8 CalcInterruptDuelPts(const SOLDIERTYPE* const pSoldier, const SOLDIERTYPE* 
 		{
 			// modify by the difficulty level setting
 			bPoints += gbDiff[ DIFF_ENEMY_INTERRUPT_MOD ][ SoldierDifficultyLevel( pSoldier ) ];
-			bPoints = __max( bPoints, 9 );
+			bPoints = std::max(bPoints, 9);
 		}
 		*/
 
@@ -1268,7 +1277,7 @@ INT8 CalcInterruptDuelPts(const SOLDIERTYPE* const pSoldier, const SOLDIERTYPE* 
 	{
 		bPoints = AUTOMATIC_INTERRUPT - 1; // hack it to one less than max so its legal
 	}
-	SLOGD(DEBUG_TAG_TEAMTURN, "Calculating int pts for %d vs %d, number is %d",
+	SLOGD("Calculating int pts for {} vs {}, number is {}",
 		pSoldier->ubID, opponent->ubID, bPoints);
 	return( bPoints );
 }
@@ -1295,7 +1304,7 @@ BOOLEAN InterruptDuel( SOLDIERTYPE * pSoldier, SOLDIERTYPE * pOpponent)
 			fResult = TRUE;
 		}
 	}
-	//ScreenMsg( FONT_MCOLOR_LTYELLOW, MSG_INTERFACE, L"Interrupt duel %d (%d pts) vs %d (%d pts)", pSoldier->ubID, pSoldier->bInterruptDuelPts, pOpponent->ubID, pOpponent->bInterruptDuelPts );
+	//ScreenMsg( FONT_MCOLOR_LTYELLOW, MSG_INTERFACE, ST::format("Interrupt duel {} ({} pts) vs {} ({} pts)", pSoldier->ubID, pSoldier->bInterruptDuelPts, pOpponent->ubID, pOpponent->bInterruptDuelPts) );
 	return( fResult );
 }
 
@@ -1308,7 +1317,7 @@ static void DeleteFromIntList(UINT8 ubIndex, BOOLEAN fCommunicate)
 	{
 		return;
 	}
-	SLOGD(DEBUG_TAG_TEAMTURN, "INTERRUPT: removing ID %d", gOutOfTurnOrder[ubIndex]->ubID);
+	SLOGD("INTERRUPT: removing ID {}", gOutOfTurnOrder[ubIndex]->ubID);
 
 	// if we're NOT deleting the LAST entry in the int list
 	if (ubIndex < gubOutOfTurnPersons)
@@ -1330,7 +1339,7 @@ void AddToIntList(SOLDIERTYPE* const s, const BOOLEAN fGainControl, const BOOLEA
 {
 	UINT8 ubLoop;
 
-	SLOGD(DEBUG_TAG_TEAMTURN, "INTERRUPT: adding ID %d who %s",
+	SLOGD("INTERRUPT: adding ID {} who {}",
 				s->ubID, fGainControl ? "gains control" : "loses control");
 
 	// check whether 'who' is already anywhere on the queue after the first index
@@ -1371,7 +1380,7 @@ void AddToIntList(SOLDIERTYPE* const s, const BOOLEAN fGainControl, const BOOLEA
 		// turn off AI control flag if they lost control
 		if (s->uiStatusFlags & SOLDIER_UNDERAICONTROL)
 		{
-			SLOGD(DEBUG_TAG_AI, "Taking away AI control from %d", s->ubID);
+			SLOGD("Taking away AI control from {}", s->ubID);
 			s->uiStatusFlags &= ~SOLDIER_UNDERAICONTROL;
 		}
 	}
@@ -1527,7 +1536,7 @@ void ResolveInterruptsVs( SOLDIERTYPE * pSoldier, UINT8 ubInterruptType)
 							if ( PythSpacesAway( pSoldier->sGridNo, pOpponent->sGridNo ) > MaxDistanceVisible() )
 							{
 								pOpponent->bInterruptDuelPts = NO_INTERRUPT;
-								SLOGD(DEBUG_TAG_TEAMTURN, "Resetting int pts for %d - NOISE BEYOND SIGHT DISTANCE!?",
+								SLOGD("Resetting int pts for {} - NOISE BEYOND SIGHT DISTANCE!?",
 											pOpponent->ubID);
 								continue;
 							}
@@ -1535,7 +1544,7 @@ void ResolveInterruptsVs( SOLDIERTYPE * pSoldier, UINT8 ubInterruptType)
 						else if ( pOpponent->bOppList[pSoldier->ubID] != SEEN_CURRENTLY )
 						{
 							pOpponent->bInterruptDuelPts = NO_INTERRUPT;
-							SLOGD(DEBUG_TAG_TEAMTURN, "Resetting int pts for %d - DOESN'T SEE ON SIGHT INTERRUPT!?",
+							SLOGD("Resetting int pts for {} - DOESN'T SEE ON SIGHT INTERRUPT!?",
 										pOpponent->ubID);
 							continue;
 						}
@@ -1549,17 +1558,17 @@ void ResolveInterruptsVs( SOLDIERTYPE * pSoldier, UINT8 ubInterruptType)
 							case AUTOMATIC_INTERRUPT:	// interrupts occurs automatically
 								pSoldier->bInterruptDuelPts = 0;	// just to have a valid intDiff later
 								fIntOccurs = TRUE;
-								SLOGD(DEBUG_TAG_TEAMTURN, "INTERRUPT: automatic interrupt on %d by %d",
+								SLOGD("INTERRUPT: automatic interrupt on {} by {}",
 											pSoldier->ubID, pOpponent->ubID);
 								break;
 
 							default:		// interrupt is possible, run a duel
-								SLOGD(DEBUG_TAG_TEAMTURN, "Calculating int duel pts for onlooker in ResolveInterruptsVs");
+								SLOGD("Calculating int duel pts for onlooker in ResolveInterruptsVs");
 								pSoldier->bInterruptDuelPts = CalcInterruptDuelPts(pSoldier, pOpponent, TRUE);
 								fIntOccurs = InterruptDuel(pOpponent,pSoldier);
 								if (fIntOccurs)
 								{
-									SLOGD(DEBUG_TAG_TEAMTURN, "INTERRUPT: standard interrupt on %d (%d pts) by %d (%d pts)",
+									SLOGD("INTERRUPT: standard interrupt on {} ({} pts) by {} ({} pts)",
 												pSoldier->ubID, pSoldier->bInterruptDuelPts, pOpponent->ubID, pOpponent->bInterruptDuelPts);
 								}
 								break;
@@ -1581,7 +1590,7 @@ void ResolveInterruptsVs( SOLDIERTYPE * pSoldier, UINT8 ubInterruptType)
 						/*
 							if (pOpponent->bInterruptDuelPts != NO_INTERRUPT)
 							{
-								ScreenMsg( FONT_MCOLOR_LTYELLOW, MSG_INTERFACE, L"%d fails to interrupt %d (%d vs %d pts)", pOpponent->ubID, pSoldier->ubID, pOpponent->bInterruptDuelPts, pSoldier->bInterruptDuelPts);
+								ScreenMsg( FONT_MCOLOR_LTYELLOW, MSG_INTERFACE, ST::format("{} fails to interrupt {} ({} vs {} pts)", pOpponent->ubID, pSoldier->ubID, pOpponent->bInterruptDuelPts, pSoldier->bInterruptDuelPts));
 							}
 							*/
 						}
@@ -1589,7 +1598,7 @@ void ResolveInterruptsVs( SOLDIERTYPE * pSoldier, UINT8 ubInterruptType)
 						// either way, clear out both sides' bInterruptDuelPts field to prepare next one
 						if (pSoldier->bInterruptDuelPts != NO_INTERRUPT)
 						{
-							SLOGD(DEBUG_TAG_TEAMTURN, "Resetting int pts for %d and %d",
+							SLOGD("Resetting int pts for {} and {}",
 										pSoldier->ubID, pOpponent->ubID);
 						}
 						pSoldier->bInterruptDuelPts = NO_INTERRUPT;
@@ -1646,7 +1655,7 @@ void ResolveInterruptsVs( SOLDIERTYPE * pSoldier, UINT8 ubInterruptType)
 					}
 				}
 
-				if (ubSmallestSlot < NOBODY)
+				if (ubSmallestSlot < MAX_NUM_SOLDIERS)
 				{
 					// add this guy to everyone's interrupt queue
 					AddToIntList(IntList[ubSmallestSlot], TRUE, TRUE);
@@ -1672,7 +1681,7 @@ void ResolveInterruptsVs( SOLDIERTYPE * pSoldier, UINT8 ubInterruptType)
 void SaveTeamTurnsToTheSaveGameFile(HWFILE const f)
 {
 	BYTE  data[174];
-	BYTE* d = data;
+	DataWriter d{data};
 	for (size_t i = 0; i != lengthof(gOutOfTurnOrder); ++i)
 	{
 		INJ_SOLDIER(d, gOutOfTurnOrder[i])
@@ -1684,18 +1693,18 @@ void SaveTeamTurnsToTheSaveGameFile(HWFILE const f)
 	INJ_BOOL(   d, gfHiddenInterrupt)
 	INJ_SOLDIER(d, gLastInterruptedGuy)
 	INJ_SKIP(   d, 17)
-	Assert(d == endof(data));
+	Assert(d.getConsumed() == lengthof(data));
 
-	FileWrite(f, data, sizeof(data));
+	f->write(data, sizeof(data));
 }
 
 
 void LoadTeamTurnsFromTheSavedGameFile(HWFILE const f)
 {
 	BYTE data[174];
-	FileRead(f, data, sizeof(data));
+	f->read(data, sizeof(data));
 
-	BYTE const* d = data;
+	DataReader d{data};
 	EXTR_SKIP(d, 1)
 	for (size_t i = 1; i != lengthof(gOutOfTurnOrder); ++i)
 	{
@@ -1708,7 +1717,7 @@ void LoadTeamTurnsFromTheSavedGameFile(HWFILE const f)
 	EXTR_BOOL(   d, gfHiddenInterrupt)
 	EXTR_SOLDIER(d, gLastInterruptedGuy)
 	EXTR_SKIP(   d, 17)
-	Assert(d == endof(data));
+	Assert(d.getConsumed() == lengthof(data));
 }
 
 

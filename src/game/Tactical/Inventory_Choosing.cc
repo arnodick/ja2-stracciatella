@@ -31,7 +31,7 @@
 
 
 UINT32 guiMortarsRolledByTeam = 0;
-
+static const SGPSector tixa(TIXA_SECTOR_X, TIXA_SECTOR_Y);
 
 static void MarkAllWeaponsOfSameGunClassAsDropped(UINT16 usWeapon);
 
@@ -117,7 +117,7 @@ void GenerateRandomEquipment( SOLDIERCREATE_STRUCT *pp, INT8 bSoldierClass, INT8
 {
 	OBJECTTYPE *pItem;
 	//general rating information
-	INT8 bRating = 0;
+	int bRating = 0;
 	//numbers of items
 	INT8 bAmmoClips = 0;
 	INT8 bGrenades = 0;
@@ -178,7 +178,7 @@ void GenerateRandomEquipment( SOLDIERCREATE_STRUCT *pp, INT8 bSoldierClass, INT8
 		case SOLDIER_CLASS_ADMINISTRATOR:
 		case SOLDIER_CLASS_GREEN_MILITIA:
 			bRating = BAD_ADMINISTRATOR_EQUIPMENT_RATING + bEquipmentModifier;
-			bRating = (INT8)MAX( MIN_EQUIPMENT_CLASS, MIN( MAX_EQUIPMENT_CLASS, bRating ) );
+			bRating = (INT8) std::clamp(bRating, MIN_EQUIPMENT_CLASS, MAX_EQUIPMENT_CLASS);
 
 			bWeaponClass = bRating;
 
@@ -225,7 +225,7 @@ void GenerateRandomEquipment( SOLDIERCREATE_STRUCT *pp, INT8 bSoldierClass, INT8
 		case SOLDIER_CLASS_REG_MILITIA:
 			//army guys tend to have a broad range of equipment
 			bRating = BAD_ARMY_EQUIPMENT_RATING + bEquipmentModifier;
-			bRating = (INT8)MAX( MIN_EQUIPMENT_CLASS, MIN( MAX_EQUIPMENT_CLASS, bRating ) );
+			bRating = (INT8) std::clamp(bRating, MIN_EQUIPMENT_CLASS, MAX_EQUIPMENT_CLASS);
 
 			bWeaponClass = bRating;
 			bVestClass = bRating;
@@ -290,7 +290,7 @@ void GenerateRandomEquipment( SOLDIERCREATE_STRUCT *pp, INT8 bSoldierClass, INT8
 			if( ( bRating >= GREAT_ARMY_EQUIPMENT_RATING ) && ( Random( 100 ) < 20 ) )
 			{
 				//give this man a special weapon!  No mortars if underground, however
-				ubMaxSpecialWeaponRoll = ( !IsAutoResolveActive() && ( gbWorldSectorZ != 0 ) ) ? 6 : 7;
+				ubMaxSpecialWeaponRoll = (!IsAutoResolveActive() && gWorldSector.z != 0) ? 6 : 7;
 				switch ( Random ( ubMaxSpecialWeaponRoll ) )
 				{
 					case 0:
@@ -334,7 +334,7 @@ void GenerateRandomEquipment( SOLDIERCREATE_STRUCT *pp, INT8 bSoldierClass, INT8
 		case SOLDIER_CLASS_ELITE:
 		case SOLDIER_CLASS_ELITE_MILITIA:
 			bRating = BAD_ELITE_EQUIPMENT_RATING + bEquipmentModifier;
-			bRating = (INT8)MAX( MIN_EQUIPMENT_CLASS, MIN( MAX_EQUIPMENT_CLASS, bRating ) );
+			bRating = (INT8) std::clamp(bRating, MIN_EQUIPMENT_CLASS, MAX_EQUIPMENT_CLASS);
 
 			bWeaponClass = bRating;
 			bHelmetClass = bRating;
@@ -394,7 +394,7 @@ void GenerateRandomEquipment( SOLDIERCREATE_STRUCT *pp, INT8 bSoldierClass, INT8
 			if( ( bRating >= GOOD_ELITE_EQUIPMENT_RATING ) && ( Random( 100 ) < 33 ) )
 			{
 				//give this man a special weapon!  No mortars if underground, however
-				ubMaxSpecialWeaponRoll = ( !IsAutoResolveActive() && ( gbWorldSectorZ != 0 ) ) ? 6 : 7;
+				ubMaxSpecialWeaponRoll = (!IsAutoResolveActive() && gWorldSector.z != 0) ? 6 : 7;
 				switch ( Random ( ubMaxSpecialWeaponRoll ) )
 				{
 					case 0:
@@ -433,7 +433,7 @@ void GenerateRandomEquipment( SOLDIERCREATE_STRUCT *pp, INT8 bSoldierClass, INT8
 		//clear items, but only if they have write status.
 		if( !(pp->Inv[ i ].fFlags & OBJECT_NO_OVERWRITE) )
 		{
-			memset( &(pp->Inv[ i ]), 0, sizeof( OBJECTTYPE ) );
+			pp->Inv[ i ] = OBJECTTYPE{};
 			pp->Inv[ i ].fFlags |= OBJECT_UNDROPPABLE;
 		}
 		else
@@ -532,7 +532,7 @@ static void ChooseWeaponForSoldierCreateStruct(SOLDIERCREATE_STRUCT* pp, INT8 bW
 	UINT16 usAmmoIndex = 0;
 	UINT16 usAttachIndex = 0;
 	UINT8 ubChanceStandardAmmo;
-	INT8 bStatus;
+	int bStatus;
 
 	// Choose weapon:
 	// WEAPONS are very important, and are therefore handled differently using special pre-generated tables.
@@ -651,25 +651,24 @@ static void ChooseWeaponForSoldierCreateStruct(SOLDIERCREATE_STRUCT* pp, INT8 bW
 			case SOLDIER_CLASS_GREEN_MILITIA:
 			case SOLDIER_CLASS_REG_MILITIA:
 				//Admins/Troops: 60-75% + 1% every 4% progress
-				bStatus = (INT8)(60 + Random( 16 ));
-				bStatus += (INT8)(HighestPlayerProgressPercentage() / 4);
-				bStatus = (INT8)MIN( 100, bStatus );
+				bStatus = 60 + Random(16);
+				bStatus += HighestPlayerProgressPercentage() / 4;
+				bStatus = std::min(100, bStatus);
 				break;
 			case SOLDIER_CLASS_ELITE:
 			case SOLDIER_CLASS_ELITE_MILITIA:
 				//85-90% +  1% every 10% progress
-				bStatus = (INT8)(85 + Random( 6 ));
-				bStatus += (INT8)(HighestPlayerProgressPercentage() / 10);
-				bStatus = (INT8)MIN( 100, bStatus );
+				bStatus = 85 + Random(6);
+				bStatus += HighestPlayerProgressPercentage() / 10;
+				bStatus = std::min(100, bStatus);
 				break;
 			default:
-				bStatus = (INT8)(50 + Random( 51 ) );
+				bStatus = 50 + Random(51);
 				break;
 		}
 		// don't allow it to be lower than marksmanship, we don't want it to affect their chances of hitting
-		bStatus = (INT8)MAX( pp->bMarksmanship, bStatus );
-
-		bStatus = (INT8)MAX( bStatus, gamepolicy(enemy_weapon_minimal_status));
+		bStatus = std::max(int(pp->bMarksmanship), bStatus);
+		bStatus = std::max(bStatus, (int) gamepolicy(enemy_weapon_minimal_status));
 
 		CreateItem( usGunIndex, bStatus, &(pp->Inv[ HANDPOS ]) );
 		pp->Inv[ HANDPOS ].fFlags |= OBJECT_UNDROPPABLE;
@@ -737,7 +736,7 @@ static void ChooseGrenadesForSoldierCreateStruct(SOLDIERCREATE_STRUCT* pp, INT8 
 
 	//determine the quality of grenades.  The elite guys get the best quality, while the others
 	//get progressively worse.
-	ubBaseQuality = (UINT8)MIN( 45 + bGrenadeClass * 5, 90 );
+	ubBaseQuality = (UINT8) std::min(45 + bGrenadeClass * 5, 90);
 	ubQualityVariation = 101 - ubBaseQuality;
 
 
@@ -764,6 +763,7 @@ static void ChooseGrenadesForSoldierCreateStruct(SOLDIERCREATE_STRUCT* pp, INT8 
 						break;
 					}
 					// if grenade launcher, pick regular instead
+					// fallthrough
 				case 1:
 					ubNumReg++;
 					sNumPoints -= 9;
@@ -776,6 +776,7 @@ static void ChooseGrenadesForSoldierCreateStruct(SOLDIERCREATE_STRUCT* pp, INT8 
 						break;
 					}
 					// if grenade launcher, pick tear instead
+					// fallthrough
 				case 3:
 					ubNumTear++;
 					sNumPoints -= 6;
@@ -1200,7 +1201,7 @@ static void ChooseSpecialWeaponsForSoldierCreateStruct(SOLDIERCREATE_STRUCT* pp,
 	if (fMortar)
 	{
 		// make sure we're not distributing them underground!
-		Assert( IsAutoResolveActive() || ( gbWorldSectorZ == 0 ) );
+		Assert(IsAutoResolveActive() || gWorldSector.z == 0);
 
 		// give mortar
 		CreateItem( MORTAR, (INT8)(50 + Random( 51 )), &Object );
@@ -1215,9 +1216,7 @@ static void ChooseFaceGearForSoldierCreateStruct(SOLDIERCREATE_STRUCT* pp)
 	INT32 i;
 	INT8 bDifficultyRating = CalcDifficultyModifier( pp->ubSoldierClass );
 
-
-	if (gWorldSectorX == TIXA_SECTOR_X && gWorldSectorY == TIXA_SECTOR_Y &&
-		StrategicMap[TIXA_SECTOR_X + TIXA_SECTOR_Y * MAP_WORLD_X].fEnemyControlled)
+	if (gWorldSector == tixa && StrategicMap[tixa.AsStrategicIndex()].fEnemyControlled)
 	{
 		//Tixa is a special case that is handled differently.
 		return;
@@ -1467,7 +1466,7 @@ static void ChooseLocationSpecificGearForSoldierCreateStruct(SOLDIERCREATE_STRUC
 
 	// If this is Tixa and the player doesn't control Tixa then give all enemies gas masks,
 	// but somewhere on their person, not in their face positions
-	if ( gWorldSectorX == TIXA_SECTOR_X && gWorldSectorY == TIXA_SECTOR_Y && StrategicMap[ TIXA_SECTOR_X + TIXA_SECTOR_Y * MAP_WORLD_X ].fEnemyControlled )
+	if (gWorldSector == tixa && StrategicMap[tixa.AsStrategicIndex()].fEnemyControlled)
 	{
 		CreateItem( GASMASK, (INT8) (95+Random(6)), &Object );
 		PlaceObjectInSoldierCreateStruct( pp, &Object );
@@ -1494,7 +1493,7 @@ static BOOLEAN PlaceObjectInSoldierCreateStruct(SOLDIERCREATE_STRUCT* pp, OBJECT
 	}
 	else
 	{
-		pObject->ubNumberOfObjects = (UINT8)MIN( GCM->getItem(pObject->usItem )->getPerPocket(), pObject->ubNumberOfObjects );
+		pObject->ubNumberOfObjects = (UINT8) std::min(GCM->getItem(pObject->usItem )->getPerPocket(), pObject->ubNumberOfObjects);
 		//try to get it into a small pocket first
 		for( i = SMALLPOCK1POS; i <= SMALLPOCK8POS; i++ )
 		{
@@ -1857,7 +1856,7 @@ void AssignCreatureInventory( SOLDIERTYPE *pSoldier )
 			break;
 
 		default:
-			AssertMsg(FALSE, String("Invalid creature bodytype %d", pSoldier->ubBodyType));
+			AssertMsg(FALSE, ST::format("Invalid creature bodytype {}", pSoldier->ubBodyType));
 			return;
 	}
 
@@ -1907,7 +1906,7 @@ void ReplaceExtendedGuns( SOLDIERCREATE_STRUCT *pp, INT8 bSoldierClass )
 			else
 			{
 				bWeaponClass = GetWeaponClass( usItem );
-				AssertMsg( bWeaponClass != -1, String( "Gun %d does not have a match in the extended gun array", usItem ) );
+				AssertMsg(bWeaponClass != -1, ST::format("Gun {} does not have a match in the extended gun array", usItem));
 				usNewGun = SelectStandardArmyGun( bWeaponClass );
 			}
 
@@ -1972,7 +1971,7 @@ static UINT16 SelectStandardArmyGun(UINT8 uiGunLevel)
 	}
 
 	// choose one the of the possible gun choices
-	uiChoice = Random(gunChoice->at(uiGunLevel).size());
+	uiChoice = Random(static_cast<UINT32>(gunChoice->at(uiGunLevel).size()));
 	usGunIndex = (gunChoice->at(uiGunLevel)[uiChoice])->getItemIndex();
 
 	Assert(usGunIndex);

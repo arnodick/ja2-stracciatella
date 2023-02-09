@@ -1,74 +1,65 @@
-#include "Directories.h"
-#include "FileMan.h"
-#include "Font.h"
-#include "HImage.h"
-#include "LoadSaveData.h"
-#include "LoadSaveObjectType.h"
 #include "Map_Screen_Interface.h"
-#include "Map_Screen_Interface_Map.h"
-#include "MercPortrait.h"
-#include "Render_Dirty.h"
+#include "ContentManager.h"
+#include "Dialogue_Control.h"
+#include "Directories.h"
+#include "EMail.h"
+#include "FileMan.h"
+#include "Finances.h"
+#include "Font.h"
 #include "Font_Control.h"
-#include "Assignments.h"
-#include "Soldier_Control.h"
-#include "Overhead.h"
-#include "Squads.h"
-#include "Sound_Control.h"
-#include "SoundMan.h"
-#include "Message.h"
-#include "PopUpBox.h"
 #include "Game_Clock.h"
-#include "Handle_Items.h"
+#include "Game_Event_Hook.h"
+#include "Game_Init.h"
+#include "GameInstance.h"
+#include "GamePolicy.h"
+#include "GameSettings.h"
+#include "HImage.h"
 #include "Interface_Items.h"
 #include "Isometric_Utils.h"
-#include "Interface.h"
-#include "Game_Event_Hook.h"
+#include "Items.h"
+#include "JAScreens.h"
+#include "Keys.h"
+#include "Line.h"
+#include "LoadSaveObjectType.h"
+#include "Map_Screen_Helicopter.h"
+#include "Map_Screen_Interface_Border.h"
+#include "Map_Screen_Interface_Bottom.h"
+#include "Map_Screen_Interface_Map_Inventory.h"
+#include "MapScreen.h"
+#include "MercPortrait.h"
+#include "Message.h"
+#include "Overhead.h"
+#include "PopUpBox.h"
+#include "PreBattle_Interface.h"
+#include "Queen_Command.h"
+#include "Quests.h"
+#include "Render_Dirty.h"
+#include "Render_Fun.h"
+#include "RenderWorld.h"
+#include "SamSiteModel.h"
+#include "ShippingDestinationModel.h"
+#include "Soldier_Macros.h"
+#include "SoundMan.h"
+#include "Squads.h"
+#include "Strategic.h"
+#include "StrategicMap_Secrets.h"
+#include "Strategic_Mines.h"
 #include "Strategic_Pathing.h"
 #include "SysUtil.h"
 #include "Tactical_Placement_GUI.h"
 #include "Tactical_Save.h"
-#include "Quests.h"
-#include "StrategicMap.h"
-#include "Soldier_Profile.h"
-#include "Strategic_Movement.h"
-#include "Dialogue_Control.h"
-#include "Map_Screen_Interface_Border.h"
-#include "Map_Screen_Interface_Bottom.h"
-#include "Timer_Control.h"
-#include "VObject.h"
-#include "Vehicles.h"
-#include "Line.h"
 #include "Text.h"
-#include "Map_Screen_Helicopter.h"
-#include "PreBattle_Interface.h"
-#include "WordWrap.h"
-#include "GameSettings.h"
-#include "Campaign_Types.h"
-#include "MapScreen.h"
-#include "Map_Screen_Interface_Map_Inventory.h"
-#include "Strategic.h"
-#include "Keys.h"
-#include "Soldier_Macros.h"
-#include "Random.h"
-#include "RenderWorld.h"
-#include "Strategic_Mines.h"
-#include "Air_Raid.h"
-#include "Queen_Command.h"
-#include "Render_Fun.h"
-#include "Cursor_Control.h"
-#include "Game_Init.h"
-#include "Finances.h"
-#include "Button_System.h"
-#include "JAScreens.h"
-#include "Local.h"
+#include "Timer_Control.h"
 #include "Video.h"
-#include "MemMan.h"
-#include "Debug.h"
+#include "VObject.h"
 #include "VSurface.h"
-#include "EMail.h"
-#include "Items.h"
-#include "UILayout.h"
-
+#include "WordWrap.h"
+#include <algorithm>
+#include <iterator>
+#include <string_theory/format>
+#include <string_theory/string>
+struct FACETYPE;
+struct PopUpBox;
 
 // number of LINKED LISTS for sets of leave items (each slot holds an unlimited # of items)
 #define NUM_LEAVE_LIST_SLOTS 20
@@ -118,7 +109,7 @@ INT32 iUpdateBoxWaitingList[ MAX_CHARACTER_COUNT ];
 
 struct FASTHELPREGION
 {
-	wchar_t FastHelpText[256];
+	ST::string FastHelpText;
 	INT32 iX;
 	INT32 iY;
 	INT32 iW;
@@ -134,7 +125,7 @@ static MOUSE_REGION gMapScreenHelpTextMask;
 
 static BOOLEAN fScreenMaskForMoveCreated = FALSE;
 
-static wchar_t gsCustomErrorString[128];
+static ST::string gsCustomErrorString;
 
 BOOLEAN fShowUpdateBox = FALSE;
 static BOOLEAN fInterfaceFastHelpTextActive = FALSE;
@@ -142,8 +133,7 @@ BOOLEAN fReBuildCharacterList = FALSE;
 static INT32 giSizeOfInterfaceFastHelpTextList = 0;
 
 //Animated sector locator icon variables.
-INT16 gsSectorLocatorX;
-INT16 gsSectorLocatorY;
+SGPSector gsSectorLocator;
 UINT8 gubBlitSectorLocatorCode; //color
 static SGPVObject* guiSectorLocatorGraphicID;
 // the animate time per frame in milliseconds
@@ -242,7 +232,7 @@ static MERC_LEAVE_ITEM* gpLeaveListHead[NUM_LEAVE_LIST_SLOTS];
 static UINT32 guiLeaveListOwnerProfileId[NUM_LEAVE_LIST_SLOTS];
 
 // timers for double click
-static INT32 giDblClickTimersForMoveBoxMouseRegions[MAX_POPUP_BOX_STRING_COUNT];
+static UINT32 guiDblClickTimersForMoveBoxMouseRegions[MAX_POPUP_BOX_STRING_COUNT];
 
 UINT32 guiSectorLocatorBaseTime = 0;
 
@@ -263,7 +253,7 @@ BOOLEAN gfAtLeastOneMercWasHired = FALSE;
 void InitalizeVehicleAndCharacterList( void )
 {
 	// will init the vehicle and character lists to zero
-	memset(&gCharactersList, 0, sizeof( gCharactersList ));
+	std::fill(std::begin(gCharactersList), std::end(gCharactersList), MapScreenCharacterSt{});
 }
 
 
@@ -367,7 +357,7 @@ void ResetAssignmentsForMercsTrainingUnpaidSectorsInSelectedList()
 		SOLDIERTYPE* const pSoldier = c->merc;
 		if( pSoldier->bAssignment == TRAIN_TOWN )
 		{
-			if (!SectorInfo[SECTOR(pSoldier->sSectorX, pSoldier->sSectorY)].fMilitiaTrainingPaid)
+			if (!SectorInfo[pSoldier->sSector.AsByte()].fMilitiaTrainingPaid)
 			{
 				ResumeOldAssignment( pSoldier );
 			}
@@ -376,14 +366,14 @@ void ResetAssignmentsForMercsTrainingUnpaidSectorsInSelectedList()
 }
 
 
-void ResetAssignmentOfMercsThatWereTrainingMilitiaInThisSector( INT16 sSectorX, INT16 sSectorY )
+void ResetAssignmentOfMercsThatWereTrainingMilitiaInThisSector(const SGPSector& sSector)
 {
 	CFOR_EACH_IN_CHAR_LIST(c)
 	{
 		SOLDIERTYPE* const pSoldier = c->merc;
 		if( pSoldier->bAssignment == TRAIN_TOWN )
 		{
-			if( ( pSoldier->sSectorX == sSectorX ) && ( pSoldier->sSectorY == sSectorY ) && ( pSoldier->bSectorZ == 0 ) )
+			if (pSoldier->sSector == sSector)
 			{
 				ResumeOldAssignment( pSoldier );
 			}
@@ -461,9 +451,7 @@ void DeselectSelectedListMercsWhoCantMoveWithThisGuy(const SOLDIERTYPE* const pS
 		else
 		{
 			// reject those not in the same sector
-			if( ( pSoldier->sSectorX != pSoldier2->sSectorX ) ||
-					( pSoldier->sSectorY != pSoldier2->sSectorY ) ||
-					( pSoldier->bSectorZ != pSoldier2->bSectorZ ) )
+			if (pSoldier->sSector != pSoldier2->sSector)
 			{
 				ResetEntryForSelectedList( ( INT8 )iCounter );
 			}
@@ -809,21 +797,21 @@ void EnableTeamInfoPanels( void )
 }
 
 
-void DoMapMessageBoxWithRect(MessageBoxStyleID const ubStyle, wchar_t const* const zString, ScreenID const uiExitScreen, MessageBoxFlags const usFlags, MSGBOX_CALLBACK const ReturnCallback, SGPBox const* const centering_rect)
+void DoMapMessageBoxWithRect(MessageBoxStyleID ubStyle, const ST::string& str, ScreenID uiExitScreen, MessageBoxFlags usFlags, MSGBOX_CALLBACK ReturnCallback, const SGPBox* centering_rect)
 {	// reset the highlighted line
 	giHighLine = -1;
-	DoMessageBox(ubStyle, zString, uiExitScreen, usFlags, ReturnCallback, centering_rect);
+	DoMessageBox(ubStyle, str, uiExitScreen, usFlags, ReturnCallback, centering_rect);
 }
 
 
-void DoMapMessageBox(MessageBoxStyleID const ubStyle, wchar_t const* const zString, ScreenID const uiExitScreen, MessageBoxFlags const usFlags, MSGBOX_CALLBACK const ReturnCallback)
+void DoMapMessageBox(MessageBoxStyleID ubStyle, const ST::string& str, ScreenID uiExitScreen, MessageBoxFlags usFlags, MSGBOX_CALLBACK ReturnCallback)
 {
 	// reset the highlighted line
 	giHighLine = -1;
 
 	// do message box and return
 	SGPBox const centering_rect = { 0, 0, SCREEN_WIDTH, INV_INTERFACE_START_Y };
-	DoMessageBox(ubStyle, zString, uiExitScreen, usFlags, ReturnCallback, &centering_rect);
+	DoMessageBox(ubStyle, str, uiExitScreen, usFlags, ReturnCallback, &centering_rect);
 }
 
 
@@ -864,7 +852,7 @@ void JumpToLevel( INT32 iLevel )
 	}
 
 	// set current sector Z to level passed
-	ChangeSelectedMapSector( sSelMapX, sSelMapY, ( INT8 )iLevel );
+	ChangeSelectedMapSector(SGPSector(sSelMap.x, sSelMap.y, iLevel));
 }
 
 
@@ -959,7 +947,7 @@ void HandleDisplayOfSelectedMercArrows()
 }
 
 
-wchar_t const* GetMoraleString(SOLDIERTYPE const& s)
+ST::string GetMoraleString(SOLDIERTYPE const& s)
 {
 	return
 		s.uiStatusFlags & SOLDIER_DEAD ? pMoralStrings[5] :
@@ -976,7 +964,7 @@ void HandleLeavingOfEquipmentInCurrentSector(SOLDIERTYPE& s)
 {
 	// Just drop the stuff in the current sector
 	GridNo gridno;
-	bool const here = s.sSectorX == gWorldSectorX && s.sSectorY == gWorldSectorY && s.bSectorZ == gbWorldSectorZ;
+	bool const here = s.sSector == gWorldSector;
 	if (here)
 	{
 		// ATE: Mercs can have a gridno of NOWHERE
@@ -1013,7 +1001,7 @@ void HandleLeavingOfEquipmentInCurrentSector(SOLDIERTYPE& s)
 		}
 		else
 		{
-			AddItemsToUnLoadedSector(s.sSectorX, s.sSectorY, s.bSectorZ, gridno, 1, i, s.bLevel, WOLRD_ITEM_FIND_SWEETSPOT_FROM_GRIDNO | WORLD_ITEM_REACHABLE, 0, VISIBLE);
+			AddItemsToUnLoadedSector(s.sSector, gridno, 1, i, s.bLevel, WORLD_ITEM_FIND_SWEETSPOT_FROM_GRIDNO | WORLD_ITEM_REACHABLE, 0, VISIBLE);
 		}
 	}
 
@@ -1043,28 +1031,27 @@ void HandleMercLeavingEquipment(SOLDIERTYPE& s, bool const in_drassen)
 static void FreeLeaveListSlot(UINT32 uiSlotIndex);
 
 
-static void HandleEquipmentLeft(UINT32 const slot_idx, UINT const sector, GridNo const grid)
+static void HandleEquipmentLeft(UINT32 const slot_idx, INT const sector, GridNo const grid)
 {
 	Assert(slot_idx < NUM_LEAVE_LIST_SLOTS);
 
 	if (MERC_LEAVE_ITEM* i = gpLeaveListHead[slot_idx])
 	{
-		wchar_t sString[128];
-		wchar_t const* const town = g_towns_locative[GetTownIdForSector(sector)];
-		int            const x    = SECTORX(sector);
-		char           const y    = SECTORY(sector) - 1 + 'A';
+		ST::string sString;
+		ST::string town = GCM->getTownLocative(GetTownIdForSector(sector));
+		SGPSector sMap(sector);
 		ProfileID      const id   = guiLeaveListOwnerProfileId[slot_idx];
 		if (id != NO_PROFILE)
 		{
-			swprintf(sString, lengthof(sString), str_left_equipment, GetProfile(id).zNickname, town, y, x);
+			sString = st_format_printf(str_left_equipment, GetProfile(id).zNickname, town, sMap);
 		}
 		else
 		{
-			swprintf(sString, lengthof(sString), L"A departing merc has left their equipment in %ls (%c%d).", town, y, x);
+			sString = ST::format("A departing merc has left their equipment in {} ({}).", town, sMap);
 		}
 		ScreenMsg(FONT_MCOLOR_LTYELLOW, MSG_INTERFACE, sString);
 
-		bool const is_sector_loaded = gWorldSectorX == SECTORX(sector) && gWorldSectorY == SECTORY(sector) && gbWorldSectorZ == 0;
+		bool const is_sector_loaded = gWorldSector == sMap;
 		for (; i; i = i->pNext)
 		{
 			if (is_sector_loaded)
@@ -1073,7 +1060,7 @@ static void HandleEquipmentLeft(UINT32 const slot_idx, UINT const sector, GridNo
 			}
 			else
 			{ // Given this slot value, add to sector item list
-				AddItemsToUnLoadedSector(SECTORX(sector), SECTORY(sector), 0, grid, 1, &i->o, 0, WORLD_ITEM_REACHABLE, 0, VISIBLE);
+				AddItemsToUnLoadedSector(SGPSector(sector), grid, 1, &i->o, 0, WORLD_ITEM_REACHABLE, 0, VISIBLE);
 			}
 		}
 	}
@@ -1084,13 +1071,14 @@ static void HandleEquipmentLeft(UINT32 const slot_idx, UINT const sector, GridNo
 
 void HandleEquipmentLeftInOmerta(const UINT32 uiSlotIndex)
 {
-	HandleEquipmentLeft(uiSlotIndex, START_SECTOR, START_SECTOR_LEAVE_EQUIP_GRIDNO);
+	HandleEquipmentLeft(uiSlotIndex, gamepolicy(start_sector), START_SECTOR_LEAVE_EQUIP_GRIDNO);
 }
 
 
 void HandleEquipmentLeftInDrassen(const UINT32 uiSlotIndex)
 {
-	HandleEquipmentLeft(uiSlotIndex, BOBBYR_SHIPPING_DEST_SECTOR, 10433);
+	auto primaryAirport = GCM->getPrimaryShippingDestination();
+	HandleEquipmentLeft(uiSlotIndex, primaryAirport->getDeliverySector(), 10433);
 }
 
 
@@ -1128,7 +1116,7 @@ void AddItemToLeaveIndex(const OBJECTTYPE* const o, const UINT32 uiSlotIndex)
 
 	if (o == NULL) return;
 
-	MERC_LEAVE_ITEM* const mli = MALLOC(MERC_LEAVE_ITEM);
+	MERC_LEAVE_ITEM* const mli = new MERC_LEAVE_ITEM{};
 	mli->o     = *o;
 	mli->pNext = NULL;
 
@@ -1152,7 +1140,7 @@ static void FreeLeaveListSlot(UINT32 uiSlotIndex)
 	while( pCurrent )
 	{
 		pTemp = pCurrent->pNext;
-		MemFree( pCurrent );
+		delete pCurrent;
 		pCurrent = pTemp;
 	}
 
@@ -1202,9 +1190,9 @@ static INT32 SetUpDropItemListForMerc(SOLDIERTYPE& s)
 
 	// Zero out profiles
 	MERCPROFILESTRUCT& p = GetProfile(s.ubProfile);
-	memset(p.bInvStatus, 0, sizeof(p.bInvStatus));
-	memset(p.bInvNumber, 0, sizeof(p.bInvNumber));
-	memset(p.inv,        0, sizeof(p.inv));
+	std::fill(std::begin(p.bInvStatus), std::end(p.bInvStatus), 0);
+	std::fill(std::begin(p.bInvNumber), std::end(p.bInvNumber), 0);
+	std::fill(std::begin(p.inv), std::end(p.inv), 0);
 
 	return slot;
 }
@@ -1256,15 +1244,15 @@ void UpdateCharRegionHelpText(void)
 	SOLDIERTYPE const* const s = GetSelectedInfoChar();
 
 	// health/energy/morale
-	wchar_t status[128];
+	ST::string status;
 	if (!s || s->bLife == 0)
 	{
-		status[0] = L'\0';
+		status = ST::null;
 	}
 	else if (s->bAssignment == ASSIGNMENT_POW)
 	{
 		// POW - stats unknown
-		swprintf(status, lengthof(status), L"%ls: ??, %ls: ??, %ls: ??",
+		status = ST::format("{}: ??, {}: ??, {}: ??",
 			pMapScreenStatusStrings[0],
 			pMapScreenStatusStrings[1],
 			pMapScreenStatusStrings[2]
@@ -1273,14 +1261,14 @@ void UpdateCharRegionHelpText(void)
 	else if (AM_A_ROBOT(s))
 	{
 		// robot (condition only)
-		swprintf(status, lengthof(status), L"%ls: %d/%d",
+		status = ST::format("{}: {}/{}",
 			pMapScreenStatusStrings[3], s->bLife, s->bLifeMax
 		);
 	}
 	else if (s->uiStatusFlags & SOLDIER_VEHICLE)
 	{
 		// vehicle (condition/fuel)
-		swprintf(status, lengthof(status), L"%ls: %d/%d, %ls: %d/%d",
+		status = ST::format("{}: {}/{}, {}: {}/{}",
 			pMapScreenStatusStrings[3], s->bLife,   s->bLifeMax,
 			pMapScreenStatusStrings[4], s->bBreath, s->bBreathMax
 		);
@@ -1288,8 +1276,8 @@ void UpdateCharRegionHelpText(void)
 	else
 	{
 		// person (health/energy/morale)
-		wchar_t const* const morale = GetMoraleString(*s);
-		swprintf(status, lengthof(status), L"%ls: %d/%d, %ls: %d/%d, %ls: %ls",
+		ST::string morale = GetMoraleString(*s);
+		status = ST::format("{}: {}/{}, {}: {}/{}, {}: {}",
 			pMapScreenStatusStrings[0], s->bLife,   s->bLifeMax,
 			pMapScreenStatusStrings[1], s->bBreath, s->bBreathMax,
 			pMapScreenStatusStrings[2], morale
@@ -1410,7 +1398,7 @@ void RandomMercInGroupSaysQuote(GROUP const& g, UINT16 const quote_num)
 {
 	/* If traversing tactically, don't do this, unless time compression was
 	 * required for some reason (don't go to sector) */
-	if ((gfTacticalTraversal || g.ubSectorZ > 0) && !IsTimeBeingCompressed())
+	if ((gfTacticalTraversal || g.ubSector.z > 0) && !IsTimeBeingCompressed())
 	{
 		return;
 	}
@@ -1473,9 +1461,9 @@ BOOLEAN MapscreenCanPassItemToChar(const SOLDIERTYPE* const pNewSoldier)
 	if ( fShowMapInventoryPool && !gpItemPointerSoldier && fMapInventoryItem )
 	{
 		// disallow passing items to anyone not in that sector
-		if ( pNewSoldier->sSectorX != sSelMapX ||
-			pNewSoldier->sSectorY != sSelMapY ||
-			pNewSoldier->bSectorZ != ( INT8 )( iCurrentMapSectorZ ) )
+		if (pNewSoldier->sSector.x != sSelMap.x ||
+			pNewSoldier->sSector.y != sSelMap.y ||
+			pNewSoldier->sSector.z != ( INT8 )( iCurrentMapSectorZ ) )
 		{
 			return( FALSE );
 		}
@@ -1510,9 +1498,7 @@ BOOLEAN MapscreenCanPassItemToChar(const SOLDIERTYPE* const pNewSoldier)
 	if ( pOldSoldier != NULL )
 	{
 		// disallow passing items to a merc not in the same sector
-		if ( pNewSoldier->sSectorX != pOldSoldier->sSectorX ||
-			pNewSoldier->sSectorY != pOldSoldier->sSectorY ||
-			pNewSoldier->bSectorZ != pOldSoldier->bSectorZ )
+		if (pNewSoldier->sSector != pOldSoldier->sSector)
 		{
 			return( FALSE );
 		}
@@ -1637,7 +1623,7 @@ void GoToPrevCharacterInList( void )
 }
 
 
-void HandleMinerEvent(UINT8 const bMinerNumber, INT16 const sQuoteNumber, BOOLEAN const fForceMapscreen)
+void HandleMinerEvent(ProfileID const ubMinerProfileID, INT16 const sQuoteNumber, BOOLEAN const fForceMapscreen)
 {
 	BOOLEAN fFromMapscreen = FALSE;
 
@@ -1663,13 +1649,13 @@ void HandleMinerEvent(UINT8 const bMinerNumber, INT16 const sQuoteNumber, BOOLEA
 		if ( iCurrentMapSectorZ != 0 )
 		{
 			// switch to it, because the miner locators wouldn't show up if we're underground while they speak
-			ChangeSelectedMapSector( sSelMapX, sSelMapY, 0 );
+			ChangeSelectedMapSector( sSelMap );
 		}
 
 		fMapPanelDirty = TRUE;
 	}
 
-	CharacterDialogue(g_external_face_profile_ids[bMinerNumber], sQuoteNumber, uiExternalStaticNPCFaces[bMinerNumber], DIALOGUE_EXTERNAL_NPC_UI, FALSE);
+	CharacterDialogue(ubMinerProfileID, sQuoteNumber, GetExternalNPCFace(ubMinerProfileID), DIALOGUE_EXTERNAL_NPC_UI, FALSE);
 }
 
 
@@ -1691,13 +1677,13 @@ void ShutDownUserDefineHelpTextRegions( void )
 }
 
 
-void SetUpFastHelpRegion(INT32 x, INT32 y, INT32 width, const wchar_t* text)
+void SetUpFastHelpRegion(INT32 x, INT32 y, INT32 width, const ST::string& str)
 {
 	FASTHELPREGION* fhr = &pFastHelpMapScreenList[0];
 	fhr->iX = x;
 	fhr->iY = y;
 	fhr->iW = width;
-	wcslcpy(fhr->FastHelpText, text, lengthof(fhr->FastHelpText));
+	fhr->FastHelpText = str;
 	giSizeOfInterfaceFastHelpTextList = 1;
 }
 
@@ -1777,12 +1763,7 @@ static void DisplayFastHelpRegions(FASTHELPREGION* pRegion, INT32 iSize)
 // show one region
 static void DisplayUserDefineHelpTextRegions(FASTHELPREGION* pRegion)
 {
-	UINT16 usFillColor;
 	INT32 iX,iY,iW,iH;
-
-	// grab the color for the background region
-	usFillColor = Get16BPPColor(FROMRGB(250, 240, 188));
-
 
 	iX = pRegion->iX;
 	iY = pRegion->iY;
@@ -1821,10 +1802,6 @@ static void DisplayUserDefineHelpTextRegions(FASTHELPREGION* pRegion)
 	FRAME_BUFFER->ShadowRect(iX + 2, iY + 2, iX + iW - 3, iY + iH - 3);
 	FRAME_BUFFER->ShadowRect(iX + 2, iY + 2, iX + iW - 3, iY + iH - 3);
 
-	// fillt he video surface areas
-	//ColorFillVideoSurfaceArea(FRAME_BUFFER, iX, iY, (iX + iW), (iY + iH), 0);
-	//ColorFillVideoSurfaceArea(FRAME_BUFFER, (iX + 1), (iY + 1), (iX + iW - 1), (iY + iH - 1), usFillColor);
-
 	iH = DisplayWrappedString(iX + 10, iY + 6, pRegion->iW, 0, FONT10ARIAL, FONT_BEIGE, pRegion->FastHelpText, FONT_NEARBLACK, MARK_DIRTY);
 
 	InvalidateRegion(  iX, iY, (iX + iW) , (iY + iH + 20 ) );
@@ -1843,7 +1820,7 @@ static void StopMapScreenHelpText(void)
 }
 
 
-static void MapScreenHelpTextScreenMaskBtnCallback(MOUSE_REGION* pRegion, INT32 iReason);
+static void MapScreenHelpTextScreenMaskBtnCallback(MOUSE_REGION* pRegion, UINT32 iReason);
 
 
 static void SetUpShutDownMapScreenHelpTextScreenMask(void)
@@ -1865,14 +1842,9 @@ static void SetUpShutDownMapScreenHelpTextScreenMask(void)
 }
 
 
-static void MapScreenHelpTextScreenMaskBtnCallback(MOUSE_REGION* pRegion, INT32 iReason)
+static void MapScreenHelpTextScreenMaskBtnCallback(MOUSE_REGION* pRegion, UINT32 iReason)
 {
-	if( iReason & MSYS_CALLBACK_REASON_RBUTTON_UP )
-	{
-		// stop showing
-		ShutDownUserDefineHelpTextRegions( );
-	}
-	else if( iReason & MSYS_CALLBACK_REASON_LBUTTON_UP )
+	if( iReason & MSYS_CALLBACK_REASON_ANY_BUTTON_UP )
 	{
 		// stop showing
 		ShutDownUserDefineHelpTextRegions( );
@@ -2252,10 +2224,10 @@ void CreateDestroyMovementBox( INT16 sSectorX, INT16 sSectorY, INT16 sSectorZ )
 }
 
 
-void SetUpMovingListsForSector(INT16 const x, INT16 const y, INT16 const z)
+void SetUpMovingListsForSector(const SGPSector& sSector)
 {
 	// Not allowed for underground movement
-	Assert(z == 0);
+	Assert(sSector.z == 0);
 
 	InitializeMovingLists();
 
@@ -2266,7 +2238,7 @@ void SetUpMovingListsForSector(INT16 const x, INT16 const y, INT16 const z)
 		SOLDIERTYPE& s = *i->merc;
 		if (s.bAssignment == IN_TRANSIT)     continue;
 		if (s.bAssignment == ASSIGNMENT_POW) continue;
-		if (s.sSectorX != x || s.sSectorY != y || s.bSectorZ != z) continue;
+		if (s.sSector != sSector) continue;
 
 		if (s.uiStatusFlags & SOLDIER_VEHICLE)
 		{
@@ -2289,7 +2261,7 @@ void SetUpMovingListsForSector(INT16 const x, INT16 const y, INT16 const z)
 	}
 
 	fShowMapScreenMovementList = TRUE;
-	CreateDestroyMovementBox(x, y, z);
+	CreateDestroyMovementBox(sSector.x, sSector.y, sSector.z);
 }
 
 
@@ -2326,11 +2298,11 @@ static void CreatePopUpBoxForMovementBox(void)
 	SGPBox const& area = GetBoxArea(box);
 	if (area.x + area.w >= MAP_VIEW_START_X + MAP_VIEW_WIDTH)
 	{
-		SetBoxX(box, MAX(MAP_VIEW_START_X, MAP_VIEW_START_X + MAP_VIEW_WIDTH - area.w));
+		SetBoxX(box, std::max(MAP_VIEW_START_X, MAP_VIEW_START_X + MAP_VIEW_WIDTH - area.w));
 	}
 	if (area.y + area.h >= MAP_VIEW_START_Y + MAP_VIEW_HEIGHT)
 	{
-		SetBoxY(box, MAX(MAP_VIEW_START_Y, MAP_VIEW_START_Y + MAP_VIEW_HEIGHT - area.h));
+		SetBoxY(box, std::max(MAP_VIEW_START_Y, MAP_VIEW_START_Y + MAP_VIEW_HEIGHT - area.h));
 	}
 }
 
@@ -2341,27 +2313,25 @@ static BOOLEAN AllOtherSoldiersInListAreSelected(void);
 static void AddStringsToMoveBox(PopUpBox* const box)
 {
 	INT32 iCount = 0, iCountB = 0;
-	wchar_t sString[ 128 ], sStringB[ 128 ];
 	BOOLEAN fFirstOne = TRUE;
 
 	// clear all the strings out of the box
 	RemoveAllBoxStrings(box);
 
 	// add title
-	GetShortSectorString( sSelMapX, sSelMapY, sStringB, lengthof(sStringB));
-	swprintf(sString, lengthof(sString), pMovementMenuStrings[0], sStringB);
+	ST::string sString = st_format_printf(pMovementMenuStrings[0], sSelMap.AsShortString());
 	AddMonoString(box, sString);
 
 
 	// blank line
-	AddMonoString(box, L"");
+	AddMonoString(box, ST::null);
 
 
 	// add squads
 	for( iCount = 0; iCount < giNumberOfSquadsInSectorMoving; iCount++ )
 	{
 		// add this squad, now add all the grunts in it
-		swprintf(sString, lengthof(sString), fSquadIsMoving[iCount] ? L"*%ls*" : L"%ls", pSquadMenuStrings[iSquadMovingList[iCount]]);
+		sString = ST::format(fSquadIsMoving[iCount] ? "*{}*" : "{}", pSquadMenuStrings[iSquadMovingList[iCount]]);
 		AddMonoString(box, sString);
 
 		// now add all the grunts in it
@@ -2372,11 +2342,11 @@ static void AddStringsToMoveBox(PopUpBox* const box)
 				// add mercs in squads
 				if (IsSoldierSelectedForMovement(*pSoldierMovingList[iCountB]))
 				{
-					swprintf( sString, lengthof(sString), L"   *%ls*", pSoldierMovingList[ iCountB ]->name );
+					sString = ST::format("   *{}*", pSoldierMovingList[ iCountB ]->name);
 				}
 				else
 				{
-					swprintf( sString, lengthof(sString), L"   %ls", pSoldierMovingList[ iCountB ]->name );
+					sString = ST::format("   {}", pSoldierMovingList[ iCountB ]->name);
 				}
 				AddMonoString(box, sString);
 			}
@@ -2388,7 +2358,7 @@ static void AddStringsToMoveBox(PopUpBox* const box)
 	for( iCount = 0; iCount < giNumberOfVehiclesInSectorMoving; iCount++ )
 	{
 		// add this vehicle
-		swprintf(sString, lengthof(sString), fVehicleIsMoving[iCount] ? L"*%ls*" : L"%ls", pVehicleStrings[pVehicleList[iVehicleMovingList[iCount]].ubVehicleType]);
+		sString = ST::format(fVehicleIsMoving[iCount] ? "*{}*" : "{}", pVehicleStrings[pVehicleList[iVehicleMovingList[iCount]].ubVehicleType]);
 		AddMonoString(box, sString);
 
 		// now add all the grunts in it
@@ -2399,11 +2369,11 @@ static void AddStringsToMoveBox(PopUpBox* const box)
 				// add mercs in vehicles
 				if (IsSoldierSelectedForMovement(*pSoldierMovingList[iCountB]))
 				{
-					swprintf( sString, lengthof(sString), L"   *%ls*", pSoldierMovingList[ iCountB ]->name );
+					sString = ST::format("   *{}*", pSoldierMovingList[ iCountB ]->name);
 				}
 				else
 				{
-					swprintf( sString, lengthof(sString), L"   %ls", pSoldierMovingList[ iCountB ]->name );
+					sString = ST::format("   {}", pSoldierMovingList[ iCountB ]->name);
 				}
 				AddMonoString(box, sString);
 			}
@@ -2422,21 +2392,21 @@ static void AddStringsToMoveBox(PopUpBox* const box)
 			if ( fFirstOne )
 			{
 				// add OTHER header line
-				swprintf(sString, lengthof(sString), AllOtherSoldiersInListAreSelected() ? L"*%ls*" : L"%ls", pMovementMenuStrings[3]);
+				sString = ST::format(AllOtherSoldiersInListAreSelected() ? "*{}*" : "{}", pMovementMenuStrings[3]);
 				AddMonoString(box, sString);
 
 				fFirstOne = FALSE;
 			}
 
 			// add OTHER soldiers (not on duty nor in a vehicle)
-			swprintf(sString, lengthof(sString), IsSoldierSelectedForMovement(*pSoldierMovingList[iCount]) ? L"  *%ls ( %ls )*" : L"  %ls ( %ls )", pSoldierMovingList[iCount]->name, pAssignmentStrings[pSoldierMovingList[iCount]->bAssignment]);
+			sString = ST::format(IsSoldierSelectedForMovement(*pSoldierMovingList[iCount]) ? "  *{} ( {} )*" : "  {} ( {} )", pSoldierMovingList[iCount]->name, pAssignmentStrings[pSoldierMovingList[iCount]->bAssignment]);
 			AddMonoString(box, sString);
 		}
 	}
 
 
 	// blank line
-	AddMonoString(box, L"");
+	AddMonoString(box, ST::null);
 
 
 	if ( IsAnythingSelectedForMoving() )
@@ -2447,7 +2417,7 @@ static void AddStringsToMoveBox(PopUpBox* const box)
 	else
 	{
 		// blank line
-		AddMonoString(box, L"");
+		AddMonoString(box, ST::null);
 	}
 
 	// add cancel line
@@ -2461,8 +2431,8 @@ static void MakeRegionBlank(const INT32 i, const UINT16 x, const UINT16 y, const
 }
 
 
-static void MoveMenuBtnCallback(MOUSE_REGION* pRegion, INT32 iReason);
-static void MoveMenuMvtCallback(MOUSE_REGION* pRegion, INT32 iReason);
+static void MoveMenuBtnCallback(MOUSE_REGION* pRegion, UINT32 iReason);
+static void MoveMenuMvtCallback(MOUSE_REGION* pRegion, UINT32 iReason);
 
 
 static void MakeRegion(const INT32 i, const UINT16 x, const UINT16 y, const UINT16 w, const UINT16 h, const UINT32 val_a, const UINT32 val_b)
@@ -2564,7 +2534,7 @@ static void ClearMouseRegionsForMoveBox(void)
 }
 
 
-static void MoveMenuMvtCallback(MOUSE_REGION* pRegion, INT32 iReason)
+static void MoveMenuMvtCallback(MOUSE_REGION* pRegion, UINT32 iReason)
 {
 	// mvt callback handler for move box line regions
 	INT32 iValue = -1;
@@ -2590,21 +2560,22 @@ static void HandleMoveoutOfSectorMovementTroops(void);
 static void SelectAllOtherSoldiersInList(void);
 
 
-static void MoveMenuBtnCallback(MOUSE_REGION* pRegion, INT32 iReason)
+static void MoveMenuBtnCallback(MOUSE_REGION* pRegion, UINT32 iReason)
 {
 	// btn callback handler for move box line regions
-	INT32 iMoveBoxLine = -1, iRegionType = -1, iListIndex = -1, iClickTime = 0;
+	INT32 iMoveBoxLine = -1, iRegionType = -1, iListIndex = -1;
+	UINT32 uiClickTime = 0;
 	SOLDIERTYPE *pSoldier = NULL;
 
 
 	iMoveBoxLine = MSYS_GetRegionUserData( pRegion, 0 );
 	iRegionType  = MSYS_GetRegionUserData( pRegion, 1 );
 	iListIndex   = MSYS_GetRegionUserData( pRegion, 2 );
-	iClickTime   = GetJA2Clock();
+	uiClickTime   = GetJA2Clock();
 
-	if( ( iReason & MSYS_CALLBACK_REASON_LBUTTON_UP )  )
+	if( ( iReason & MSYS_CALLBACK_REASON_POINTER_UP )  )
 	{
-		if( iClickTime - giDblClickTimersForMoveBoxMouseRegions[ iMoveBoxLine ] < DBL_CLICK_DELAY_FOR_MOVE_MENU  )
+		if( uiClickTime - guiDblClickTimersForMoveBoxMouseRegions[ iMoveBoxLine ] < DBL_CLICK_DELAY_FOR_MOVE_MENU  )
 		{
 			// dbl click, and something is selected?
 			if ( IsAnythingSelectedForMoving() )
@@ -2616,7 +2587,7 @@ static void MoveMenuBtnCallback(MOUSE_REGION* pRegion, INT32 iReason)
 		}
 		else
 		{
-			giDblClickTimersForMoveBoxMouseRegions[ iMoveBoxLine ] = iClickTime;
+			guiDblClickTimersForMoveBoxMouseRegions[ iMoveBoxLine ] = uiClickTime;
 
 			if( iRegionType == SQUAD_REGION )
 			{
@@ -2752,7 +2723,7 @@ static void MoveMenuBtnCallback(MOUSE_REGION* pRegion, INT32 iReason)
 			}
 			else
 			{
-				SLOGE(DEBUG_TAG_ASSERTS, "MoveMenuBtnCallback: Invalid regionType %d, moveBoxLine %d", iRegionType, iMoveBoxLine);
+				SLOGA("MoveMenuBtnCallback: Invalid regionType {}, moveBoxLine {}", iRegionType, iMoveBoxLine);
 				return;
 			}
 
@@ -2887,7 +2858,7 @@ static void HandleMoveoutOfSectorMovementTroops(void)
 			{
 				if ( !AddCharacterToSquad( pSoldier, ( INT8 )( iSquadNumber ) ) )
 				{
-					SLOGE(DEBUG_TAG_ASSERTS, "HandleMoveoutOfSectorMovementTroops: AddCharacterToSquad %d failed, iCounter %d", iSquadNumber, iCounter);
+					SLOGA("HandleMoveoutOfSectorMovementTroops: AddCharacterToSquad {} failed, iCounter {}", iSquadNumber, iCounter);
 					// toggle whether he's going or not to try and recover somewhat gracefully
 					fSoldierIsMoving[ iCounter ] = !fSoldierIsMoving[ iCounter ];
 				}
@@ -3004,16 +2975,10 @@ static BOOLEAN AllOtherSoldiersInListAreSelected(void)
 }
 
 
-static BOOLEAN IsThisSquadInThisSector(const INT16 sSectorX, const INT16 sSectorY, const INT8 bSectorZ, const INT8 bSquadValue)
+static BOOLEAN IsThisSquadInThisSector(const SGPSector& sSector, const INT8 bSquadValue)
 {
-	INT16 sX;
-	INT16 sY;
-	INT8  bZ;
-	return
-		SectorSquadIsIn(bSquadValue, &sX, &sY, &bZ) &&
-		sSectorX == sX                              &&
-		sSectorY == sY                              &&
-		bSectorZ == bZ                              &&
+	SGPSector sMap;
+	return SectorSquadIsIn(bSquadValue, sMap) && sMap == sSector &&
 		!IsThisSquadOnTheMove(bSquadValue);
 }
 
@@ -3027,7 +2992,7 @@ static INT8 FindSquadThatSoldierCanJoin(SOLDIERTYPE* pSoldier)
 	for( bCounter = 0; bCounter < NUMBER_OF_SQUADS; bCounter++ )
 	{
 		// is this squad in this sector
-		if( IsThisSquadInThisSector( pSoldier->sSectorX, pSoldier->sSectorY, pSoldier->bSectorZ, bCounter ) )
+		if (IsThisSquadInThisSector(pSoldier->sSector, bCounter))
 		{
 			// does it have room?
 			if (!IsThisSquadFull(bCounter))
@@ -3058,17 +3023,18 @@ void ReBuildMoveBox( void )
 
 	// stop showing the box
 	fShowMapScreenMovementList = FALSE;
-	CreateDestroyMovementBox( sSelMapX, sSelMapY, ( INT16 )iCurrentMapSectorZ );
+	CreateDestroyMovementBox( sSelMap.x, sSelMap.y, ( INT16 )iCurrentMapSectorZ );
 
 	// show the box
 	fShowMapScreenMovementList = TRUE;
-	CreateDestroyMovementBox( sSelMapX, sSelMapY, ( INT16 )iCurrentMapSectorZ );
+	CreateDestroyMovementBox( sSelMap.x, sSelMap.y, ( INT16 )iCurrentMapSectorZ );
 	ShowBox( ghMoveBox );
 	MarkAllBoxesAsAltered( );
 }
 
 
-static void MoveScreenMaskBtnCallback(MOUSE_REGION* pRegion, INT32 iReason);
+static void MoveScreenMaskBtnCallbackPrimary(MOUSE_REGION* pRegion, UINT32 iReason);
+static void MoveScreenMaskBtnCallbackSecondary(MOUSE_REGION* pRegion, UINT32 iReason);
 
 
 void CreateScreenMaskForMoveBox( void )
@@ -3076,7 +3042,7 @@ void CreateScreenMaskForMoveBox( void )
 	if (!fScreenMaskForMoveCreated)
 	{
 		// set up the screen mask
-		MSYS_DefineRegion(&gMoveBoxScreenMask, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, MSYS_PRIORITY_HIGHEST - 4, MSYS_NO_CURSOR, MSYS_NO_CALLBACK, MoveScreenMaskBtnCallback);
+		MSYS_DefineRegion(&gMoveBoxScreenMask, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, MSYS_PRIORITY_HIGHEST - 4, MSYS_NO_CURSOR, MSYS_NO_CALLBACK, MouseCallbackPrimarySecondary(MoveScreenMaskBtnCallbackPrimary, MoveScreenMaskBtnCallbackSecondary));
 
 		fScreenMaskForMoveCreated = TRUE;
 	}
@@ -3093,22 +3059,19 @@ void RemoveScreenMaskForMoveBox( void )
 }
 
 
-static void MoveScreenMaskBtnCallback(MOUSE_REGION* pRegion, INT32 iReason)
+static void MoveScreenMaskBtnCallbackPrimary(MOUSE_REGION* pRegion, UINT32 iReason)
 {
-	// btn callback handler for move box screen mask region
-	if( ( iReason & MSYS_CALLBACK_REASON_LBUTTON_UP )  )
-	{
-		fShowMapScreenMovementList = FALSE;
-	}
-	else if( iReason & MSYS_CALLBACK_REASON_RBUTTON_UP )
-	{
-		sSelectedMilitiaTown = 0;
+	fShowMapScreenMovementList = FALSE;
+}
 
-		// are we showing the update box
-		if( fShowUpdateBox )
-		{
-			fShowUpdateBox = FALSE;
-		}
+static void MoveScreenMaskBtnCallbackSecondary(MOUSE_REGION* pRegion, UINT32 iReason)
+{
+	sSelectedMilitiaTown = 0;
+
+	// are we showing the update box
+	if( fShowUpdateBox )
+	{
+		fShowUpdateBox = FALSE;
 	}
 }
 
@@ -3279,7 +3242,7 @@ void DisplaySoldierUpdateBox( )
 
 	//InterruptTime();
 	PauseGame( );
-	LockPauseState(LOCK_PAUSE_04);
+	LockPauseState(LOCK_PAUSE_DISPLAY_SOLDIER_UPDATE);
 
 	PauseDialogueQueue( );
 
@@ -3452,7 +3415,7 @@ void DisplaySoldierUpdateBox( )
 }
 
 
-static void MakeButton(UINT idx, INT16 x, INT16 y, GUI_CALLBACK click, const wchar_t* text, const wchar_t* help_text)
+static void MakeButton(UINT idx, INT16 x, INT16 y, GUI_CALLBACK click, const ST::string& text, const ST::string& help_text)
 {
 	GUIButtonRef const btn = QuickCreateButtonImg(INTERFACEDIR "/group_confirm_tactical.sti", 7, 8, x, y, MSYS_PRIORITY_HIGHEST - 1, click);
 	guiUpdatePanelButtons[idx] = btn;
@@ -3461,8 +3424,8 @@ static void MakeButton(UINT idx, INT16 x, INT16 y, GUI_CALLBACK click, const wch
 }
 
 
-static void ContinueUpdateButtonCallback(GUI_BUTTON* btn, INT32 reason);
-static void StopUpdateButtonCallback(GUI_BUTTON* btn, INT32 reason);
+static void ContinueUpdateButtonCallback(GUI_BUTTON* btn, UINT32 reason);
+static void StopUpdateButtonCallback(GUI_BUTTON* btn, UINT32 reason);
 
 
 static void CreateDestroyUpdatePanelButtons(INT32 iX, INT32 iY, BOOLEAN fFourWideMode)
@@ -3517,7 +3480,7 @@ void CreateDestroyTheUpdateBox( void )
 
 		// lock it paused
 		PauseGame();
-		LockPauseState(LOCK_PAUSE_05);
+		LockPauseState(LOCK_PAUSE_CREATE_SOLDIER_UPDATE);
 
 		// display the box
 		DisplaySoldierUpdateBox( );
@@ -3596,18 +3559,18 @@ static void RenderSoldierSmallFaceForUpdatePanel(INT32 iIndex, INT32 iX, INT32 i
 }
 
 
-static void ContinueUpdateButtonCallback(GUI_BUTTON *btn, INT32 reason)
+static void ContinueUpdateButtonCallback(GUI_BUTTON *btn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		EndUpdateBox(TRUE); // restart time compression
 	}
 }
 
 
-static void StopUpdateButtonCallback(GUI_BUTTON *btn, INT32 reason)
+static void StopUpdateButtonCallback(GUI_BUTTON *btn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		EndUpdateBox(FALSE); // stop time compression
 	}
@@ -3630,32 +3593,9 @@ void EndUpdateBox( BOOLEAN fContinueTimeCompression )
 	}
 }
 
-
-void SetTixaAsFound( void )
-{
-	// set the town of Tixa as found by the player
-	fFoundTixa = TRUE;
-	fMapPanelDirty = TRUE;
-}
-
-void SetOrtaAsFound( void )
-{
-	// set the town of Orta as found by the player
-	fFoundOrta = TRUE;
-	fMapPanelDirty = TRUE;
-}
-
-void SetSAMSiteAsFound( UINT8 uiSamIndex )
-{
-	// set this SAM site as being found by the player
-	fSamSiteFound[ uiSamIndex ] = TRUE;
-	fMapPanelDirty = TRUE;
-}
-
-
 void InitTimersForMoveMenuMouseRegions()
 {
-	FOR_EACH(INT32, i, giDblClickTimersForMoveBoxMouseRegions) *i = 0;
+	FOR_EACH(UINT32, i, guiDblClickTimersForMoveBoxMouseRegions) *i = 0;
 }
 
 
@@ -3664,18 +3604,18 @@ void UpdateHelpTextForMapScreenMercIcons()
 	const SOLDIERTYPE* const s = GetSelectedInfoChar();
 
 	// if merc is an AIM merc
-	wchar_t const* const contract = s && s->ubWhatKindOfMercAmI == MERC_TYPE__AIM_MERC ?
-		zMarksMapScreenText[21] : L"";
+	ST::string contract = s && s->ubWhatKindOfMercAmI == MERC_TYPE__AIM_MERC ?
+		zMarksMapScreenText[21] : ST::null;
 	gContractIconRegion.SetFastHelpText(contract);
 
 	// if merc has life insurance
-	wchar_t const* const insurance = s && s->usLifeInsurance > 0 ?
-		zMarksMapScreenText[3] : L"";
+	ST::string insurance = s && s->usLifeInsurance > 0 ?
+		zMarksMapScreenText[3] : ST::null;
 	gInsuranceIconRegion.SetFastHelpText(insurance);
 
 	// if merc has a medical deposit
-	wchar_t const* const medical = s && s->usMedicalDeposit > 0 ?
-		zMarksMapScreenText[12] : L"";
+	ST::string medical = s && s->usMedicalDeposit > 0 ?
+		zMarksMapScreenText[12] : ST::null;
 	gDepositIconRegion.SetFastHelpText(medical);
 }
 
@@ -3719,26 +3659,30 @@ BOOLEAN HandleTimeCompressWithTeamJackedInAndGearedToGo( void )
 	// make sure the game just started
 	if (!DidGameJustStart()) return FALSE;
 
+	static const SGPSector usStartSector(gamepolicy(start_sector));
+
 	// Select starting sector.
-	ChangeSelectedMapSector(SECTORX(START_SECTOR), SECTORY(START_SECTOR), 0);
+	ChangeSelectedMapSector(usStartSector);
 
 	// load starting sector
 	try
 	{
-		SetCurrentWorldSector(SECTORX(START_SECTOR), SECTORY(START_SECTOR), 0);
+		SetCurrentWorldSector(usStartSector);
 	}
 	catch (...) /* XXX exception should probably propagate; caller ignores return value */
 	{
 		return FALSE;
 	}
 
-	//Setup variables in the PBI for this first battle.  We need to support the
-	//non-persistant PBI in case the user goes to mapscreen.
-	gfBlitBattleSectorLocator = TRUE;
-	gubPBSectorX = SECTORX(START_SECTOR);
-	gubPBSectorY = SECTORY(START_SECTOR);
-	gubPBSectorZ = 0;
-	gubEnemyEncounterCode = ENTERING_ENEMY_SECTOR_CODE;
+	if (NumEnemiesInSector(usStartSector) > 0)
+	{
+		//Setup variables in the PBI for this first battle.  We need to support the
+		//non-persistant PBI in case the user goes to mapscreen.
+		gfBlitBattleSectorLocator = TRUE;
+		gubPBSector = SGPSector(gamepolicy(start_sector));
+
+		gubEnemyEncounterCode = ENTERING_ENEMY_SECTOR_CODE;
+	}
 
 	InitHelicopterEntranceByMercs( );
 
@@ -3754,22 +3698,21 @@ BOOLEAN HandleTimeCompressWithTeamJackedInAndGearedToGo( void )
 }
 
 
-void NotifyPlayerWhenEnemyTakesControlOfImportantSector(INT16 const x, INT16 const y, INT8 const z)
+void NotifyPlayerWhenEnemyTakesControlOfImportantSector(const SGPSector& sec)
 {
 	// There is nothing important to player below ground
-	if (z != 0) return;
+	if (sec.z != 0) return;
 
-	wchar_t sector_desc[128];
-	GetSectorIDString(x, y, z, sector_desc, lengthof(sector_desc), TRUE);
+	ST::string sector_desc = GetSectorIDString(sec, TRUE);
 
-	wchar_t buf[256];
-	if (IsThisSectorASAMSector(x, y, z))
+	ST::string buf;
+	if (IsThisSectorASAMSector(sec))
 	{
-		swprintf(buf, lengthof(buf), pMapErrorString[15], sector_desc);
+		buf = st_format_printf(pMapErrorString[15], sector_desc);
 	}
 	else
 	{
-		UINT8 const sector  = SECTOR(x, y);
+		UINT8 const sector  = sec.AsByte();
 		INT8  const mine_id = GetMineIndexForSector(sector);
 		if (mine_id != -1                           &&
 				GetMaxDailyRemovalFromMine(mine_id) > 0 &&
@@ -3777,9 +3720,8 @@ void NotifyPlayerWhenEnemyTakesControlOfImportantSector(INT16 const x, INT16 con
 		{ // There is a mine and it was producing for us
 			// Get how much we now will get from the mines
 			INT32 const income = GetProjectedTotalDailyIncome();
-			wchar_t     income_string[64];
-			SPrintMoney(income_string, income);
-			swprintf(buf, lengthof(buf), pMapErrorString[16], sector_desc, income_string);
+			ST::string income_string = SPrintMoney(income);
+			buf = st_format_printf(pMapErrorString[16], sector_desc, income_string);
 		}
 		else
 		{
@@ -3788,40 +3730,40 @@ void NotifyPlayerWhenEnemyTakesControlOfImportantSector(INT16 const x, INT16 con
 			// San Mona isn't important
 			if (town_id == SAN_MONA) return;
 
-			swprintf(buf, lengthof(buf), pMapErrorString[25], sector_desc);
+			buf = st_format_printf(pMapErrorString[25], sector_desc);
 		}
 	}
 	DoScreenIndependantMessageBox(buf, MSG_BOX_FLAG_OK, MapScreenDefaultOkBoxCallback);
 }
 
 
-void NotifyPlayerOfInvasionByEnemyForces(INT16 const x, INT16 const y, INT8 const z, MSGBOX_CALLBACK const return_callback)
+void NotifyPlayerOfInvasionByEnemyForces(const SGPSector& sector, MSGBOX_CALLBACK const return_callback)
 {
-	if (z != 0) return;
+	if (sector.z != 0) return;
 
 	// If enemy controlled anyways, leave
-	if (StrategicMap[CALCULATE_STRATEGIC_INDEX(x, y)].fEnemyControlled) return;
+	if (StrategicMap[sector.AsStrategicIndex()].fEnemyControlled) return;
 
-	wchar_t buf[128];
-	wchar_t sector_desc[128];
+	ST::string buf;
+	ST::string sector_desc;
 
 	// check if SAM site here
-	if (IsThisSectorASAMSector(x, y, z))
+	if (IsThisSectorASAMSector(sector))
 	{
-		GetShortSectorString(x, y, sector_desc, lengthof(sector_desc));
-		swprintf(buf, lengthof(buf), pMapErrorString[22], sector_desc);
+		sector_desc = sector.AsShortString();
+		buf = st_format_printf(pMapErrorString[22], sector_desc);
 		DoScreenIndependantMessageBox(buf, MSG_BOX_FLAG_OK, return_callback);
 	}
-	else if (GetTownIdForSector(SECTOR(x, y)) != BLANK_SECTOR)
+	else if (GetTownIdForSector(sector) != BLANK_SECTOR)
 	{
-		GetSectorIDString(x, y, z, sector_desc, lengthof(sector_desc), TRUE);
-		swprintf(buf, lengthof(buf), pMapErrorString[23], sector_desc);
+		sector_desc = GetSectorIDString(sector, TRUE);
+		buf = st_format_printf(pMapErrorString[23], sector_desc);
 		DoScreenIndependantMessageBox(buf, MSG_BOX_FLAG_OK, return_callback);
 	}
 	else
 	{
-		GetShortSectorString(x, y, sector_desc, lengthof(sector_desc));
-		swprintf(buf, lengthof(buf), pMapErrorString[24], sector_desc);
+		sector_desc = sector.AsShortString();
+		buf = st_format_printf(pMapErrorString[24], sector_desc);
 		ScreenMsg(FONT_MCOLOR_LTYELLOW, MSG_INTERFACE, buf);
 	}
 }
@@ -3840,7 +3782,7 @@ static MoveError CanCharacterMoveInStrategic(SOLDIERTYPE& s)
 	// A POW?
 	if (s.bAssignment == ASSIGNMENT_POW) return ME_POW;
 	// Underground? (can't move strategically, must use tactical traversal)
-	if (s.bSectorZ != 0) return ME_UNDERGROUND;
+	if (s.sSector.z != 0) return ME_UNDERGROUND;
 
 	// Vehicle checks
 	if (s.uiStatusFlags & SOLDIER_VEHICLE)
@@ -3858,14 +3800,14 @@ static MoveError CanCharacterMoveInStrategic(SOLDIERTYPE& s)
 		// Dead?
 		if (s.bLife <= 0)
 		{
-			swprintf(gsCustomErrorString, lengthof(gsCustomErrorString), pMapErrorString[35], s.name);
+			gsCustomErrorString = st_format_printf(pMapErrorString[35], s.name);
 			return ME_CUSTOM;
 		}
 
 		// Too injured?
 		if (s.bLife < OKLIFE)
 		{
-			swprintf(gsCustomErrorString, lengthof(gsCustomErrorString), pMapErrorString[33], s.name);
+			gsCustomErrorString = st_format_printf(pMapErrorString[33], s.name);
 			return ME_CUSTOM;
 		}
 	}
@@ -3875,26 +3817,23 @@ static MoveError CanCharacterMoveInStrategic(SOLDIERTYPE& s)
 	if (!s.fBetweenSectors && !SoldierAboardAirborneHeli(s))
 	{
 		// And that sector is loaded
-		if (s.sSectorX == gWorldSectorX &&
-				s.sSectorY == gWorldSectorY &&
-				s.bSectorZ == gbWorldSectorZ)
+		if (s.sSector == gWorldSector)
 		{
 			// In combat?
 			if (gTacticalStatus.uiFlags & INCOMBAT) return ME_COMBAT;
 			// Hostile sector?
 			if (gTacticalStatus.fEnemyInSector) return ME_ENEMY;
-			// Air raid in loaded sector where character is?
-			if (InAirRaid()) return ME_AIR_RAID;
+			// Bloodcat ambush?
+			if (gubEnemyEncounterCode == BLOODCAT_AMBUSH_CODE && HostileBloodcatsPresent()) return ME_COMBAT;
 		}
 
 		// Not necessarily loaded - if there are any hostiles there
-		if (NumHostilesInSector(s.sSectorX, s.sSectorY, s.bSectorZ) > 0) return ME_ENEMY;
+		if (NumHostilesInSector(s.sSector) > 0) return ME_ENEMY;
 	}
 
 	// If in L12 museum, and the museum alarm went off, and Eldin still around
-	if (s.sSectorX == 12        &&
-			s.sSectorY == MAP_ROW_L &&
-			s.bSectorZ == 0         &&
+	static const SGPSector museum(12, MAP_ROW_L);
+	if (s.sSector == museum &&
 			!s.fBetweenSectors && GetProfile(ELDIN).bMercStatus != MERC_IS_DEAD)
 	{
 		UINT8	const room = GetRoom(s.sGridNo);
@@ -3914,7 +3853,7 @@ static MoveError CanCharacterMoveInStrategic(SOLDIERTYPE& s)
 	 * anyway in the next sector, or already asleep and can't be awakened */
 	if (PlayerSoldierTooTiredToTravel(s))
 	{
-		swprintf(gsCustomErrorString, lengthof(gsCustomErrorString), pMapErrorString[43], s.name);
+		gsCustomErrorString = st_format_printf(pMapErrorString[43], s.name);
 		return ME_CUSTOM;
 	}
 
@@ -3933,8 +3872,8 @@ static MoveError CanCharacterMoveInStrategic(SOLDIERTYPE& s)
 				(s.bAssignment  < ON_DUTY && NumberOfNonEPCsInSquad(s.bAssignment) == 0))
 		{
 			MERCPROFILESTRUCT const&       p    = GetProfile(s.ubProfile);
-			wchar_t           const* const text = p.bSex == MALE ? pMapErrorString[6] : pMapErrorString[7];
-			swprintf(gsCustomErrorString, lengthof(gsCustomErrorString), text, s.name);
+			ST::string text = p.bSex == MALE ? pMapErrorString[6] : pMapErrorString[7];
+			gsCustomErrorString = st_format_printf(text, s.name);
 			return ME_CUSTOM;
 		}
 	}
@@ -3945,13 +3884,13 @@ static MoveError CanCharacterMoveInStrategic(SOLDIERTYPE& s)
 	{
 		case MARIA:
 			// Maria can't move if she's in sector C5
-			if (SECTOR(s.sSectorX, s.sSectorY) == SEC_C5) problem_exists = true;
+			if (s.sSector.AsByte() == SEC_C5) problem_exists = true;
 			break;
 	}
 
 	if (problem_exists)
 	{ // Inform user this specific merc cannot be moved out of the sector
-		swprintf(gsCustomErrorString, lengthof(gsCustomErrorString), pMapErrorString[29], s.name);
+		gsCustomErrorString = st_format_printf(pMapErrorString[29], s.name);
 		return ME_CUSTOM;
 	}
 
@@ -3996,7 +3935,7 @@ MoveError CanEntireMovementGroupMercIsInMove(SOLDIERTYPE& s)
 void ReportMapScreenMovementError(const INT8 bErrorNumber)
 {
 	// a customized message?
-	const wchar_t* const text = (bErrorNumber != ME_CUSTOM ? pMapErrorString[bErrorNumber] : gsCustomErrorString);
+	ST::string text = (bErrorNumber != ME_CUSTOM ? pMapErrorString[bErrorNumber] : gsCustomErrorString);
 	DoMapMessageBox(MSG_BOX_BASIC_STYLE, text, MAP_SCREEN, MSG_BOX_FLAG_OK, MapScreenDefaultOkBoxCallback);
 }
 
@@ -4116,9 +4055,7 @@ static BOOLEAN CanSoldierMoveWithVehicleId(const SOLDIERTYPE* const pSoldier, co
 		pVehicle2 = &( pVehicleList[ iVehicle2Id ] );
 
 		// as long as they're in the same location, amd neither is between sectors, different vehicles is also ok
-		if( ( pVehicle1->sSectorX == pVehicle2->sSectorX ) &&
-			( pVehicle1->sSectorY == pVehicle2->sSectorY ) &&
-			( pVehicle1->sSectorZ == pVehicle2->sSectorZ ) &&
+		if (pVehicle1->sSector == pVehicle2->sSector &&
 			!pVehicle1->fBetweenSectors &&
 			!pVehicle2->fBetweenSectors )
 		{
@@ -4141,7 +4078,7 @@ void SaveLeaveItemList(HWFILE const f)
 		{
 			// Save to specify that a node DOES exist
 			BOOLEAN const node_exists = TRUE;
-			FileWrite(f, &node_exists, sizeof(BOOLEAN));
+			f->write(&node_exists, sizeof(BOOLEAN));
 
 			// Save number of items
 			UINT32 n_items = 0;
@@ -4149,31 +4086,31 @@ void SaveLeaveItemList(HWFILE const f)
 			{
 				++n_items;
 			}
-			FileWrite(f, &n_items, sizeof(UINT32));
+			f->write(&n_items, sizeof(UINT32));
 
 			for (MERC_LEAVE_ITEM const* i = head; i; i = i->pNext)
 			{
 				BYTE  data[40];
-				BYTE* d = data;
-				d = InjectObject(d, &i->o);
+				DataWriter d{data};
+				InjectObject(d, &i->o);
 				INJ_SKIP(d, 4)
-				Assert(d == endof(data));
+				Assert(d.getConsumed() == lengthof(data));
 
-				FileWrite(f, data, sizeof(data));
+				f->write(data, sizeof(data));
 			}
 		}
 		else
 		{
 			// Save to specify that a node DOENST exist
 			BOOLEAN const node_exists = FALSE;
-			FileWrite(f, &node_exists, sizeof(BOOLEAN));
+			f->write(&node_exists, sizeof(BOOLEAN));
 		}
 	}
 
 	// Save the leave list profile IDs
 	for (INT32 i = 0; i < NUM_LEAVE_LIST_SLOTS; ++i)
 	{
-		FileWrite(f, &guiLeaveListOwnerProfileId[i], sizeof(UINT32));
+		f->write(&guiLeaveListOwnerProfileId[i], sizeof(UINT32));
 	}
 }
 
@@ -4187,25 +4124,25 @@ void LoadLeaveItemList(HWFILE const f)
 	{
 		// Load flag which specifies whether a node exists
 		BOOLEAN	node_exists;
-		FileRead(f, &node_exists, sizeof(BOOLEAN));
+		f->read(&node_exists, sizeof(BOOLEAN));
 		if (!node_exists) continue;
 
 		// Load the number specifing how many items there are in the list
 		UINT32 n_items;
-		FileRead(f, &n_items, sizeof(UINT32));
+		f->read(&n_items, sizeof(UINT32));
 
 		MERC_LEAVE_ITEM** anchor = &gpLeaveListHead[i];
 		for (UINT32 n = n_items; n != 0; --n)
 		{
-			MERC_LEAVE_ITEM* const li = MALLOCZ(MERC_LEAVE_ITEM);
+			MERC_LEAVE_ITEM* const li = new MERC_LEAVE_ITEM{};
 
 			BYTE  data[40];
-			FileRead(f, data, sizeof(data));
+			f->read(data, sizeof(data));
 
-			BYTE const* d = data;
-			d = ExtractObject(d, &li->o);
+			DataReader d{data};
+			ExtractObject(d, &li->o);
 			EXTR_SKIP(d, 4)
-			Assert(d == endof(data));
+			Assert(d.getConsumed() == lengthof(data));
 
 			// Append node to list
 			*anchor = li;
@@ -4216,7 +4153,7 @@ void LoadLeaveItemList(HWFILE const f)
 	// Load the leave list profile IDs
 	for (INT32 i = 0; i < NUM_LEAVE_LIST_SLOTS; ++i)
 	{
-		FileRead(f, &guiLeaveListOwnerProfileId[i], sizeof(UINT32));
+		f->read(&guiLeaveListOwnerProfileId[i], sizeof(UINT32));
 	}
 }
 
@@ -4228,8 +4165,7 @@ void TurnOnSectorLocator( UINT8 ubProfileID )
 	const SOLDIERTYPE* const pSoldier = FindSoldierByProfileID(ubProfileID);
 	if( pSoldier )
 	{
-		gsSectorLocatorX = pSoldier->sSectorX;
-		gsSectorLocatorY = pSoldier->sSectorY;
+		gsSectorLocator = pSoldier->sSector;
 	}
 	else
 	{
@@ -4242,8 +4178,7 @@ void TurnOnSectorLocator( UINT8 ubProfileID )
 			{
 				// can't use his profile, he's where his chopper is
 				VEHICLETYPE const& v = GetHelicopter();
-				gsSectorLocatorX = v.sSectorX;
-				gsSectorLocatorY = v.sSectorY;
+				gsSectorLocator = v.sSector;
 			}
 			else
 			{
@@ -4252,8 +4187,7 @@ void TurnOnSectorLocator( UINT8 ubProfileID )
 		}
 		else
 		{
-			gsSectorLocatorX = gMercProfiles[ ubProfileID ].sSectorX;
-			gsSectorLocatorY = gMercProfiles[ ubProfileID ].sSectorY;
+			gsSectorLocator = gMercProfiles[ubProfileID].sSector;
 		}
 	}
 	gubBlitSectorLocatorCode = LOCATOR_COLOR_YELLOW;
@@ -4268,20 +4202,17 @@ void TurnOffSectorLocator()
 
 
 
-void HandleBlitOfSectorLocatorIcon( INT16 sSectorX, INT16 sSectorY, INT16 sSectorZ, UINT8 ubLocatorID )
+void HandleBlitOfSectorLocatorIcon(const SGPSector& sSector, UINT8 ubLocatorID)
 {
 	static UINT8  ubFrame = 0;
 	UINT8 ubBaseFrame = 0;
 	UINT32 uiTimer = 0;
 	INT16 sScreenX, sScreenY;
 
-
 	// blits at 0,0 had been observerd...
-	Assert( ( sSectorX >= 1 ) && ( sSectorX <= 16 ) );
-	Assert( ( sSectorY >= 1 ) && ( sSectorY <= 16 ) );
-	Assert( ( sSectorZ >= 0 ) && ( sSectorZ <=  3 ) );
+	Assert(sSector.IsValid());
 
-	if( sSectorZ != iCurrentMapSectorZ )
+	if (sSector.z != iCurrentMapSectorZ)
 	{ //if the z level of the map screen renderer is different than the
 		//sector z that we wish to locate, then don't render it
 		return;
@@ -4310,7 +4241,7 @@ void HandleBlitOfSectorLocatorIcon( INT16 sSectorX, INT16 sSectorY, INT16 sSecto
 	}
 
 	//Convert the sector value into screen values.
-	GetScreenXYFromMapXY( sSectorX, sSectorY, &sScreenX, &sScreenY );
+	GetScreenXYFromMapXY(sSector, &sScreenX, &sScreenY);
 	// make sure we are on the border
 	if( sScreenX < MAP_GRID_X )
 	{

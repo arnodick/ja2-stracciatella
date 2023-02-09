@@ -68,7 +68,6 @@
 #include "JAScreens.h"
 #include "ScreenIDs.h"
 #include "Video.h"
-#include "MemMan.h"
 #include "Debug.h"
 #include "Items.h"
 #include "UILayout.h"
@@ -80,7 +79,14 @@
 #include "Soldier.h"
 #include "WeaponModels.h"
 #include "policy/GamePolicy.h"
-#include "slog/slog.h"
+#include "Logger.h"
+#include "MercProfile.h"
+
+#include <string_theory/format>
+#include <string_theory/string>
+
+#include <algorithm>
+#include <iterator>
 
 #define ITEMDESC_FONT					BLOCKFONT2
 #define ITEMDESC_FONTSHADOW2				32
@@ -110,8 +116,8 @@
 #define ITEM_STATS_HEIGHT				8
 #define MAX_STACK_POPUP_WIDTH				6
 
-#define ITEMDESC_START_X				214
-#define ITEMDESC_START_Y				1 + INV_INTERFACE_START_Y
+#define ITEMDESC_START_X				(INTERFACE_START_X + 214)
+#define ITEMDESC_START_Y				(1 + INV_INTERFACE_START_Y)
 #define ITEMDESC_HEIGHT				133
 #define ITEMDESC_WIDTH					320
 #define MAP_ITEMDESC_HEIGHT				268
@@ -141,8 +147,8 @@ static const SGPBox g_map_itemdesc_desc_box        = { 23, 170, 220,  0 };
 static const SGPBox g_map_itemdesc_pros_cons_box   = { 23, 230, 220, 10 };
 static const SGPBox g_map_itemdesc_item_status_box = { 18,  54,   2, 42 };
 
-#define DOTDOTDOT L"..."
-#define COMMA_AND_SPACE L", "
+#define DOTDOTDOT "..."
+#define COMMA_AND_SPACE ", "
 
 #define ITEM_PROS_AND_CONS( usItem )			( ( GCM->getItem(usItem)->isGun()) )
 
@@ -171,7 +177,7 @@ static const SGPBox g_map_itemdesc_item_status_box = { 18,  54,   2, 42 };
 #define BAD_RELIABILITY				-2
 #define BAD_REPAIR_EASE				-2
 
-#define KEYRING_X      496
+#define KEYRING_X      (INTERFACE_START_X + 496)
 #define KEYRING_Y      (INV_INTERFACE_START_Y + 106)
 #define MAP_KEYRING_X (STD_SCREEN_X + 217)
 #define MAP_KEYRING_Y (STD_SCREEN_Y + 271)
@@ -206,16 +212,17 @@ static BOOLEAN gbItemPointerLocateGood = FALSE;
 static SGPVObject *guiItemDescBox;
 static SGPVObject *guiMapItemDescBox;
 static SGPVObject *guiItemGraphic;
+static UINT8 guiItemGraphicIndex;
 static SGPVObject *guiMoneyGraphicsForDescBox;
 static SGPVObject *guiBullet;
 BOOLEAN gfInItemDescBox = FALSE;
 static UINT32 guiCurrentItemDescriptionScreen=0;
 OBJECTTYPE *gpItemDescObject = NULL;
 static BOOLEAN gfItemDescObjectIsAttachment = FALSE;
-static const wchar_t *gzItemName;
-static wchar_t gzItemDesc[SIZE_ITEM_INFO];
-static wchar_t gzItemPros[SIZE_ITEM_PROS];
-static wchar_t gzItemCons[SIZE_ITEM_CONS];
+static ST::string gzItemName;
+static ST::string gzItemDesc;
+static ST::string gzItemPros;
+static ST::string gzItemCons;
 static INT16 gsInvDescX;
 static INT16 gsInvDescY;
 static UINT8 gubItemDescStatusIndex;
@@ -270,10 +277,6 @@ SOLDIERTYPE *gpItemPopupSoldier;
 
 // inventory description done button for mapscreen
 GUIButtonRef giMapInvDescButton;
-
-
-static BOOLEAN gfItemPopupRegionCallbackEndFix = FALSE;
-
 
 struct INV_DESC_STATS
 {
@@ -420,54 +423,46 @@ INT8 gbCompatibleApplyItem = FALSE;
 
 static SGPVObject *guiMapInvSecondHandBlockout;
 static SGPVObject *guiSecItemHiddenVO;
-static SGPVObject *guiGUNSM;
-static SGPVObject *guiP1ITEMS;
-static SGPVObject *guiP2ITEMS;
-static SGPVObject *guiP3ITEMS;
+static SGPVObject *guiSmallInventoryGraphicMissingSmallPocket;
+static SGPVObject *guiSmallInventoryGraphicMissingBigPocket;
+static std::map<ST::string, SGPVObject*> allInventoryGraphics;
+const ST::string guiBigInventoryGraphicMissingPath = "sti/interface/inventory/inventory-graphic-not-found-big.sti";
 
-
-static BOOLEAN AttemptToAddSubstring(wchar_t* const zDest, const wchar_t* const zTemp, UINT32* const puiStringLength, const UINT32 uiPixLimit)
+static BOOLEAN AttemptToAddSubstring(ST::string& zDest, const ST::string& zTemp, UINT32* puiStringLength, UINT32 uiPixLimit)
 {
 	UINT32 uiRequiredStringLength, uiTempStringLength;
 
 	uiTempStringLength = StringPixLength( zTemp, ITEMDESC_FONT );
 	uiRequiredStringLength = *puiStringLength + uiTempStringLength;
-	if (zDest[0] != 0)
+	if (!zDest.empty())
 	{
 		uiRequiredStringLength += StringPixLength( COMMA_AND_SPACE, ITEMDESC_FONT );
 	}
 	if (uiRequiredStringLength < uiPixLimit)
 	{
-		if (zDest[0] != 0)
+		if (!zDest.empty())
 		{
-			wcscat( zDest, COMMA_AND_SPACE );
+			zDest += COMMA_AND_SPACE;
 		}
-		wcscat( zDest, zTemp );
+		zDest += zTemp;
 		*puiStringLength = uiRequiredStringLength;
 		return( TRUE );
 	}
 	else
 	{
-		wcscat( zDest, DOTDOTDOT );
+		zDest += DOTDOTDOT;
 		return( FALSE );
 	}
 }
 
 
-static void GenerateProsString(wchar_t* const zItemPros, OBJECTTYPE const& o, UINT32 const uiPixLimit)
+static void GenerateProsString(ST::string& zItemPros, const OBJECTTYPE& o, UINT32 uiPixLimit)
 {
 	UINT32 uiStringLength = 0;
-	const wchar_t *zTemp;
+	ST::string zTemp;
 	UINT16 usItem = o.usItem;
-	UINT8 ubWeight;
 
-	zItemPros[0] = 0;
-
-	ubWeight = GCM->getItem(usItem)->getWeight();
-	if (GCM->getItem(usItem)->getItemClass() == IC_GUN)
-	{
-		ubWeight += GCM->getItem(o.usGunAmmoItem)->getWeight();
-	}
+	zItemPros = ST::null;
 
 	if (GCM->getItem(usItem)->getWeight() <= EXCEPTIONAL_WEIGHT)
 	{
@@ -561,14 +556,14 @@ static void GenerateProsString(wchar_t* const zItemPros, OBJECTTYPE const& o, UI
 }
 
 
-static void GenerateConsString(wchar_t* const zItemCons, OBJECTTYPE const& o, UINT32 const uiPixLimit)
+static void GenerateConsString(ST::string& zItemCons, const OBJECTTYPE& o, UINT32 uiPixLimit)
 {
 	UINT32 uiStringLength = 0;
-	const wchar_t *zTemp;
+	ST::string zTemp;
 	UINT8 ubWeight;
 	UINT16 usItem = o.usItem;
 
-	zItemCons[0] = 0;
+	zItemCons = ST::null;
 
 	// calculate the weight of the item plus ammunition but not including any attachments
 	ubWeight = GCM->getItem(usItem)->getWeight();
@@ -693,7 +688,7 @@ void InitInvSlotInterface(INV_REGION_DESC const* const pRegionDesc, INV_REGION_D
 		MSYS_SetRegionUserData(&m, 0, i);
 	}
 
-	memset(gbCompatibleAmmo, 0, sizeof(gbCompatibleAmmo));
+	std::fill(std::begin(gbCompatibleAmmo), std::end(gbCompatibleAmmo), 0);
 }
 
 
@@ -800,8 +795,7 @@ static void INVRenderINVPanelItem(SOLDIERTYPE const& s, INT16 const pocket, Dirt
 	UINT16 outline   = SGP_TRANSPARENT;
 	if (dirty_level == DIRTYLEVEL2)
 	{
-		wchar_t buf[150];
-		GetHelpTextForItem(buf, lengthof(buf), o);
+		ST::string buf = GetHelpTextForItem(o);
 		r.SetFastHelpText(buf);
 
 		// If it's the second hand and this hand cannot contain anything, remove the
@@ -815,7 +809,7 @@ static void INVRenderINVPanelItem(SOLDIERTYPE const& s, INT16 const pocket, Dirt
 			}
 			else
 			{
-				INT32 const x = 217;
+				INT32 const x = INTERFACE_START_X + 217;
 				INT32 const y = INV_INTERFACE_START_Y + 108;
 				BltVideoObject(guiSAVEBUFFER, guiSecItemHiddenVO, 0, x, y);
 				RestoreExternBackgroundRect(x, y, 72, 28);
@@ -1235,7 +1229,7 @@ BOOLEAN InternalHandleCompatibleAmmoUI(const SOLDIERTYPE* pSoldier, const OBJECT
 {
 	BOOLEAN fFound = FALSE;
 	INT32 cnt;
-	BOOLEAN fFoundAttachment = FALSE;
+	//BOOLEAN fFoundAttachment = FALSE;
 
 	// ATE: If pTest object is NULL, test only for existence of syringes, etc...
 	if ( pTestObject == NULL )
@@ -1301,7 +1295,7 @@ BOOLEAN InternalHandleCompatibleAmmoUI(const SOLDIERTYPE* pSoldier, const OBJECT
 			ValidLaunchable(b, a) ||
 			ValidLaunchable(a, b) )
 		{
-			fFoundAttachment = TRUE;
+			//fFoundAttachment = TRUE;
 
 			if ( fOn != gbCompatibleAmmo[ cnt ] )
 			{
@@ -1564,17 +1558,18 @@ void INVRenderItem(SGPVSurface* const buffer, SOLDIERTYPE const* const s, OBJECT
 	if (dirty_level == DIRTYLEVEL2)
 	{
 		// Center the object in the slot
-		SGPVObject  const& item_vo = GetInterfaceGraphicForItem(item);
-		UINT8       const  gfx_idx = item->getGraphicNum();
-		ETRLEObject const& e       = item_vo.SubregionProperties(gfx_idx);
+		auto graphic = GetSmallInventoryGraphicForItem(item);
+		auto item_vo = graphic.first;
+		auto gfx_idx = graphic.second;
+		ETRLEObject const& e       = item_vo->SubregionProperties(gfx_idx);
 		INT16       const  cx      = sX + (sWidth  - e.usWidth)  / 2 - e.sOffsetX;
 		INT16       const  cy      = sY + (sHeight - e.usHeight) / 2 - e.sOffsetY;
 
 		if (gamepolicy(f_draw_item_shadow))
 		{
-			BltVideoObjectOutlineShadow(buffer, &item_vo, gfx_idx, cx - 2, cy + 2);
+			BltVideoObjectOutlineShadow(buffer, item_vo, gfx_idx, cx - 2, cy + 2);
 		}
-		BltVideoObjectOutline(      buffer, &item_vo, gfx_idx, cx,     cy, outline_colour);
+		BltVideoObjectOutline(buffer, item_vo, gfx_idx, cx,     cy, outline_colour);
 
 		if (buffer == FRAME_BUFFER)
 		{
@@ -1613,14 +1608,14 @@ void INVRenderItem(SGPVSurface* const buffer, SOLDIERTYPE const* const s, OBJECT
 			{
 				RestoreExternBackgroundRect(sNewX, sNewY, 20, 15);
 			}
-			GPrintInvalidateF(sNewX, sNewY, L"%d", o.ubGunShotsLeft);
+			GPrintInvalidate(sNewX, sNewY, ST::format("{}", o.ubGunShotsLeft));
 
 			// Display 'JAMMED' if we are jammed
 			if (o.bGunAmmoStatus < 0)
 			{
 				SetFontForeground(FONT_MCOLOR_RED);
 
-				const wchar_t* const jammed =
+				ST::string jammed =
 					sWidth >= BIG_INV_SLOT_WIDTH - 10 ?
 						TacticalStr[JAMMED_ITEM_STR] :
 						TacticalStr[SHORT_JAMMED_GUN];
@@ -1636,8 +1631,7 @@ void INVRenderItem(SGPVSurface* const buffer, SOLDIERTYPE const* const s, OBJECT
 			// Display # of items
 			SetFontForeground(FONT_GRAY4);
 
-			wchar_t pStr[16];
-			swprintf(pStr, lengthof(pStr), L"%d", o.ubNumberOfObjects);
+			ST::string pStr = ST::format("{}", o.ubNumberOfObjects);
 
 			const UINT16 uiStringLength = StringPixLength(pStr, ITEM_FONT);
 			const INT16  sNewX          = sX + sWidth - uiStringLength - 4;
@@ -1654,7 +1648,7 @@ void INVRenderItem(SGPVSurface* const buffer, SOLDIERTYPE const* const s, OBJECT
 		{
 			SetFontForeground(GetAttachmentHintColor(&o));
 
-			const wchar_t* const attach_marker  = L"*";
+			ST::string attach_marker = "*";
 			UINT16         const uiStringLength = StringPixLength(attach_marker, ITEM_FONT);
 			INT16          const sNewX          = sX + sWidth - uiStringLength - 4;
 			INT16          const sNewY          = sY;
@@ -1670,7 +1664,7 @@ void INVRenderItem(SGPVSurface* const buffer, SOLDIERTYPE const* const s, OBJECT
 		{
 			SetFontForeground(FONT_DKRED);
 
-			const wchar_t* const mode_marker    = s->bWeaponMode == WM_BURST ? L"*" : L"+";
+			ST::string mode_marker = s->bWeaponMode == WM_BURST ? "*" : "+";
 			UINT16         const uiStringLength = StringPixLength(mode_marker, ITEM_FONT);
 			INT16          const sNewX          = sX + sWidth - uiStringLength - 4;
 			INT16          const sNewY          = sY + 13; // rather arbitrary
@@ -1721,28 +1715,13 @@ void CycleItemDescriptionItem( )
 
 	CreateItem( (UINT16)usOldItem, 100, &( gpItemDescSoldier->inv[ HANDPOS ] ) );
 
-	InternalInitItemDescriptionBox( &( gpItemDescSoldier->inv[ HANDPOS ] ), 214, (INT16)(INV_INTERFACE_START_Y + 1 ), gubItemDescStatusIndex, gpItemDescSoldier );
+	InternalInitItemDescriptionBox( &( gpItemDescSoldier->inv[ HANDPOS ] ), INTERFACE_START_X + 214, (INT16)(INV_INTERFACE_START_Y + 1 ), gubItemDescStatusIndex, gpItemDescSoldier );
 }
 
 
 void InitItemDescriptionBox(SOLDIERTYPE* pSoldier, UINT8 ubPosition, INT16 sX, INT16 sY, UINT8 ubStatusIndex)
 {
-	OBJECTTYPE *pObject;
-
-	//DEF:
-	//if we are in the shopkeeper screen, and we are to use the
-	if( guiCurrentScreen == SHOPKEEPER_SCREEN && ubPosition == 255 )
-	{
-		pObject = pShopKeeperItemDescObject;
-	}
-
-	//else use item from the hand position
-	else
-	{
-		pObject = &(pSoldier->inv[ ubPosition ] );
-	}
-
-	InternalInitItemDescriptionBox(pObject, sX, sY, ubStatusIndex, pSoldier);
+	InternalInitItemDescriptionBox(&pSoldier->inv[ubPosition], sX, sY, ubStatusIndex, pSoldier);
 }
 
 
@@ -1762,17 +1741,22 @@ static void SetAttachmentTooltips(void)
 	for (UINT i = 0; i < MAX_ATTACHMENTS; ++i)
 	{
 		const UINT16 attachment = gpItemDescObject->usAttachItem[i];
-		const wchar_t* const tip = (attachment != NOTHING ? ItemNames[attachment] : g_langRes->Message[STR_ATTACHMENTS]);
+		ST::string tip = (attachment != NOTHING ? GCM->getItem(attachment)->getName() : g_langRes->Message[STR_ATTACHMENTS]);
 		gItemDescAttachmentRegions[i].SetFastHelpText(tip);
 	}
 }
 
 
-static void BtnMoneyButtonCallback(GUI_BUTTON* btn, INT32 reason);
-static void ItemDescAmmoCallback(GUI_BUTTON* btn, INT32 reason);
-static void ItemDescAttachmentsCallback(MOUSE_REGION* pRegion, INT32 iReason);
-static void ItemDescCallback(MOUSE_REGION* pRegion, INT32 iReason);
-static void ItemDescDoneButtonCallback(GUI_BUTTON* btn, INT32 reason);
+static void BtnMoneyButtonCallbackPrimary(GUI_BUTTON* btn, UINT32 reason);
+static void BtnMoneyButtonCallbackSecondary(GUI_BUTTON* btn, UINT32 reason);
+static void BtnMoneyButtonCallbackOther(GUI_BUTTON* btn, UINT32 reason);
+static void ItemDescAmmoCallback(GUI_BUTTON* btn, UINT32 reason);
+static void ItemDescAttachmentsCallbackPrimary(MOUSE_REGION* pRegion, UINT32 iReason);
+static void ItemDescAttachmentsCallbackSecondary(MOUSE_REGION* pRegion, UINT32 iReason);
+static void ItemDescCallbackPrimary(MOUSE_REGION* pRegion, UINT32 iReason);
+static void ItemDescCallbackSecondary(MOUSE_REGION* pRegion, UINT32 iReason);
+static void ItemDescDoneButtonCallbackPrimary(GUI_BUTTON* btn, UINT32 reason);
+static void ItemDescDoneButtonCallbackSecondary(GUI_BUTTON* btn, UINT32 reason);
 static void ReloadItemDesc(void);
 
 
@@ -1789,25 +1773,25 @@ void InternalInitItemDescriptionBox(OBJECTTYPE* const o, const INT16 sX, const I
 	gubItemDescStatusIndex = ubStatusIndex;
 	gpItemDescSoldier      = s;
 	fItemDescDelete        = FALSE;
+	MOUSE_CALLBACK itemDescCallback = MouseCallbackPrimarySecondary(ItemDescCallbackPrimary, ItemDescCallbackSecondary);
 
 	// Build a mouse region here that is over any others.....
 	if (in_map)
 	{
-		MSYS_DefineRegion(&gInvDesc, gsInvDescX, gsInvDescY, gsInvDescX + MAP_ITEMDESC_WIDTH, gsInvDescY + MAP_ITEMDESC_HEIGHT, MSYS_PRIORITY_HIGHEST - 2, CURSOR_NORMAL, MSYS_NO_CALLBACK, ItemDescCallback);
+		MSYS_DefineRegion(&gInvDesc, gsInvDescX, gsInvDescY, gsInvDescX + MAP_ITEMDESC_WIDTH, gsInvDescY + MAP_ITEMDESC_HEIGHT, MSYS_PRIORITY_HIGHEST - 2, CURSOR_NORMAL, MSYS_NO_CALLBACK, itemDescCallback);
 
-		giMapInvDescButton = QuickCreateButtonImg(INTERFACEDIR "/itemdescdonebutton.sti", 0, 1, gsInvDescX + 204, gsInvDescY + 107, MSYS_PRIORITY_HIGHEST, ItemDescDoneButtonCallback);
+		giMapInvDescButton = QuickCreateButtonImg(INTERFACEDIR "/itemdescdonebutton.sti", 0, 1, gsInvDescX + 204, gsInvDescY + 107, MSYS_PRIORITY_HIGHEST, ButtonCallbackPrimarySecondary(ItemDescDoneButtonCallbackPrimary, ItemDescDoneButtonCallbackSecondary));
 
 		fShowDescriptionFlag = TRUE;
 	}
 	else
 	{
-		MSYS_DefineRegion(&gInvDesc, gsInvDescX, gsInvDescY, gsInvDescX + ITEMDESC_WIDTH, gsInvDescY + ITEMDESC_HEIGHT, MSYS_PRIORITY_HIGHEST, MSYS_NO_CURSOR, MSYS_NO_CALLBACK, ItemDescCallback);
+		MSYS_DefineRegion(&gInvDesc, gsInvDescX, gsInvDescY, gsInvDescX + ITEMDESC_WIDTH, gsInvDescY + ITEMDESC_HEIGHT, MSYS_PRIORITY_HIGHEST, MSYS_NO_CURSOR, MSYS_NO_CALLBACK, itemDescCallback);
 	}
 
 	if (GCM->getItem(o->usItem)->isGun()&& o->usItem != ROCKET_LAUNCHER)
 	{
-		wchar_t	pStr[10];
-		swprintf(pStr, lengthof(pStr), L"%d/%d", o->ubGunShotsLeft, GCM->getWeapon(o->usItem)->ubMagSize);
+		ST::string pStr = ST::format("{}/{}", o->ubGunShotsLeft, GCM->getWeapon(o->usItem)->ubMagSize);
 
 		INT32 img;
 		switch (o->ubGunAmmoType)
@@ -1849,7 +1833,7 @@ void InternalInitItemDescriptionBox(OBJECTTYPE* const o, const INT16 sX, const I
 
 	if (ITEM_PROS_AND_CONS(o->usItem))
 	{
-		INT16         const pros_cons_indent = __max(StringPixLength(gzProsLabel, ITEMDESC_FONT), StringPixLength(gzConsLabel, ITEMDESC_FONT)) + 10;
+		INT16         const pros_cons_indent = std::max(StringPixLength(gzProsLabel, ITEMDESC_FONT), StringPixLength(gzConsLabel, ITEMDESC_FONT)) + 10;
 		const SGPBox* const box              = (in_map ? &g_map_itemdesc_pros_cons_box : &g_itemdesc_pros_cons_box);
 		UINT16        const x                = box->x + pros_cons_indent + gsInvDescX;
 		UINT16              y                = box->y                    + gsInvDescY;
@@ -1859,12 +1843,12 @@ void InternalInitItemDescriptionBox(OBJECTTYPE* const o, const INT16 sX, const I
 		{
 			// Add region for pros/cons help text
 			MOUSE_REGION* const r = &gProsAndConsRegions[i];
-			MSYS_DefineRegion(r, x, y, x + w - 1, y + h - 1, MSYS_PRIORITY_HIGHEST, MSYS_NO_CURSOR, MSYS_NO_CALLBACK, ItemDescCallback);
+			MSYS_DefineRegion(r, x, y, x + w - 1, y + h - 1, MSYS_PRIORITY_HIGHEST, MSYS_NO_CURSOR, MSYS_NO_CALLBACK, itemDescCallback);
 			y += box->h;
 
-			const wchar_t* label;
+			ST::string label;
 			// use temp variable to prevent an initial comma from being displayed
-			wchar_t FullItemTemp[SIZE_ITEM_PROS];
+			ST::string FullItemTemp;
 			if (i == 0)
 			{
 				label = gzProsLabel;
@@ -1875,8 +1859,7 @@ void InternalInitItemDescriptionBox(OBJECTTYPE* const o, const INT16 sX, const I
 				label = gzConsLabel;
 				GenerateConsString(FullItemTemp, *o, 1000);
 			}
-			wchar_t text[SIZE_ITEM_PROS];
-			swprintf(text, lengthof(text), L"%ls %ls", label, FullItemTemp);
+			ST::string text = ST::format("{} {}", label, FullItemTemp);
 			r->SetFastHelpText(text);
 		}
 	}
@@ -1897,14 +1880,16 @@ void InternalInitItemDescriptionBox(OBJECTTYPE* const o, const INT16 sX, const I
 			const UINT16        w = agi->item_box.w;
 			const UINT16        h = agi->item_box.h;
 			MOUSE_REGION* const r = &gItemDescAttachmentRegions[i];
-			MSYS_DefineRegion(r, x, y, x + w, y + h, MSYS_PRIORITY_HIGHEST, MSYS_NO_CURSOR, MSYS_NO_CALLBACK, ItemDescAttachmentsCallback);
+			MSYS_DefineRegion(r, x, y, x + w, y + h, MSYS_PRIORITY_HIGHEST, MSYS_NO_CURSOR, MSYS_NO_CALLBACK, MouseCallbackPrimarySecondary(ItemDescAttachmentsCallbackPrimary, ItemDescAttachmentsCallbackSecondary));
 			MSYS_SetRegionUserData(r, 0, i);
 		}
 		SetAttachmentTooltips();
 	}
 	else
 	{
-		memset(&gRemoveMoney, 0, sizeof(REMOVE_MONEY));
+		GUI_CALLBACK btnMoneyButtonCallback = ButtonCallbackPrimarySecondary(BtnMoneyButtonCallbackPrimary, BtnMoneyButtonCallbackSecondary, BtnMoneyButtonCallbackOther);
+
+		gRemoveMoney = REMOVE_MONEY{};
 		gRemoveMoney.uiTotalAmount    = o->uiMoneyAmount;
 		gRemoveMoney.uiMoneyRemaining = o->uiMoneyAmount;
 		gRemoveMoney.uiMoneyRemoving  = 0;
@@ -1922,7 +1907,7 @@ void InternalInitItemDescriptionBox(OBJECTTYPE* const o, const INT16 sX, const I
 				5, DEFAULT_SHADOW,
 				5, DEFAULT_SHADOW,
 				loc->x + gMoneyButtonOffsets[i].x, loc->y + gMoneyButtonOffsets[i].y, MSYS_PRIORITY_HIGHEST,
-				BtnMoneyButtonCallback
+				btnMoneyButtonCallback
 			);
 			guiMoneyButtonBtn[i]->SetUserData(i);
 		}
@@ -1937,7 +1922,7 @@ void InternalInitItemDescriptionBox(OBJECTTYPE* const o, const INT16 sX, const I
 			5, DEFAULT_SHADOW,
 			5, DEFAULT_SHADOW,
 			loc->x + gMoneyButtonOffsets[i].x, loc->y + gMoneyButtonOffsets[i].y, MSYS_PRIORITY_HIGHEST,
-			BtnMoneyButtonCallback
+			btnMoneyButtonCallback
 		);
 		guiMoneyButtonBtn[i]->SetUserData(i);
 	}
@@ -1957,7 +1942,7 @@ void InternalInitItemDescriptionBox(OBJECTTYPE* const o, const INT16 sX, const I
 
 	if (gpItemPointer != NULL && !gfItemDescHelpTextOffset && !CheckFact(FACT_ATTACHED_ITEM_BEFORE, 0))
 	{
-		const wchar_t* text;
+		ST::string text;
 		if (!(GCM->getItem(o->usItem)->getFlags() & ITEM_HIDDEN_ADDON) && (
 			ValidAttachment(gpItemPointer->usItem, o->usItem) ||
 			ValidLaunchable(gpItemPointer->usItem, o->usItem) ||
@@ -1981,26 +1966,31 @@ void InternalInitItemDescriptionBox(OBJECTTYPE* const o, const INT16 sX, const I
 
 static void ReloadItemDesc(void)
 {
-	guiItemGraphic = LoadTileGraphicForItem(GCM->getItem(gpItemDescObject->usItem));
+	auto itemId = gpItemDescObject->usItem;
+	auto item = GCM->getItem(itemId);
+	auto graphic = GetBigInventoryGraphicForItem(item);
+
+	guiItemGraphic = graphic.first;
+	guiItemGraphicIndex = graphic.second;
 
 	//
 	// Load name, desc
 	//
 
 	//if the player is extracting money from the players account, use a different item name and description
-	UINT16 Item = gpItemDescObject->usItem;
-	if (Item == MONEY && gfAddingMoneyToMercFromPlayersAccount)
+	if (itemId == MONEY && gfAddingMoneyToMercFromPlayersAccount)
 	{
-		Item = MONEY_FOR_PLAYERS_ACCOUNT;
+		itemId = MONEY_FOR_PLAYERS_ACCOUNT;
 	}
-	gzItemName = ItemNames[Item];
-	LoadItemInfo(Item, gzItemDesc);
+	item = GCM->getItem(itemId);
+	gzItemName = item->getName();
+	gzItemDesc = item->getDescription();
 }
 
 
-static void ItemDescAmmoCallback(GUI_BUTTON*  const btn, INT32 const reason)
+static void ItemDescAmmoCallback(GUI_BUTTON*  const btn, UINT32 const reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		if (gpItemPointer) return;
 		if (!EmptyWeaponMagazine(gpItemDescObject, &gItemPointer)) return;
@@ -2008,7 +1998,7 @@ static void ItemDescAmmoCallback(GUI_BUTTON*  const btn, INT32 const reason)
 		SetItemPointer(&gItemPointer, gpItemDescSoldier);
 		fInterfacePanelDirty = DIRTYLEVEL2;
 
-		btn->SpecifyText(L"0");
+		btn->SpecifyText("0");
 
 		if (guiCurrentItemDescriptionScreen == MAP_SCREEN)
 		{
@@ -2031,7 +2021,7 @@ static void ItemDescAmmoCallback(GUI_BUTTON*  const btn, INT32 const reason)
 
 static void DoAttachment(void)
 {
-	if ( AttachObject( gpItemDescSoldier, gpItemDescObject, gpItemPointer ) )
+	if (AttachObject(gpItemDescSoldier, gpItemDescObject, gpItemPointer, gubItemDescStatusIndex))
 	{
 		if (gpItemPointer->usItem == NOTHING)
 		{
@@ -2054,7 +2044,7 @@ static void DoAttachment(void)
 				if (guiCurrentScreen == SHOPKEEPER_SCREEN)
 				{
 					//Clear out the moving cursor
-					memset( &gMoveingItem, 0, sizeof( INVENTORY_IN_SLOT ) );
+					gMoveingItem = INVENTORY_IN_SLOT{};
 
 					//change the curosr back to the normal one
 					SetSkiCursor( CURSOR_NORMAL );
@@ -2092,120 +2082,117 @@ static void PermanantAttachmentMessageBoxCallBack(MessageBoxReturnValue const ub
 }
 
 
-static void ItemDescAttachmentsCallback(MOUSE_REGION* pRegion, INT32 iReason)
+static void ItemDescAttachmentsCallbackPrimary(MOUSE_REGION* pRegion, UINT32 iReason)
 {
-	UINT32 uiItemPos;
-	static BOOLEAN fRightDown = FALSE;
-
 	if ( gfItemDescObjectIsAttachment )
 	{
 		// screen out completely
 		return;
 	}
 
-	uiItemPos = MSYS_GetRegionUserData( pRegion, 0 );
+	UINT32 uiItemPos = MSYS_GetRegionUserData( pRegion, 0 );
 
-	if (iReason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	// if the item being described belongs to a shopkeeper, ignore attempts to pick it up / replace it
+	if (guiCurrentScreen == SHOPKEEPER_SCREEN && pShopKeeperItemDescObject)
 	{
-		// if the item being described belongs to a shopkeeper, ignore attempts to pick it up / replace it
-		if (guiCurrentScreen == SHOPKEEPER_SCREEN && pShopKeeperItemDescObject)
-		{
-			return;
-		}
+		return;
+	}
 
-		// Try to place attachment if something is in our hand
-		// require as many APs as to reload
-		if ( gpItemPointer != NULL )
+	// Try to place attachment if something is in our hand
+	// require as many APs as to reload
+	if ( gpItemPointer != NULL )
+	{
+		// nb pointer could be NULL because of inventory manipulation in mapscreen from sector inv
+		if ( !gpItemPointerSoldier || EnoughPoints( gpItemPointerSoldier, AP_RELOAD_GUN, 0, TRUE ) )
 		{
-			// nb pointer could be NULL because of inventory manipulation in mapscreen from sector inv
-			if ( !gpItemPointerSoldier || EnoughPoints( gpItemPointerSoldier, AP_RELOAD_GUN, 0, TRUE ) )
+			if ( (GCM->getItem(gpItemPointer->usItem)->getFlags() & ITEM_INSEPARABLE) && ValidAttachment( gpItemPointer->usItem, gpItemDescObject->usItem ) )
 			{
-				if ( (GCM->getItem(gpItemPointer->usItem)->getFlags() & ITEM_INSEPARABLE) && ValidAttachment( gpItemPointer->usItem, gpItemDescObject->usItem ) )
-				{
-					DoScreenIndependantMessageBox(g_langRes->Message[STR_PERMANENT_ATTACHMENT], MSG_BOX_FLAG_YESNO, PermanantAttachmentMessageBoxCallBack);
-					return;
-				}
-
-				DoAttachment();
+				DoScreenIndependantMessageBox(g_langRes->Message[STR_PERMANENT_ATTACHMENT], MSG_BOX_FLAG_YESNO, PermanantAttachmentMessageBoxCallBack);
+				return;
 			}
-		}
-		else
-		{
-			// ATE: Make sure we have enough AP's to drop it if we pick it up!
-			if ( EnoughPoints( gpItemDescSoldier, ( AP_RELOAD_GUN + AP_PICKUP_ITEM ), 0, TRUE ) )
-			{
-				// Get attachment if there is one
-				// The follwing function will handle if no attachment is here
-				if ( RemoveAttachment( gpItemDescObject, (UINT8)uiItemPos, &gItemPointer ) )
-				{
-					SetItemPointer(&gItemPointer, gpItemDescSoldier);
 
-					//if( guiCurrentScreen == MAP_SCREEN )
-					if( guiCurrentItemDescriptionScreen == MAP_SCREEN )
-					{
-						SetMapCursorItem();
-						fTeamPanelDirty=TRUE;
-					}
-
-					//if we are currently in the shopkeeper interface
-					else if (guiCurrentScreen == SHOPKEEPER_SCREEN)
-					{
-						// pick up attachment from item into cursor (don't try to sell)
-						BeginSkiItemPointer( PLAYERS_INVENTORY, -1, FALSE );
-					}
-
-					//Dirty interface
-					fInterfacePanelDirty = DIRTYLEVEL2;
-
-					// re-evaluate repairs
-					gfReEvaluateEveryonesNothingToDo = TRUE;
-
-					UpdateItemHatches();
-					SetAttachmentTooltips();
-				}
-			}
+			DoAttachment();
 		}
 	}
-	else if (iReason & MSYS_CALLBACK_REASON_RBUTTON_DWN )
+	else
 	{
-		fRightDown = TRUE;
-	}
-	else if (iReason & MSYS_CALLBACK_REASON_RBUTTON_UP && fRightDown )
-	{
-		static OBJECTTYPE Object2;
-
-		fRightDown = FALSE;
-
-		if ( gpItemDescObject->usAttachItem[ uiItemPos ] != NOTHING )
+		// ATE: Make sure we have enough AP's to drop it if we pick it up!
+		if ( EnoughPoints( gpItemDescSoldier, ( AP_RELOAD_GUN + AP_PICKUP_ITEM ), 0, TRUE ) )
 		{
-			BOOLEAN fShopkeeperItem = FALSE;
-
-			// remember if this is a shopkeeper's item we're viewing ( pShopKeeperItemDescObject will get nuked on deletion )
-			if (guiCurrentScreen == SHOPKEEPER_SCREEN && pShopKeeperItemDescObject)
+			// Get attachment if there is one
+			// The follwing function will handle if no attachment is here
+			if ( RemoveAttachment( gpItemDescObject, (UINT8)uiItemPos, &gItemPointer ) )
 			{
-				fShopkeeperItem = TRUE;
-			}
+				SetItemPointer(&gItemPointer, gpItemDescSoldier);
 
-			DeleteItemDescriptionBox( );
+				//if( guiCurrentScreen == MAP_SCREEN )
+				if( guiCurrentItemDescriptionScreen == MAP_SCREEN )
+				{
+					SetMapCursorItem();
+					fTeamPanelDirty=TRUE;
+				}
 
-			CreateItem(gpItemDescObject->usAttachItem[uiItemPos], gpItemDescObject->bAttachStatus[uiItemPos], &Object2);
+				//if we are currently in the shopkeeper interface
+				else if (guiCurrentScreen == SHOPKEEPER_SCREEN)
+				{
+					// pick up attachment from item into cursor (don't try to sell)
+					BeginSkiItemPointer( PLAYERS_INVENTORY, -1, FALSE );
+				}
 
-			gfItemDescObjectIsAttachment = TRUE;
-			InternalInitItemDescriptionBox(&Object2, gsInvDescX, gsInvDescY, 0, gpItemDescSoldier);
+				//Dirty interface
+				fInterfacePanelDirty = DIRTYLEVEL2;
 
-			if (fShopkeeperItem)
-			{
-				pShopKeeperItemDescObject = &Object2;
-				StartSKIDescriptionBox();
+				// re-evaluate repairs
+				gfReEvaluateEveryonesNothingToDo = TRUE;
+
+				UpdateItemHatches();
+				SetAttachmentTooltips();
 			}
 		}
 	}
 }
 
-
-static wchar_t const* GetObjectImprint(OBJECTTYPE const& o)
+static void ItemDescAttachmentsCallbackSecondary(MOUSE_REGION* pRegion, UINT32 iReason)
 {
-	return !HasObjectImprint(o) ? 0 :
+	if ( gfItemDescObjectIsAttachment )
+	{
+		// screen out completely
+		return;
+	}
+
+	UINT32 uiItemPos = MSYS_GetRegionUserData( pRegion, 0 );
+
+	static OBJECTTYPE Object2;
+
+	if ( gpItemDescObject->usAttachItem[ uiItemPos ] != NOTHING )
+	{
+		BOOLEAN fShopkeeperItem = FALSE;
+
+		// remember if this is a shopkeeper's item we're viewing ( pShopKeeperItemDescObject will get nuked on deletion )
+		if (guiCurrentScreen == SHOPKEEPER_SCREEN && pShopKeeperItemDescObject)
+		{
+			fShopkeeperItem = TRUE;
+		}
+
+		DeleteItemDescriptionBox( );
+
+		CreateItem(gpItemDescObject->usAttachItem[uiItemPos], gpItemDescObject->bAttachStatus[uiItemPos], &Object2);
+
+		gfItemDescObjectIsAttachment = TRUE;
+		InternalInitItemDescriptionBox(&Object2, gsInvDescX, gsInvDescY, 0, gpItemDescSoldier);
+
+		if (fShopkeeperItem)
+		{
+			pShopKeeperItemDescObject = &Object2;
+			StartSKIDescriptionBox();
+		}
+	}
+}
+
+
+static ST::string GetObjectImprint(OBJECTTYPE const& o)
+{
+	return !HasObjectImprint(o) ? ST::null :
 		o.ubImprintID == NO_PROFILE + 1 ? pwMiscSectorStrings[3] :
 		GetProfile(o.ubImprintID).zNickname;
 }
@@ -2221,7 +2208,7 @@ void RenderItemDescriptionBox(void)
 {
 	if (!gfInItemDescBox) return;
 
-	wchar_t pStr[100];
+	ST::string pStr;
 	INT16   usX;
 	INT16   usY;
 
@@ -2246,15 +2233,15 @@ void RenderItemDescriptionBox(void)
 	{
 		// Display item
 		// center in slot, remove offsets
-		ETRLEObject const& e  = guiItemGraphic->SubregionProperties(0);
+		ETRLEObject const& e  = guiItemGraphic->SubregionProperties(guiItemGraphicIndex);
 		SGPBox      const& xy = in_map ? g_desc_item_box_map: g_desc_item_box;
 		INT32       const  x  = dx + xy.x + (xy.w - e.usWidth)  / 2 - e.sOffsetX;
 		INT32       const  y  = dy + xy.y + (xy.h - e.usHeight) / 2 - e.sOffsetY;
 		if (gamepolicy(f_draw_item_shadow))
 		{
-			BltVideoObjectOutlineShadow(guiSAVEBUFFER, guiItemGraphic, 0, x - 2, y + 2);
+			BltVideoObjectOutlineShadow(guiSAVEBUFFER, guiItemGraphic, guiItemGraphicIndex, x - 2, y + 2);
 		}
-		BltVideoObject(guiSAVEBUFFER, guiItemGraphic, 0, x, y);
+		BltVideoObject(guiSAVEBUFFER, guiItemGraphic, guiItemGraphicIndex, x, y);
 	}
 
 	{ // Display status
@@ -2358,16 +2345,17 @@ void RenderItemDescriptionBox(void)
 	{
 		{
 			const WeaponModel * w = GCM->getWeapon(obj.usItem);
-			size_t            n = 0;
 			if (w->calibre->index != NOAMMO)
 			{
-				n += swprintf(pStr, lengthof(pStr), L"%ls ", w->calibre->getName());
+				ST::string name = *w->calibre->getName();
+				pStr += ST::format("{} ", name);
 			}
-			n += swprintf(pStr + n, lengthof(pStr) - n, L"%ls", WeaponType[w->ubWeaponType]);
-			if (wchar_t const* const imprint = GetObjectImprint(obj))
+			pStr += ST::format("{}", WeaponType[w->ubWeaponType]);
+			ST::string imprint = GetObjectImprint(obj);
+			if (!imprint.empty())
 			{
 				// Add name noting imprint
-				n += swprintf(pStr + n, lengthof(pStr) - n, L" (%ls)", imprint);
+				pStr += ST::format(" ({})", imprint);
 			}
 
 			SGPBox const& xy = in_map ? gMapDescNameBox : gDescNameBox;
@@ -2390,7 +2378,7 @@ void RenderItemDescriptionBox(void)
 			SetFontForeground(FONT_BLACK);
 			SetFontShadow(ITEMDESC_FONTSHADOW2);
 
-			INT16 const pros_cons_indent = __max(StringPixLength(gzProsLabel, ITEMDESC_FONT), StringPixLength(gzConsLabel, ITEMDESC_FONT)) + 10;
+			INT16 const pros_cons_indent = std::max(StringPixLength(gzProsLabel, ITEMDESC_FONT), StringPixLength(gzConsLabel, ITEMDESC_FONT)) + 10;
 			x += pros_cons_indent;
 			w -= pros_cons_indent + StringPixLength(DOTDOTDOT, ITEMDESC_FONT);
 
@@ -2417,7 +2405,7 @@ void RenderItemDescriptionBox(void)
 		INV_DESC_STATS const* const ids = in_map ? gMapWeaponStats : gWeaponStats;
 
 		//LABELS
-		mprintf(dx + ids[0].sX, dy + ids[0].sY, gWeaponStatsDesc[0], GetWeightUnitString()); // mass
+		MPrint(dx + ids[0].sX, dy + ids[0].sY, st_format_printf(gWeaponStatsDesc[0], GetWeightUnitString())); // mass
 		if (item->getItemClass() & (IC_GUN | IC_LAUNCHER))
 		{
 			MPrint(dx + ids[2].sX, dy + ids[2].sY, gWeaponStatsDesc[3]); // range
@@ -2441,13 +2429,13 @@ void RenderItemDescriptionBox(void)
 
 		//Status
 		SetFontForeground(5);
-		swprintf(pStr, lengthof(pStr), L"%2d%%", obj.bGunStatus);
+		pStr = ST::format("{2d}%", obj.bGunStatus);
 		FindFontRightCoordinates(dx + ids[1].sX + ids[1].sValDx, dy + ids[1].sY, ITEM_STATS_WIDTH, ITEM_STATS_HEIGHT, pStr, BLOCKFONT2, &usX, &usY);
 		MPrint(usX, usY, pStr);
 
 		//Weight
 		HighlightIf(fWeight <= EXCEPTIONAL_WEIGHT / 10);
-		swprintf(pStr, lengthof(pStr), L"%1.1f", fWeight);
+		pStr = ST::format("{1.1f}", fWeight);
 		FindFontRightCoordinates(dx + ids[0].sX + ids[0].sValDx, dy + ids[0].sY, ITEM_STATS_WIDTH, ITEM_STATS_HEIGHT, pStr, BLOCKFONT2, &usX, &usY);
 		MPrint(usX, usY, pStr);
 
@@ -2456,7 +2444,7 @@ void RenderItemDescriptionBox(void)
 			// Range
 			UINT16 const range = GunRange(obj);
 			HighlightIf(range >= EXCEPTIONAL_RANGE);
-			swprintf(pStr, lengthof(pStr), L"%2d", range / 10);
+			pStr = ST::format("{2d}", range / 10);
 			FindFontRightCoordinates(dx + ids[2].sX + ids[2].sValDx, dy + ids[2].sY, ITEM_STATS_WIDTH, ITEM_STATS_HEIGHT, pStr, BLOCKFONT2, &usX, &usY);
 			MPrint(usX, usY, pStr);
 		}
@@ -2465,7 +2453,7 @@ void RenderItemDescriptionBox(void)
 		{
 			// Damage
 			HighlightIf(w->ubImpact >= EXCEPTIONAL_DAMAGE);
-			swprintf(pStr, lengthof(pStr), L"%2d", w->ubImpact);
+			pStr = ST::format("{2d}", w->ubImpact);
 			FindFontRightCoordinates(dx + ids[3].sX + ids[3].sValDx, dy + ids[3].sY, ITEM_STATS_WIDTH, ITEM_STATS_HEIGHT, pStr, BLOCKFONT2, &usX, &usY);
 			MPrint(usX, usY, pStr);
 		}
@@ -2474,14 +2462,14 @@ void RenderItemDescriptionBox(void)
 
 		//APs
 		HighlightIf(ubAttackAPs <= EXCEPTIONAL_AP_COST);
-		swprintf(pStr, lengthof(pStr), L"%2d", ubAttackAPs);
+		pStr = ST::format("{2d}", ubAttackAPs);
 		FindFontRightCoordinates(dx + ids[4].sX + ids[4].sValDx, dy + ids[4].sY, ITEM_STATS_WIDTH, ITEM_STATS_HEIGHT, pStr, BLOCKFONT2, &usX, &usY);
 		MPrint(usX, usY, pStr);
 
 		if (w->ubShotsPerBurst > 0)
 		{
 			HighlightIf(w->ubShotsPerBurst >= EXCEPTIONAL_BURST_SIZE || obj.usItem == G11);
-			swprintf(pStr, lengthof(pStr), L"%2d", ubAttackAPs + CalcAPsToBurst(DEFAULT_APS, obj));
+			pStr = ST::format("{2d}", ubAttackAPs + CalcAPsToBurst(DEFAULT_APS, obj));
 			FindFontRightCoordinates(dx + ids[5].sX + ids[5].sValDx, dy + ids[5].sY, ITEM_STATS_WIDTH, ITEM_STATS_HEIGHT, pStr, BLOCKFONT2, &usX, &usY);
 			MPrint(usX, usY, pStr);
 		}
@@ -2492,7 +2480,7 @@ void RenderItemDescriptionBox(void)
 
 		{
 			// Display the total amount of money
-			SPrintMoney(pStr, in_map && gfAddingMoneyToMercFromPlayersAccount ? LaptopSaveInfo.iCurrentBalance : gRemoveMoney.uiTotalAmount);
+			pStr = SPrintMoney(in_map && gfAddingMoneyToMercFromPlayersAccount ? LaptopSaveInfo.iCurrentBalance : gRemoveMoney.uiTotalAmount);
 			SGPBox const& xy = in_map ? gMapDescNameBox : gDescNameBox;
 			FindFontRightCoordinates(dx + xy.x, dy + xy.y, xy.w, xy.h, pStr, BLOCKFONT2, &usX, &usY);
 			MPrint(usX, usY, pStr);
@@ -2502,7 +2490,7 @@ void RenderItemDescriptionBox(void)
 			// Display the 'Separate' text
 			SetFontForeground(in_map ? 5 : 6);
 			MoneyLoc const&       xy    = in_map ? gMapMoneyButtonLoc : gMoneyButtonLoc;
-			wchar_t  const* const label = !in_map && gfAddingMoneyToMercFromPlayersAccount ? gzMoneyAmounts[5] : gzMoneyAmounts[4];
+			ST::string label = !in_map && gfAddingMoneyToMercFromPlayersAccount ? gzMoneyAmounts[5] : gzMoneyAmounts[4];
 			MPrint(xy.x + gMoneyButtonOffsets[4].x, xy.y + gMoneyButtonOffsets[4].y, label);
 		}
 
@@ -2531,7 +2519,7 @@ void RenderItemDescriptionBox(void)
 		UINT16 const uiRightLength = 35;
 
 		//Display the total amount of money remaining
-		SPrintMoney(pStr, gRemoveMoney.uiMoneyRemaining);
+		pStr = SPrintMoney(gRemoveMoney.uiMoneyRemaining);
 		if (in_map)
 		{
 			UINT16 const uiStringLength = StringPixLength(pStr, ITEMDESC_FONT);
@@ -2545,7 +2533,7 @@ void RenderItemDescriptionBox(void)
 		}
 
 		//Display the total amount of money removing
-		SPrintMoney(pStr, gRemoveMoney.uiMoneyRemoving);
+		pStr = SPrintMoney(gRemoveMoney.uiMoneyRemoving);
 		if (in_map)
 		{
 			UINT16 const uiStringLength = StringPixLength(pStr, ITEMDESC_FONT);
@@ -2561,7 +2549,7 @@ void RenderItemDescriptionBox(void)
 	else if (item->getItemClass() == IC_MONEY)
 	{
 		SetFontForeground(FONT_FCOLOR_WHITE);
-		SPrintMoney(pStr, obj.uiMoneyAmount);
+		pStr = SPrintMoney(obj.uiMoneyAmount);
 		SGPBox const& xy = in_map ? gMapDescNameBox : gDescNameBox;
 		FindFontRightCoordinates(dx + xy.x, dy + xy.y, xy.w, xy.h, pStr, BLOCKFONT2, &usX, &usY);
 		MPrint(usX, usY, pStr);
@@ -2574,11 +2562,11 @@ void RenderItemDescriptionBox(void)
 		INV_DESC_STATS const* const ids = in_map ? gMapWeaponStats : gWeaponStats;
 
 		// amount for ammunition, status otherwise
-		wchar_t const* const label = GCM->getItem(gpItemDescObject->usItem)->isAmmo() ? gWeaponStatsDesc[2] : gWeaponStatsDesc[1];
+		ST::string label = GCM->getItem(gpItemDescObject->usItem)->isAmmo() ? gWeaponStatsDesc[2] : gWeaponStatsDesc[1];
 		MPrint(dx + ids[1].sX, dy + ids[1].sY, label);
 
 		//Weight
-		mprintf(dx + ids[0].sX, dy + ids[0].sY, gWeaponStatsDesc[0], GetWeightUnitString());
+		MPrint(dx + ids[0].sX, dy + ids[0].sY, st_format_printf(gWeaponStatsDesc[0], GetWeightUnitString()));
 
 		// Values
 		SetFontForeground(5);
@@ -2586,20 +2574,20 @@ void RenderItemDescriptionBox(void)
 		if (item->isAmmo())
 		{
 			// Ammo - print amount
-			swprintf(pStr, lengthof(pStr), L"%d/%d", obj.ubShotsLeft[0], item->asAmmo()->capacity);
+			pStr = ST::format("{}/{}", obj.ubShotsLeft[gubItemDescStatusIndex], item->asAmmo()->capacity);
 			FindFontRightCoordinates(dx + ids[1].sX + ids[1].sValDx, dy + ids[1].sY, ITEM_STATS_WIDTH, ITEM_STATS_HEIGHT, pStr, BLOCKFONT2, &usX, &usY);
 			MPrint(usX, usY, pStr);
 		}
 		else
 		{
 			// Status
-			swprintf(pStr, lengthof(pStr), L"%2d%%", obj.bStatus[gubItemDescStatusIndex]);
+			pStr = ST::format("{2d}%", obj.bStatus[gubItemDescStatusIndex]);
 			FindFontRightCoordinates(dx + ids[1].sX + ids[1].sValDx, dy + ids[1].sY, ITEM_STATS_WIDTH, ITEM_STATS_HEIGHT, pStr, BLOCKFONT2, &usX, &usY);
 			MPrint(usX, usY, pStr);
 		}
 
 		//Weight
-		swprintf(pStr, lengthof(pStr), L"%1.1f", fWeight);
+		pStr = ST::format("{1.1f}", fWeight);
 		FindFontRightCoordinates(dx + ids[0].sX + ids[0].sValDx, dy + ids[0].sY, ITEM_STATS_WIDTH, ITEM_STATS_HEIGHT, pStr, BLOCKFONT2, &usX, &usY);
 		MPrint(usX, usY, pStr);
 
@@ -2618,12 +2606,11 @@ void RenderItemDescriptionBox(void)
 			KEY const& key = KeyTable[obj.ubKeyID];
 
 			SetFontForeground(5);
-			wchar_t sTempString[128];
-			GetShortSectorString(SECTORX(key.usSectorFound), SECTORY(key.usSectorFound), sTempString, lengthof(sTempString));
+			ST::string sTempString = SGPSector(key.usSectorFound).AsShortString();
 			FindFontRightCoordinates(x, y0, 110, ITEM_STATS_HEIGHT, sTempString, BLOCKFONT2, &usX, &usY);
 			MPrint(usX, usY, sTempString);
 
-			swprintf(pStr, lengthof(pStr), L"%d", key.usDateFound);
+			pStr = ST::format("{}", key.usDateFound);
 			FindFontRightCoordinates(x, y1, 110, ITEM_STATS_HEIGHT, pStr, BLOCKFONT2, &usX, &usY);
 			MPrint(usX, usY, pStr);
 		}
@@ -2789,7 +2776,7 @@ void DeleteItemDescriptionBox( )
 		if( gRemoveMoney.uiMoneyRemaining == 0 && !gfAddingMoneyToMercFromPlayersAccount )
 		{
 			//get rid of the money in the slot
-			memset( gpItemDescObject, 0, sizeof( OBJECTTYPE ) );
+			*gpItemDescObject = OBJECTTYPE{};
 			gpItemDescObject = NULL;
 		}
 	}
@@ -2835,7 +2822,7 @@ void BeginItemPointer( SOLDIERTYPE *pSoldier, UINT8 ubHandPos )
 	BOOLEAN fOk;
 	OBJECTTYPE pObject;
 
-	memset( &pObject, 0, sizeof( OBJECTTYPE ) );
+	pObject = OBJECTTYPE{};
 
 	if (_KeyDown( SHIFT ))
 	{
@@ -2856,30 +2843,20 @@ void BeginItemPointer( SOLDIERTYPE *pSoldier, UINT8 ubHandPos )
 
 void BeginKeyRingItemPointer( SOLDIERTYPE *pSoldier, UINT8 ubKeyRingPosition )
 {
-	BOOLEAN fOk;
-
 	// If not null return
 	if ( gpItemPointer != NULL )
 	{
 		return;
 	}
 
-	if (_KeyDown( SHIFT ))
-	{
-		// Remove all from soldier's slot
-		fOk = RemoveKeysFromSlot( pSoldier, ubKeyRingPosition, pSoldier->pKeyRing[ ubKeyRingPosition ].ubNumber, &gItemPointer );
-	}
-	else
-	{
-		RemoveKeyFromSlot( pSoldier, ubKeyRingPosition, &gItemPointer );
-		fOk = (gItemPointer.ubNumberOfObjects == 1);
-	}
-
+	// With shift down, remove all keys from this slot
+	// With shift up, remove only one key
+	BOOLEAN const fOk = RemoveKeysFromSlot( pSoldier, ubKeyRingPosition,
+		_KeyDown( SHIFT ) ? pSoldier->pKeyRing[ ubKeyRingPosition ].ubNumber : 1,
+		&gItemPointer );
 
 	if (fOk)
 	{
-		// ATE: Look if we are a BLOODIED KNIFE, and change if so, making guy scream...
-
 		// Dirty interface
 		fInterfacePanelDirty = DIRTYLEVEL2;
 		SetItemPointer(&gItemPointer, pSoldier);
@@ -2887,12 +2864,6 @@ void BeginKeyRingItemPointer( SOLDIERTYPE *pSoldier, UINT8 ubKeyRingPosition )
 
 		if (fInMapMode) SetMapCursorItem();
 	}
-	else
-	{
-		//Debug mesg
-	}
-
-
 
 	gfItemPointerDifferentThanDefault = FALSE;
 }
@@ -2908,7 +2879,7 @@ void EndItemPointer( )
 
 		if (guiCurrentScreen == SHOPKEEPER_SCREEN)
 		{
-			memset( &gMoveingItem, 0, sizeof( INVENTORY_IN_SLOT ) );
+			gMoveingItem = INVENTORY_IN_SLOT{};
 			SetSkiCursor( CURSOR_NORMAL );
 		}
 		else
@@ -2984,7 +2955,7 @@ void DrawItemTileCursor( )
 	INT16 sDist;
 	INT8 bLevel;
 
-	GridNo usMapPos = GetMouseMapPos();
+	GridNo usMapPos = guiCurrentCursorGridNo;
 	if (usMapPos != NOWHERE)
 	{
 		// Force mouse position to guy...
@@ -3264,7 +3235,8 @@ static bool IsValidAmmoToReloadRobot(SOLDIERTYPE const& s, OBJECTTYPE const& amm
 	OBJECTTYPE const& weapon = s.inv[HANDPOS];
 	if (!CompatibleAmmoForGun(&ammo, &weapon))
 	{
-		ScreenMsg(FONT_MCOLOR_LTYELLOW, MSG_UI_FEEDBACK, TacticalStr[ROBOT_NEEDS_GIVEN_CALIBER_STR], GCM->getWeapon(weapon.usItem)->calibre->getName());
+		ST::string name = *GCM->getWeapon(weapon.usItem)->calibre->getName();
+		ScreenMsg(FONT_MCOLOR_LTYELLOW, MSG_UI_FEEDBACK, st_format_printf(TacticalStr[ROBOT_NEEDS_GIVEN_CALIBER_STR], name));
 		return false;
 	}
 	return true;
@@ -3419,7 +3391,7 @@ BOOLEAN HandleItemPointerClick( UINT16 usMapPos )
 					if ( sActionGridNo != -1 && gbItemPointerSrcSlot != NO_SLOT )
 					{
 							// Make a temp object for ammo...
-							gpItemPointerSoldier->pTempObject  = MALLOC(OBJECTTYPE);
+							gpItemPointerSoldier->pTempObject  = new OBJECTTYPE{};
 							*gpItemPointerSoldier->pTempObject = TempObject;
 
 							// Remove from soldier's inv...
@@ -3433,9 +3405,7 @@ BOOLEAN HandleItemPointerClick( UINT16 usMapPos )
 							// CHECK IF WE ARE AT THIS GRIDNO NOW
 							if ( gpItemPointerSoldier->sGridNo != sActionGridNo )
 							{
-								SoldierSP soldier = GetSoldier(gpItemPointerSoldier);
-
-								soldier->setPendingAction(MERC_RELOADROBOT);
+								Soldier{gpItemPointerSoldier}.setPendingAction(MERC_RELOADROBOT);
 
 								// WALK UP TO DEST FIRST
 								EVENT_InternalGetNewSoldierPath( gpItemPointerSoldier, sActionGridNo, gpItemPointerSoldier->usUIMovementMode, FALSE, FALSE );
@@ -3465,11 +3435,7 @@ BOOLEAN HandleItemPointerClick( UINT16 usMapPos )
 					EndItemPointer( );
 
 					// If we are giving it to somebody not on our team....
-					if (tgt->ubProfile < FIRST_RPC || RPC_RECRUITED(tgt))
-					{
-
-					}
-					else
+					if (tgt->ubProfile != NO_PROFILE && !MercProfile(tgt->ubProfile).isPlayerMerc() && !RPC_RECRUITED(tgt))
 					{
 						SetEngagedInConvFromPCAction( gpItemPointerSoldier );
 					}
@@ -3519,7 +3485,7 @@ BOOLEAN HandleItemPointerClick( UINT16 usMapPos )
 				switch ( gAnimControl[ gpItemPointerSoldier->usAnimState ].ubHeight )
 				{
 					case ANIM_STAND:
-						gpItemPointerSoldier->pTempObject = MALLOC(OBJECTTYPE);
+						gpItemPointerSoldier->pTempObject = new OBJECTTYPE{};
 						*gpItemPointerSoldier->pTempObject = *gpItemPointer;
 						gpItemPointerSoldier->sPendingActionData2 = usMapPos;
 
@@ -3586,7 +3552,7 @@ BOOLEAN HandleItemPointerClick( UINT16 usMapPos )
 					// try to auto place object....
 					if ( AutoPlaceObject( pSoldier, gpItemPointer, TRUE ) )
 					{
-						ScreenMsg( FONT_MCOLOR_LTYELLOW, MSG_INTERFACE, pMessageStrings[ MSG_ITEM_PASSED_TO_MERC ], ShortItemNames[ usItem ], pSoldier->name );
+						ScreenMsg( FONT_MCOLOR_LTYELLOW, MSG_INTERFACE, st_format_printf(pMessageStrings[ MSG_ITEM_PASSED_TO_MERC ], GCM->getItem(usItem)->getShortName(), pSoldier->name) );
 
 						// Check if it's the same now!
 						if ( gpItemPointer->ubNumberOfObjects == 0 )
@@ -3625,7 +3591,7 @@ BOOLEAN HandleItemPointerClick( UINT16 usMapPos )
 					}
 					else
 					{
-						ScreenMsg( FONT_MCOLOR_LTYELLOW, MSG_INTERFACE, pMessageStrings[ MSG_NO_ROOM_TO_PASS_ITEM ], ShortItemNames[ usItem ], pSoldier->name );
+						ScreenMsg( FONT_MCOLOR_LTYELLOW, MSG_INTERFACE, st_format_printf(pMessageStrings[ MSG_NO_ROOM_TO_PASS_ITEM ], GCM->getItem(usItem)->getShortName(), pSoldier->name) );
 						return( FALSE );
 					}
 				}
@@ -3705,10 +3671,10 @@ BOOLEAN HandleItemPointerClick( UINT16 usMapPos )
 
 			// Increment attacker count...
 			gTacticalStatus.ubAttackBusyCount++;
-			SLOGD(DEBUG_TAG_INTERFACE, "INcremtning ABC: Throw item to %d", gTacticalStatus.ubAttackBusyCount);
+			SLOGD("INcremtning ABC: Throw item to {}", gTacticalStatus.ubAttackBusyCount);
 
 			// Given our gridno, throw grenate!
-			CalculateLaunchItemParamsForThrow(gpItemPointerSoldier, sGridNo, gpItemPointerSoldier->bLevel, gsInterfaceLevel * 256 + sEndZ, gpItemPointer, 0, ubThrowActionCode, target);
+			CalculateLaunchItemParamsForThrow(gpItemPointerSoldier, sGridNo, gsInterfaceLevel, gsInterfaceLevel * 256 + sEndZ, gpItemPointer, 0, ubThrowActionCode, target);
 
 			// OK, goto throw animation
 			HandleSoldierThrowItem( gpItemPointerSoldier, usMapPos );
@@ -3735,8 +3701,10 @@ BOOLEAN InKeyRingPopup( )
 }
 
 
-static void ItemPopupFullRegionCallback(MOUSE_REGION* pRegion, INT32 iReason);
-static void ItemPopupRegionCallback(MOUSE_REGION* pRegion, INT32 iReason);
+static void ItemPopupFullRegionCallbackPrimary(MOUSE_REGION* pRegion, UINT32 iReason);
+static void ItemPopupFullRegionCallbackSecondary(MOUSE_REGION* pRegion, UINT32 iReason);
+static void ItemPopupRegionCallbackPrimary(MOUSE_REGION* pRegion, UINT32 iReason);
+static void ItemPopupRegionCallbackSecondary(MOUSE_REGION* pRegion, UINT32 iReason);
 
 
 void InitItemStackPopup(SOLDIERTYPE* const pSoldier, UINT8 const ubPosition, INT16 const sInvX, INT16 const sInvY, INT16 const sInvWidth, INT16 const sInvHeight)
@@ -3829,17 +3797,17 @@ void InitItemStackPopup(SOLDIERTYPE* const pSoldier, UINT8 const ubPosition, INT
 		UINT32 col = cnt % MAX_STACK_POPUP_WIDTH;
 
 		// Build a mouse region here that is over any others.....
-		MSYS_DefineRegion(&gItemPopupRegions[cnt], sCenX + col * usPopupWidth, sCenY + row * usPopupHeight, sCenX + (col + 1) * usPopupWidth, sCenY + (row+1) * usPopupHeight, MSYS_PRIORITY_HIGHEST, MSYS_NO_CURSOR, MSYS_NO_CALLBACK, ItemPopupRegionCallback);
+		MOUSE_CALLBACK itemPopupRegionCallback = MouseCallbackPrimarySecondary(ItemPopupRegionCallbackPrimary, ItemPopupRegionCallbackSecondary, MSYS_NO_CALLBACK, true);
+		MSYS_DefineRegion(&gItemPopupRegions[cnt], sCenX + col * usPopupWidth, sCenY + row * usPopupHeight, sCenX + (col + 1) * usPopupWidth, sCenY + (row+1) * usPopupHeight, MSYS_PRIORITY_HIGHEST, MSYS_NO_CURSOR, MSYS_NO_CALLBACK, itemPopupRegionCallback);
 		MSYS_SetRegionUserData( &gItemPopupRegions[cnt], 0, cnt );
 
 		//OK, for each item, set dirty text if applicable!
-		gItemPopupRegions[cnt].SetFastHelpText(ItemNames[pSoldier->inv[ubPosition].usItem]);
-		gfItemPopupRegionCallbackEndFix = FALSE;
+		gItemPopupRegions[cnt].SetFastHelpText(GCM->getItem(pSoldier->inv[ubPosition].usItem)->getName());
 	}
 
 
 	// Build a mouse region here that is over any others.....
-	MSYS_DefineRegion(&gItemPopupRegion, gsItemPopupInvX, gsItemPopupInvY, gsItemPopupInvX + gsItemPopupInvWidth, gsItemPopupInvY + gsItemPopupInvHeight, MSYS_PRIORITY_HIGH, MSYS_NO_CURSOR, MSYS_NO_CALLBACK, ItemPopupFullRegionCallback);
+	MSYS_DefineRegion(&gItemPopupRegion, gsItemPopupInvX, gsItemPopupInvY, gsItemPopupInvX + gsItemPopupInvWidth, gsItemPopupInvY + gsItemPopupInvHeight, MSYS_PRIORITY_HIGH, MSYS_NO_CURSOR, MSYS_NO_CALLBACK, MouseCallbackPrimarySecondary(ItemPopupFullRegionCallbackPrimary, ItemPopupFullRegionCallbackSecondary));
 
 
 	//Disable all faces
@@ -4000,12 +3968,11 @@ void InitKeyRingPopup(SOLDIERTYPE* const pSoldier, INT16 const sInvX, INT16 cons
 			MSYS_NO_CURSOR, MSYS_NO_CALLBACK, KeyRingSlotInvClickCallback
 		);
 		MSYS_SetRegionUserData( &gKeyRingRegions[cnt], 0, cnt );
-		//gfItemPopupRegionCallbackEndFix = FALSE;
 	}
 
 
 	// Build a mouse region here that is over any others.....
-	MSYS_DefineRegion(&gItemPopupRegion, sInvX, sInvY, sInvX + sInvWidth, sInvY + sInvHeight, MSYS_PRIORITY_HIGH, MSYS_NO_CURSOR, MSYS_NO_CALLBACK, ItemPopupFullRegionCallback);
+	MSYS_DefineRegion(&gItemPopupRegion, sInvX, sInvY, sInvX + sInvWidth, sInvY + sInvHeight, MSYS_PRIORITY_HIGH, MSYS_NO_CURSOR, MSYS_NO_CALLBACK, MouseCallbackPrimarySecondary(ItemPopupFullRegionCallbackPrimary, ItemPopupFullRegionCallbackSecondary));
 
 
 	//Disable all faces
@@ -4047,7 +4014,7 @@ void RenderKeyRingPopup(const BOOLEAN fFullRender)
 	}
 
 	OBJECTTYPE o;
-	memset(&o, 0, sizeof(o));
+	o = OBJECTTYPE{};
 	o.bStatus[0] = 100;
 
 	ETRLEObject const& pTrav = guiItemPopupBoxes->SubregionProperties(0);
@@ -4078,11 +4045,17 @@ void RenderKeyRingPopup(const BOOLEAN fFullRender)
 
 		BltVideoObject(FRAME_BUFFER, guiItemPopupBoxes, 0, x, y);
 
-		const KEY_ON_RING* const key = &key_ring[i];
-		if (key->ubKeyID == INVALID_KEY_NUMBER || key->ubNumber == 0) continue;
+		const KEY_ON_RING& key = key_ring[i];
+		if (!key.isValid()) continue;
 
-		o.ubNumberOfObjects = key->ubNumber;
-		o.usItem            = FIRST_KEY + LockTable[key->ubKeyID].usKeyItem;
+		o.ubNumberOfObjects = key.ubNumber;
+
+		auto keyId = LockTable[key.ubKeyID].usKeyItem;
+		auto item = GCM->getKeyItemForKeyId(keyId);
+		if (item == NULL) {
+			throw std::runtime_error(ST::format("Could not find key item for key id `{}` when rendering key popup", keyId).to_std_string());
+		}
+		o.usItem            = item->getItemIndex();
 
 		DrawItemUIBarEx(o, 0, x + 7, y + 24, ITEM_BAR_HEIGHT, Get16BPPColor(STATUS_BAR), Get16BPPColor(STATUS_BAR_SHADOW), FRAME_BUFFER);
 		INVRenderItem(FRAME_BUFFER, NULL, o, x + 8, y, box_w - 8, box_h - 2, DIRTYLEVEL2, 0, SGP_TRANSPARENT);
@@ -4117,109 +4090,85 @@ void DeleteKeyRingPopup(void)
 	FreeMouseCursor();
 }
 
-
-SGPVObject const& GetInterfaceGraphicForItem(const ItemModel *item)
-{
-	// CHECK SUBCLASS
-	switch (item->getGraphicType())
-	{
-		case 0:
-			return *guiGUNSM;
-		case 1:
-			return *guiP1ITEMS;
-		case 2:
-			return *guiP2ITEMS;
-		default:
-			return *guiP3ITEMS;
+std::pair<const SGPVObject*, UINT8> GetFallbackSmallInventoryGraphicForItem(const ItemModel *item) {
+	if (item->getPerPocket() != 0) {
+		return std::make_pair(guiSmallInventoryGraphicMissingSmallPocket, 0);
 	}
+	return std::make_pair(guiSmallInventoryGraphicMissingBigPocket, 0);
 }
 
+std::pair<const SGPVObject*, UINT8> GetSmallInventoryGraphicForItem(const ItemModel *item)
+{
+	auto path = item->getInventoryGraphicSmall().getPath().to_lower();
+	auto subImageIndex = item->getInventoryGraphicSmall().getSubImageIndex();
+	auto i = allInventoryGraphics.find(path);
+	if (i == allInventoryGraphics.end()) {
+		SLOGE("Could not find small inventory graphic for item `{}`", item->getInternalName());
+		return GetFallbackSmallInventoryGraphicForItem(item);
+	}
+	if (subImageIndex >= i->second->SubregionCount()) {
+		SLOGE("subImageIndex out of range for small inventory graphic `{}` for item `{}`: subregion count is `{}`, subImageIndex is `{}`",
+			path,
+			item->getInternalName(),
+			i->second->SubregionCount(),
+			subImageIndex
+		);
+		return GetFallbackSmallInventoryGraphicForItem(item);
+	}
+	return std::make_pair(i->second, subImageIndex);
+}
 
 UINT16 GetTileGraphicForItem(const ItemModel * item)
 {
-	UINT32 Type;
-	switch (item->getGraphicType())
-	{
-		case 0:
-			Type = GUNS;
-			break;
-		case 1:
-			Type = P1ITEMS;
-			break;
-		case 2:
-			Type = P2ITEMS;
-			break;
-		default:
-			Type = P3ITEMS;
-			break;
+	return GetTileIndexFromTypeSubIndex(item->getTileGraphic().tileType, item->getTileGraphic().subIndex);
+}
+
+std::pair<SGPVObject*, UINT8> GetFallbackBigInventoryGraphic() {
+	return std::make_pair(AddVideoObjectFromFile(guiBigInventoryGraphicMissingPath), 0);
+}
+
+std::pair<SGPVObject*, UINT8> GetBigInventoryGraphicForItem(const ItemModel * item)
+{
+	auto path = item->getInventoryGraphicBig().getPath();
+	auto subImageIndex = item->getInventoryGraphicBig().getSubImageIndex();
+
+	SGPVObject* vObject = NULL;
+	try {
+		vObject = AddVideoObjectFromFile(path);
+	} catch (const std::runtime_error &ex) {
+		SLOGE("Error loading big inventory graphic for item `{}`", item->getInternalName());
 	}
-	return GetTileIndexFromTypeSubIndex(Type, item->getGraphicNum() + 1);
+	if (vObject == NULL) {
+		return GetFallbackBigInventoryGraphic();
+	}
+	if (subImageIndex >= vObject->SubregionCount()) {
+		SLOGE("subImageIndex out of range for big inventory graphic `{}` for item `{}`: subregion count is `{}`, subImageIndex is `{}`",
+			path,
+			item->getInternalName(),
+			vObject->SubregionCount(),
+			subImageIndex
+		);
+		return GetFallbackBigInventoryGraphic();
+	}
+	return std::make_pair(vObject, subImageIndex);
 }
 
 
-SGPVObject* LoadTileGraphicForItem(const ItemModel * item)
+static void ItemDescCallbackPrimary(MOUSE_REGION* pRegion, UINT32 iReason)
 {
-	const char* Prefix;
-	switch (item->getGraphicType())
+	//Only exit the screen if we are NOT in the money interface.  Only the DONE button should exit the money interface.
+	if( gpItemDescObject->usItem != MONEY )
 	{
-		case 0:
-			Prefix = "gun";
-			break;
-		case 1:
-			Prefix = "p1item";
-			break;
-		case 2:
-			Prefix = "p2item";
-			break;
-		default:
-			Prefix = "p3item";
-			break;
+		DeleteItemDescriptionBox( );
 	}
-
-	//Load item
-	SGPFILENAME ImageFile;
-	sprintf(ImageFile, BIGITEMSDIR "/%s%02d.sti", Prefix, item->getGraphicNum());
-	return AddVideoObjectFromFile(ImageFile);
 }
 
-
-static void ItemDescCallback(MOUSE_REGION* pRegion, INT32 iReason)
+static void ItemDescCallbackSecondary(MOUSE_REGION* pRegion, UINT32 iReason)
 {
-	static BOOLEAN fRightDown = FALSE, fLeftDown = FALSE;
-
-	if (iReason & MSYS_CALLBACK_REASON_LBUTTON_DWN)
+	//Only exit the screen if we are NOT in the money interface.  Only the DONE button should exit the money interface.
+	//if( gpItemDescObject->usItem != MONEY )
 	{
-		fLeftDown = TRUE;
-	}
-	else if (iReason & MSYS_CALLBACK_REASON_LBUTTON_UP)
-	{
-		if ( fLeftDown )
-		{
-			fLeftDown = FALSE;
-
-			//Only exit the screen if we are NOT in the money interface.  Only the DONE button should exit the money interface.
-			if( gpItemDescObject->usItem != MONEY )
-			{
-				DeleteItemDescriptionBox( );
-			}
-		}
-	}
-	else if (iReason & MSYS_CALLBACK_REASON_RBUTTON_DWN)
-	{
-		fRightDown = TRUE;
-	}
-	else if (iReason & MSYS_CALLBACK_REASON_RBUTTON_UP)
-	{
-		if ( fRightDown )
-		{
-			fRightDown = FALSE;
-
-			//Only exit the screen if we are NOT in the money interface.  Only the DONE button should exit the money interface.
-			//if( gpItemDescObject->usItem != MONEY )
-			{
-				DeleteItemDescriptionBox( );
-			}
-		}
+		DeleteItemDescriptionBox( );
 	}
 }
 
@@ -4227,169 +4176,147 @@ static void ItemDescCallback(MOUSE_REGION* pRegion, INT32 iReason)
 static void RemoveMoney(void);
 
 
-static void ItemDescDoneButtonCallback(GUI_BUTTON *btn, INT32 reason)
+static void ItemDescDoneButtonCallbackPrimary(GUI_BUTTON *btn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
-	{
-		if (gpItemDescObject->usItem == MONEY) RemoveMoney();
-		DeleteItemDescriptionBox();
-	}
+	if (gpItemDescObject->usItem == MONEY) RemoveMoney();
+	DeleteItemDescriptionBox();
+}
 
-	if (reason & MSYS_CALLBACK_REASON_RBUTTON_UP)
-	{
-		DeleteItemDescriptionBox();
-	}
+static void ItemDescDoneButtonCallbackSecondary(GUI_BUTTON *btn, UINT32 reason)
+{
+	DeleteItemDescriptionBox();
 }
 
 
-static void ItemPopupRegionCallback(MOUSE_REGION* pRegion, INT32 iReason)
+static void ItemPopupRegionCallbackPrimary(MOUSE_REGION* pRegion, UINT32 iReason)
 {
-	UINT32 uiItemPos;
+	UINT32 uiItemPos = MSYS_GetRegionUserData( pRegion, 0 );
 
-	uiItemPos = MSYS_GetRegionUserData( pRegion, 0 );
-
-	// TO ALLOW ME TO DELETE REGIONS IN CALLBACKS!
-	if ( gfItemPopupRegionCallbackEndFix )
+	//If one in our hand, place it
+	if ( gpItemPointer != NULL )
 	{
-		return;
-	}
-
-	if (iReason & MSYS_CALLBACK_REASON_LBUTTON_DWN)
-	{
-
-		//If one in our hand, place it
-		if ( gpItemPointer != NULL )
+		if ( !PlaceObjectAtObjectIndex( gpItemPointer, gpItemPopupObject, (UINT8)uiItemPos ) )
 		{
-			if ( !PlaceObjectAtObjectIndex( gpItemPointer, gpItemPopupObject, (UINT8)uiItemPos ) )
+			if (fInMapMode)
 			{
-				if (fInMapMode)
-				{
-					MAPEndItemPointer( );
-				}
-				else
-				{
-					gpItemPointer = NULL;
-					gSMPanelRegion.ChangeCursor(CURSOR_NORMAL);
-					SetCurrentCursorFromDatabase( CURSOR_NORMAL );
-
-					if (guiCurrentScreen == SHOPKEEPER_SCREEN)
-					{
-						memset( &gMoveingItem, 0, sizeof( INVENTORY_IN_SLOT ) );
-						SetSkiCursor( CURSOR_NORMAL );
-					}
-				}
-
-				// re-evaluate repairs
-				gfReEvaluateEveryonesNothingToDo = TRUE;
-			}
-
-			//Dirty interface
-			//fInterfacePanelDirty = DIRTYLEVEL2;
-			//RenderItemStackPopup( FALSE );
-		}
-		else
-		{
-			if ( uiItemPos < gpItemPopupObject->ubNumberOfObjects )
-			{
-				// Here, grab an item and put in cursor to swap
-				//RemoveObjFrom( OBJECTTYPE * pObj, UINT8 ubRemoveIndex )
-				GetObjFrom( gpItemPopupObject, (UINT8)uiItemPos, &gItemPointer );
-
-				if (fInMapMode)
-				{
-					// pick it up
-					InternalMAPBeginItemPointer( gpItemPopupSoldier );
-				}
-				else
-				{
-					SetItemPointer(&gItemPointer, gpItemPopupSoldier);
-				}
-
-				//if we are in the shop keeper interface
-				if (guiCurrentScreen == SHOPKEEPER_SCREEN)
-				{
-					// pick up stacked item into cursor and try to sell it ( unless CTRL is held down )
-					BeginSkiItemPointer(PLAYERS_INVENTORY, -1, !_KeyDown(CTRL));
-
-					// if we've just removed the last one there
-					if ( gpItemPopupObject->ubNumberOfObjects == 0 )
-					{
-						// we must immediately get out of item stack popup, because the item has been deleted
-						// (memset to 0), and errors like a right bringing up an item description for item 0
-						// could happen then.  ARM.
-						DeleteItemStackPopup( );
-					}
-				}
-
-				// re-evaluate repairs
-				gfReEvaluateEveryonesNothingToDo = TRUE;
-
-				//Dirty interface
-				//RenderItemStackPopup( FALSE );
-				//fInterfacePanelDirty = DIRTYLEVEL2;
-			}
-		}
-
-		UpdateItemHatches();
-	}
-	else if (iReason & MSYS_CALLBACK_REASON_RBUTTON_UP)
-	{
-		// Get Description....
-		// Some global stuff here - for esc, etc
-		//Remove
-		gfItemPopupRegionCallbackEndFix = TRUE;
-
-
-		DeleteItemStackPopup( );
-
-		if ( !InItemDescriptionBox( ) )
-		{
-			// RESTORE BACKGROUND
-			RestoreExternBackgroundRect( gsItemPopupInvX, gsItemPopupInvY, gsItemPopupInvWidth, gsItemPopupInvHeight );
-			if ( guiCurrentItemDescriptionScreen == MAP_SCREEN )
-			{
-				MAPInternalInitItemDescriptionBox( gpItemPopupObject, (UINT8)uiItemPos, gpItemPopupSoldier );
+				MAPEndItemPointer( );
 			}
 			else
 			{
-				InternalInitItemDescriptionBox( gpItemPopupObject, (INT16) ITEMDESC_START_X, (INT16) ITEMDESC_START_Y, (UINT8)uiItemPos, gpItemPopupSoldier );
+				gpItemPointer = NULL;
+				gSMPanelRegion.ChangeCursor(CURSOR_NORMAL);
+				SetCurrentCursorFromDatabase( CURSOR_NORMAL );
+
+				if (guiCurrentScreen == SHOPKEEPER_SCREEN)
+				{
+					gMoveingItem = INVENTORY_IN_SLOT{};
+					SetSkiCursor( CURSOR_NORMAL );
+				}
 			}
+
+			// re-evaluate repairs
+			gfReEvaluateEveryonesNothingToDo = TRUE;
 		}
 
+		//Dirty interface
+		//fInterfacePanelDirty = DIRTYLEVEL2;
+		//RenderItemStackPopup( FALSE );
+	}
+	else
+	{
+		if ( uiItemPos < gpItemPopupObject->ubNumberOfObjects )
+		{
+			// Here, grab an item and put in cursor to swap
+			//RemoveObjFrom( OBJECTTYPE * pObj, UINT8 ubRemoveIndex )
+			GetObjFrom( gpItemPopupObject, (UINT8)uiItemPos, &gItemPointer );
 
+			if (fInMapMode)
+			{
+				// pick it up
+				InternalMAPBeginItemPointer( gpItemPopupSoldier );
+			}
+			else
+			{
+				SetItemPointer(&gItemPointer, gpItemPopupSoldier);
+			}
+
+			//if we are in the shop keeper interface
+			if (guiCurrentScreen == SHOPKEEPER_SCREEN)
+			{
+				// pick up stacked item into cursor and try to sell it ( unless CTRL is held down )
+				BeginSkiItemPointer(PLAYERS_INVENTORY, -1, !_KeyDown(CTRL));
+
+				// if we've just removed the last one there
+				if ( gpItemPopupObject->ubNumberOfObjects == 0 )
+				{
+					// we must immediately get out of item stack popup, because the item has been deleted
+					// (memset to 0), and errors like a right bringing up an item description for item 0
+					// could happen then.  ARM.
+					DeleteItemStackPopup( );
+				}
+			}
+
+			// re-evaluate repairs
+			gfReEvaluateEveryonesNothingToDo = TRUE;
+
+			//Dirty interface
+			//RenderItemStackPopup( FALSE );
+			//fInterfacePanelDirty = DIRTYLEVEL2;
+		}
+	}
+
+	UpdateItemHatches();
+}
+
+static void ItemPopupRegionCallbackSecondary(MOUSE_REGION* pRegion, UINT32 iReason)
+{
+	UINT32 uiItemPos = MSYS_GetRegionUserData( pRegion, 0 );
+
+	DeleteItemStackPopup( );
+
+	if ( !InItemDescriptionBox( ) )
+	{
+		// RESTORE BACKGROUND
+		RestoreExternBackgroundRect( gsItemPopupInvX, gsItemPopupInvY, gsItemPopupInvWidth, gsItemPopupInvHeight );
+		if ( guiCurrentItemDescriptionScreen == MAP_SCREEN )
+		{
+			MAPInternalInitItemDescriptionBox( gpItemPopupObject, (UINT8)uiItemPos, gpItemPopupSoldier );
+		}
+		else
+		{
+			InternalInitItemDescriptionBox( gpItemPopupObject, (INT16) ITEMDESC_START_X, (INT16) ITEMDESC_START_Y, (UINT8)uiItemPos, gpItemPopupSoldier );
+		}
 	}
 }
 
 
-static void ItemPopupFullRegionCallback(MOUSE_REGION* pRegion, INT32 iReason)
+static void ItemPopupFullRegionCallbackPrimary(MOUSE_REGION* pRegion, UINT32 iReason)
 {
-	if (iReason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if ( InItemStackPopup( ) )
 	{
-		if ( InItemStackPopup( ) )
-		{
-			// End stack popup and retain pointer
-			EndItemStackPopupWithItemInHand( );
-		}
-		else if( InKeyRingPopup() )
-		{
-			// end pop up with key in hand
-			DeleteKeyRingPopup( );
-			fTeamPanelDirty = TRUE;
-
-		}
+		// End stack popup and retain pointer
+		EndItemStackPopupWithItemInHand( );
 	}
-	else if (iReason & MSYS_CALLBACK_REASON_RBUTTON_UP)
+	else if( InKeyRingPopup() )
 	{
-		if ( InItemStackPopup( ) )
-		{
-			DeleteItemStackPopup( );
-			fTeamPanelDirty = TRUE;
-		}
-		else
-		{
-			DeleteKeyRingPopup( );
-			fTeamPanelDirty = TRUE;
-		}
+		// end pop up with key in hand
+		DeleteKeyRingPopup( );
+		fTeamPanelDirty = TRUE;
+
+	}
+}
+
+static void ItemPopupFullRegionCallbackSecondary(MOUSE_REGION* pRegion, UINT32 iReason)
+{
+	if ( InItemStackPopup( ) )
+	{
+		DeleteItemStackPopup( );
+		fTeamPanelDirty = TRUE;
+	}
+	else
+	{
+		DeleteKeyRingPopup( );
+		fTeamPanelDirty = TRUE;
 	}
 }
 
@@ -4468,13 +4395,13 @@ void SetItemPickupMenuDirty( BOOLEAN fDirtyLevel )
 
 
 static void CalculateItemPickupMenuDimensions(void);
-static void ItemPickMenuMouseClickCallback(MOUSE_REGION* pRegion, INT32 iReason);
-static void ItemPickMenuMouseMoveCallback(MOUSE_REGION* pRegion, INT32 iReason);
-static void ItemPickupAll(GUI_BUTTON* btn, INT32 reason);
-static void ItemPickupCancel(GUI_BUTTON* btn, INT32 reason);
-static void ItemPickupOK(GUI_BUTTON* btn, INT32 reason);
-static void ItemPickupScrollDown(GUI_BUTTON* btn, INT32 reason);
-static void ItemPickupScrollUp(GUI_BUTTON* btn, INT32 reason);
+static void ItemPickMenuMouseClickCallback(MOUSE_REGION* pRegion, UINT32 iReason);
+static void ItemPickMenuMouseMoveCallback(MOUSE_REGION* pRegion, UINT32 iReason);
+static void ItemPickupAll(GUI_BUTTON* btn, UINT32 reason);
+static void ItemPickupCancel(GUI_BUTTON* btn, UINT32 reason);
+static void ItemPickupOK(GUI_BUTTON* btn, UINT32 reason);
+static void ItemPickupScrollDown(GUI_BUTTON* btn, UINT32 reason);
+static void ItemPickupScrollUp(GUI_BUTTON* btn, UINT32 reason);
 static void SetupPickupPage(INT8 bPage);
 
 
@@ -4484,12 +4411,12 @@ void InitializeItemPickupMenu(SOLDIERTYPE* const pSoldier, INT16 const sGridNo, 
 	LocateSoldier(pSoldier, FALSE);
 
 	ITEM_PICKUP_MENU_STRUCT& menu = gItemPickupMenu;
-	memset(&menu, 0, sizeof(menu));
+	menu = ITEM_PICKUP_MENU_STRUCT{};
 	menu.pItemPool = pItemPool;
 
 	InterruptTime();
 	PauseGame();
-	LockPauseState(LOCK_PAUSE_18);
+	LockPauseState(LOCK_PAUSE_ITEM_PICKUP);
 	PauseTime(TRUE);
 
 	// Alrighty, cancel lock UI if we havn't done so already
@@ -4513,7 +4440,7 @@ void InitializeItemPickupMenu(SOLDIERTYPE* const pSoldier, INT16 const sGridNo, 
 
 	menu.uiPanelVo = AddVideoObjectFromFile(INTERFACEDIR "/itembox.sti");
 
-	menu.pfSelectedArray = MALLOCNZ(BOOLEAN, menu.ubTotalItems);
+	menu.pfSelectedArray = new BOOLEAN[menu.ubTotalItems]{};
 
 	CalculateItemPickupMenuDimensions();
 
@@ -4651,7 +4578,7 @@ static void SetupPickupPage(INT8 bPage)
 	// Clear help text!
 	for ( cnt = 0; cnt < NUM_PICKUP_SLOTS; cnt++ )
 	{
-		gItemPickupMenu.Regions[cnt].SetFastHelpText(L"");
+		gItemPickupMenu.Regions[cnt].SetFastHelpText(ST::null);
 	}
 
 	for ( cnt = 0; cnt < iEnd; )
@@ -4672,14 +4599,14 @@ static void SetupPickupPage(INT8 bPage)
 			sValue = o.bStatus[0];
 
 			// Adjust for ammo, other thingys..
-			wchar_t pStr[200];
+			ST::string pStr;
 			if (GCM->getItem(o.usItem)->isAmmo() || GCM->getItem(o.usItem)->isKey())
 			{
-				swprintf( pStr, lengthof(pStr), L"" );
+				pStr = ST::null;
 			}
 			else
 			{
-				swprintf( pStr, lengthof(pStr), L"%d%%", sValue );
+				pStr = ST::format("{}%", sValue);
 			}
 
 			gItemPickupMenu.Regions[cnt - iStart].SetFastHelpText(pStr);
@@ -4731,7 +4658,7 @@ static void CalculateItemPickupMenuDimensions(void)
 
 void RenderItemPickupMenu()
 {
-	wchar_t pStr[100];
+	ST::string pStr;
 
 	if (!gfInItemPickupMenu) return;
 
@@ -4798,7 +4725,7 @@ void RenderItemPickupMenu()
 			{
 				SetFontAttributes(ITEM_FONT, FONT_GRAY4);
 
-				swprintf(pStr, lengthof(pStr), L"%d", o.ubNumberOfObjects);
+				pStr = ST::format("{}", o.ubNumberOfObjects);
 
 				INT16 sFontX;
 				INT16 sFontY;
@@ -4812,7 +4739,7 @@ void RenderItemPickupMenu()
 				// Render attachment symbols
 				SetFontForeground(GetAttachmentHintColor(&o));
 				SetFontShadow(DEFAULT_SHADOW);
-				wchar_t const* const AttachMarker   = L"*";
+				ST::string AttachMarker = "*";
 				UINT16         const uiStringLength = StringPixLength(AttachMarker, ITEM_FONT);
 				INT16          const sNewX          = sX + 43 - uiStringLength - 4;
 				INT16          const sNewY          = sY + 2;
@@ -4833,13 +4760,12 @@ void RenderItemPickupMenu()
 			// Render name
 			if (item->getItemClass() == IC_MONEY)
 			{
-				wchar_t pStr2[20];
-				SPrintMoney(pStr2, o.uiMoneyAmount);
-				swprintf(pStr, lengthof(pStr), L"%ls (%ls)", ItemNames[o.usItem], pStr2);
+				ST::string pStr2 = SPrintMoney(o.uiMoneyAmount);
+				pStr = ST::format("{} ({})", GCM->getItem(o.usItem)->getName(), pStr2);
 			}
 			else
 			{
-				wcslcpy(pStr, ShortItemNames[o.usItem], lengthof(pStr));
+				pStr = GCM->getItem(o.usItem)->getShortName();
 			}
 			INT16 sFontX;
 			INT16 sFontY;
@@ -4905,7 +4831,7 @@ void RemoveItemPickupMenu( )
 		}
 
 		// Free selection list...
-		MemFree( gItemPickupMenu.pfSelectedArray );
+		delete[] gItemPickupMenu.pfSelectedArray;
 		gItemPickupMenu.pfSelectedArray = NULL;
 
 
@@ -4931,29 +4857,29 @@ void RemoveItemPickupMenu( )
 }
 
 
-static void ItemPickupScrollUp(GUI_BUTTON* btn, INT32 reason)
+static void ItemPickupScrollUp(GUI_BUTTON* btn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		SetupPickupPage( (UINT8)( gItemPickupMenu.bScrollPage - 1 ) );
 	}
 }
 
 
-static void ItemPickupScrollDown(GUI_BUTTON* btn, INT32 reason)
+static void ItemPickupScrollDown(GUI_BUTTON* btn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		SetupPickupPage( (UINT8)( gItemPickupMenu.bScrollPage + 1 ) );
 	}
 }
 
 
-static void ItemPickupAll(GUI_BUTTON* btn, INT32 reason)
+static void ItemPickupAll(GUI_BUTTON* btn, UINT32 reason)
 {
 	INT32 cnt;
 
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		gItemPickupMenu.fAllSelected = !gItemPickupMenu.fAllSelected;
 
@@ -4972,9 +4898,9 @@ static void ItemPickupAll(GUI_BUTTON* btn, INT32 reason)
 }
 
 
-static void ItemPickupOK(GUI_BUTTON* btn, INT32 reason)
+static void ItemPickupOK(GUI_BUTTON* btn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		// OK, pickup item....
 		gItemPickupMenu.fHandled = TRUE;
@@ -4985,9 +4911,9 @@ static void ItemPickupOK(GUI_BUTTON* btn, INT32 reason)
 }
 
 
-static void ItemPickupCancel(GUI_BUTTON* btn, INT32 reason)
+static void ItemPickupCancel(GUI_BUTTON* btn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		// OK, pickup item....
 		gItemPickupMenu.fHandled = TRUE;
@@ -4995,7 +4921,7 @@ static void ItemPickupCancel(GUI_BUTTON* btn, INT32 reason)
 }
 
 
-static void ItemPickMenuMouseMoveCallback(MOUSE_REGION* const pRegion, INT32 const iReason)
+static void ItemPickMenuMouseMoveCallback(MOUSE_REGION* const pRegion, UINT32 const iReason)
 {
 	static BOOLEAN bChecked = FALSE;
 
@@ -5037,9 +4963,9 @@ static void ItemPickMenuMouseMoveCallback(MOUSE_REGION* const pRegion, INT32 con
 }
 
 
-static void ItemPickMenuMouseClickCallback(MOUSE_REGION* const pRegion, INT32 const iReason)
+static void ItemPickMenuMouseClickCallback(MOUSE_REGION* const pRegion, UINT32 const iReason)
 {
-	if (iReason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (iReason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		INT32 const item_pos = MSYS_GetRegionUserData(pRegion, 0) + gItemPickupMenu.ubScrollAnchor;
 		if (item_pos >= gItemPickupMenu.ubTotalItems) return;
@@ -5090,74 +5016,74 @@ BOOLEAN HandleItemPickupMenu( )
 }
 
 
-static void BtnMoneyButtonCallback(GUI_BUTTON* const btn, INT32 const reason)
+static void BtnMoneyButtonCallbackPrimary(GUI_BUTTON* const btn, UINT32 const reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_RBUTTON_DWN)
+	UINT32      amount   = 0;
+	UINT8 const ubButton = btn->GetUserData();
+	switch (ubButton)
 	{
-		btn->uiFlags |= BUTTON_CLICKED_ON;
+		case M_1000: amount = 1000; break;
+		case M_100:  amount =  100; break;
+		case M_10:   amount =   10; break;
+
+		case M_DONE:
+			RemoveMoney();
+			DeleteItemDescriptionBox();
+			break;
 	}
 
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (amount != 0 && gRemoveMoney.uiMoneyRemaining >= amount)
 	{
-		INT32       amount   = 0;
-		UINT8 const ubButton = btn->GetUserData();
-		switch (ubButton)
+		if (gfAddingMoneyToMercFromPlayersAccount && gRemoveMoney.uiMoneyRemoving + amount > MAX_MONEY_PER_SLOT)
 		{
-			case M_1000: amount = 1000; break;
-			case M_100:  amount =  100; break;
-			case M_10:   amount =   10; break;
-
-			case M_DONE:
-				RemoveMoney();
-				DeleteItemDescriptionBox();
-				break;
+			ScreenID const exit_screen = guiCurrentScreen == SHOPKEEPER_SCREEN ?
+				SHOPKEEPER_SCREEN : GAME_SCREEN;
+			DoMessageBox(MSG_BOX_BASIC_STYLE, gzMoneyWithdrawMessageText[MONEY_TEXT_WITHDRAW_MORE_THEN_MAXIMUM], exit_screen, MSG_BOX_FLAG_OK, NULL, NULL);
+			return;
 		}
 
-		if (amount != 0 && gRemoveMoney.uiMoneyRemaining >= amount)
-		{
-			if (gfAddingMoneyToMercFromPlayersAccount && gRemoveMoney.uiMoneyRemoving + amount > MAX_MONEY_PER_SLOT)
-			{
-				ScreenID const exit_screen = guiCurrentScreen == SHOPKEEPER_SCREEN ?
-					SHOPKEEPER_SCREEN : GAME_SCREEN;
-				DoMessageBox(MSG_BOX_BASIC_STYLE, gzMoneyWithdrawMessageText[MONEY_TEXT_WITHDRAW_MORE_THEN_MAXIMUM], exit_screen, MSG_BOX_FLAG_OK, NULL, NULL);
-				return;
-			}
+		gRemoveMoney.uiMoneyRemaining -= amount;
+		gRemoveMoney.uiMoneyRemoving  += amount;
 
-			gRemoveMoney.uiMoneyRemaining -= amount;
-			gRemoveMoney.uiMoneyRemoving  += amount;
-
-			RenderItemDescriptionBox( );
-			for (INT8 i = 0; i < MAX_ATTACHMENTS; ++i)
-			{
-				MarkAButtonDirty(guiMoneyButtonBtn[i]);
-			}
-		}
-	}
-
-	if (reason & MSYS_CALLBACK_REASON_RBUTTON_UP)
-	{
-		btn->uiFlags &= ~BUTTON_CLICKED_ON;
-
-		INT32       amount   = 0;
-		UINT8 const ubButton = btn->GetUserData();
-		switch (ubButton)
-		{
-			case M_1000: amount = 1000; break;
-			case M_100:  amount =  100; break;
-			case M_10:   amount =   10; break;
-		}
-
-		if (amount != 0 && gRemoveMoney.uiMoneyRemoving >= amount)
-		{
-			gRemoveMoney.uiMoneyRemaining += amount;
-			gRemoveMoney.uiMoneyRemoving  -= amount;
-		}
-
-		RenderItemDescriptionBox();
+		RenderItemDescriptionBox( );
 		for (INT8 i = 0; i < MAX_ATTACHMENTS; ++i)
 		{
 			MarkAButtonDirty(guiMoneyButtonBtn[i]);
 		}
+	}
+}
+
+static void BtnMoneyButtonCallbackSecondary(GUI_BUTTON* const btn, UINT32 const reason)
+{
+	btn->uiFlags &= ~BUTTON_CLICKED_ON;
+
+	UINT32      amount   = 0;
+	UINT8 const ubButton = btn->GetUserData();
+	switch (ubButton)
+	{
+		case M_1000: amount = 1000; break;
+		case M_100:  amount =  100; break;
+		case M_10:   amount =   10; break;
+	}
+
+	if (amount != 0 && gRemoveMoney.uiMoneyRemoving >= amount)
+	{
+		gRemoveMoney.uiMoneyRemaining += amount;
+		gRemoveMoney.uiMoneyRemoving  -= amount;
+	}
+
+	RenderItemDescriptionBox();
+	for (INT8 i = 0; i < MAX_ATTACHMENTS; ++i)
+	{
+		MarkAButtonDirty(guiMoneyButtonBtn[i]);
+	}
+}
+
+static void BtnMoneyButtonCallbackOther(GUI_BUTTON* const btn, UINT32 const reason)
+{
+	if (reason & MSYS_CALLBACK_REASON_RBUTTON_DWN)
+	{
+		btn->uiFlags |= BUTTON_CLICKED_ON;
 	}
 }
 
@@ -5171,7 +5097,7 @@ static void RemoveMoney(void)
 		{
 			INVENTORY_IN_SLOT InvSlot;
 
-			memset( &InvSlot, 0, sizeof(INVENTORY_IN_SLOT) );
+			InvSlot = INVENTORY_IN_SLOT{};
 
 			InvSlot.fActive = TRUE;
 			InvSlot.sItemIndex = MONEY;
@@ -5238,57 +5164,60 @@ static void RemoveMoney(void)
 }
 
 
-void GetHelpTextForItem(wchar_t* const dst, size_t const length, OBJECTTYPE const& obj)
+ST::string GetHelpTextForItem(const OBJECTTYPE& obj)
 {
+	ST::string dst;
 	UINT16 const usItem = obj.usItem;
 	if (usItem == MONEY)
 	{
-		SPrintMoney(dst, obj.uiMoneyAmount);
+		dst = SPrintMoney(obj.uiMoneyAmount);
 	}
 	else if (GCM->getItem(usItem)->getItemClass() == IC_MONEY)
 	{
 		// alternate money like silver or gold
-		wchar_t pStr2[20];
-		SPrintMoney(pStr2, obj.uiMoneyAmount);
-		swprintf(dst, length, L"%ls (%ls)", ItemNames[usItem], pStr2);
+		ST::string pStr2 = SPrintMoney(obj.uiMoneyAmount);
+		dst = ST::format("{} ({})", GCM->getItem(usItem)->getName(), pStr2);
 	}
 	else if (usItem == NOTHING)
 	{
-		wcslcpy(dst, L"", length);
+		dst = ST::null;
 	}
 	else
 	{
-		size_t n = swprintf(dst, length, L"%ls", ItemNames[usItem]);
+		dst = ST::format("{}", GCM->getItem(usItem)->getName());
 		if (!gGameOptions.fGunNut && GCM->getItem(usItem)->getItemClass() == IC_GUN)
 		{
 			const CalibreModel * calibre = GCM->getWeapon(usItem)->calibre;
 			if (calibre->showInHelpText)
 			{
-				n += swprintf(dst + n, length - n, L" (%ls)", calibre->getName());
+				ST::string name = *calibre->getName();
+				dst += ST::format(" ({})", name);
 			}
 		}
 
-		if (wchar_t const* const imprint = GetObjectImprint(obj))
+		ST::string imprint = GetObjectImprint(obj);
+		if (!imprint.empty())
 		{
-			n += swprintf(dst + n, length - n, L" [%ls]", imprint);
+			dst += ST::format(" [{}]", imprint);
 		}
 
 		// Add attachment string....
-		wchar_t const* const first_prefix = L" (";
-		wchar_t const*       prefix       = first_prefix;
+		ST::string first_prefix = " (";
+		ST::string prefix       = first_prefix;
 		FOR_EACH(UINT16 const, i, obj.usAttachItem)
 		{
 			UINT16 const attachment = *i;
 			if (attachment == NOTHING) continue;
 
-			n += swprintf(dst + n, length - n, L"%ls%ls", prefix, ItemNames[attachment]);
-			prefix = L",\n";
+			dst += ST::format("{}{}", prefix, GCM->getItem(attachment)->getName());
+			prefix = ",\n";
 		}
 		if (prefix != first_prefix)
 		{
-			n += swprintf(dst + n, length - n, L"%ls", pMessageStrings[MSG_END_ATTACHMENT_LIST]);
+			dst += ST::format("{}", pMessageStrings[MSG_END_ATTACHMENT_LIST]);
 		}
 	}
+	return dst;
 }
 
 
@@ -5328,17 +5257,17 @@ void CancelItemPointer( )
 void LoadItemCursorFromSavedGame(HWFILE const f)
 {
 	BYTE data[44];
-	FileRead(f, data, sizeof(data));
+	f->read(data, sizeof(data));
 
 	BOOLEAN      active;
 	SOLDIERTYPE* soldier;
-	BYTE const* d = data;
-	d = ExtractObject(d, &gItemPointer);
+	DataReader d{data};
+	ExtractObject(d, &gItemPointer);
 	EXTR_SOLDIER(d, soldier)
 	EXTR_U8(     d, gbItemPointerSrcSlot)
 	EXTR_BOOL(   d, active)
 	EXTR_SKIP(   d, 5)
-	Assert(d == endof(data));
+	Assert(d.getConsumed() == lengthof(data));
 
 	if (active)
 	{
@@ -5356,15 +5285,15 @@ void LoadItemCursorFromSavedGame(HWFILE const f)
 void SaveItemCursorToSavedGame(HWFILE const f)
 {
 	BYTE  data[44];
-	BYTE* d = data;
-	d = InjectObject(d, &gItemPointer);
+	DataWriter d{data};
+	InjectObject(d, &gItemPointer);
 	INJ_SOLDIER(d, gpItemPointerSoldier)
 	INJ_U8(     d, gbItemPointerSrcSlot)
 	INJ_BOOL(   d, gpItemPointer != 0)
 	INJ_SKIP(   d, 5)
-	Assert(d == endof(data));
+	Assert(d.getConsumed() == lengthof(data));
 
-	FileWrite(f, data, sizeof(data));
+	f->write(data, sizeof(data));
 }
 
 
@@ -5391,8 +5320,9 @@ void UpdateItemHatches(void)
 void SetMouseCursorFromItem(UINT16 const item_idx)
 {
 	const ItemModel * item = GCM->getItem(item_idx);
-	SGPVObject const& vo   = GetInterfaceGraphicForItem(item);
-	SetExternMouseCursor(vo, item->getGraphicNum());
+	auto graphic = GetSmallInventoryGraphicForItem(item);
+	auto vo = graphic.first;
+	SetExternMouseCursor(*vo, graphic.second);
 	SetCurrentCursorFromDatabase(EXTERN_CURSOR);
 }
 
@@ -5414,10 +5344,20 @@ void LoadInterfaceItemsGraphics()
 {
 	guiMapInvSecondHandBlockout = AddVideoObjectFromFile(INTERFACEDIR "/map_inv_2nd_gun_cover.sti");
 	guiSecItemHiddenVO          = AddVideoObjectFromFile(INTERFACEDIR "/secondary_gun_hidden.sti");
-	guiGUNSM                    = AddVideoObjectFromFile(INTERFACEDIR "/mdguns.sti");    // interface gun pictures
-	guiP1ITEMS                  = AddVideoObjectFromFile(INTERFACEDIR "/mdp1items.sti"); // interface item pictures
-	guiP2ITEMS                  = AddVideoObjectFromFile(INTERFACEDIR "/mdp2items.sti"); // interface item pictures
-	guiP3ITEMS                  = AddVideoObjectFromFile(INTERFACEDIR "/mdp3items.sti"); // interface item pictures
+	guiSmallInventoryGraphicMissingSmallPocket = AddVideoObjectFromFile("sti/interface/inventory/inventory-graphic-not-found-small-sp.sti");
+	guiSmallInventoryGraphicMissingBigPocket = AddVideoObjectFromFile("sti/interface/inventory/inventory-graphic-not-found-small-bp.sti");
+
+	for (auto const& item : GCM->getAllSmallInventoryGraphicPaths()) {
+		auto path = item.to_lower();
+		if (allInventoryGraphics.find(path) == allInventoryGraphics.end()) {
+			try {
+				auto vObject = AddVideoObjectFromFile(item);
+				allInventoryGraphics.insert_or_assign(path, vObject);
+			} catch (const std::runtime_error &ex) {
+				SLOGE("Error loading small inventory graphic `{}`: {}", item, ex.what());
+			}
+		}
+	}
 
 	// Build a sawtooth black-white-black colour gradient
 	size_t const length = lengthof(us16BPPItemCyclePlacedItemColors);
@@ -5435,8 +5375,10 @@ void DeleteInterfaceItemsGraphics()
 {
 	DeleteVideoObject(guiMapInvSecondHandBlockout);
 	DeleteVideoObject(guiSecItemHiddenVO);
-	DeleteVideoObject(guiGUNSM);
-	DeleteVideoObject(guiP1ITEMS);
-	DeleteVideoObject(guiP2ITEMS);
-	DeleteVideoObject(guiP3ITEMS);
+	DeleteVideoObject(guiSmallInventoryGraphicMissingSmallPocket);
+	DeleteVideoObject(guiSmallInventoryGraphicMissingBigPocket);
+	for (auto const& v : allInventoryGraphics) {
+		DeleteVideoObject(v.second);
+	}
+	allInventoryGraphics.clear();
 }

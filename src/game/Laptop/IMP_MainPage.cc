@@ -20,6 +20,9 @@
 #include "Button_System.h"
 #include "ScreenIDs.h"
 #include "Font_Control.h"
+#include "GamePolicy.h"
+#include "GameInstance.h"
+#include "ContentManager.h"
 
 
 #define MAIN_PAGE_BUTTON_TEXT_WIDTH 95
@@ -35,8 +38,8 @@ static MOUSE_REGION pIMPMainPageMouseRegions[4];
 
 static SGPVObject* guiCHARACTERPORTRAITFORMAINPAGE;
 
-void BtnIMPMainPagePortraitCallback(GUI_BUTTON *btn, INT32 reason);
-void BtnIMPMainPageVoiceCallback(GUI_BUTTON *btn, INT32 reason);
+void BtnIMPMainPagePortraitCallback(GUI_BUTTON *btn, UINT32 reason);
+void BtnIMPMainPageVoiceCallback(GUI_BUTTON *btn, UINT32 reason);
 
 
 // this is the current state of profiling the player is in.
@@ -123,7 +126,7 @@ void HandleIMPMainPage( void )
 }
 
 
-static void MakeButton(UINT idx, const char* img_file, const wchar_t* text, INT16 x, INT16 y, GUI_CALLBACK click)
+static void MakeButton(UINT idx, const char* img_file, const ST::string& text, INT16 x, INT16 y, GUI_CALLBACK click)
 {
 	BUTTON_PICS* const img = LoadButtonImage(img_file, 0, 1);
 	giIMPMainPageButtonImage[idx] = img;
@@ -140,10 +143,10 @@ static void MakeButton(UINT idx, const char* img_file, const wchar_t* text, INT1
 }
 
 
-static void BtnIMPMainPageAttributesCallback(GUI_BUTTON* btn, INT32 reason);
-static void BtnIMPMainPageBackCallback(GUI_BUTTON* btn, INT32 reason);
-static void BtnIMPMainPageBeginCallback(GUI_BUTTON* btn, INT32 reason);
-static void BtnIMPMainPagePersonalityCallback(GUI_BUTTON* btn, INT32 reason);
+static void BtnIMPMainPageAttributesCallback(GUI_BUTTON* btn, UINT32 reason);
+static void BtnIMPMainPageBackCallback(GUI_BUTTON* btn, UINT32 reason);
+static void BtnIMPMainPageBeginCallback(GUI_BUTTON* btn, UINT32 reason);
+static void BtnIMPMainPagePersonalityCallback(GUI_BUTTON* btn, UINT32 reason);
 
 
 static void CreateIMPMainPageButtons(void)
@@ -157,11 +160,12 @@ static void CreateIMPMainPageButtons(void)
 	giIMPMainPageButton[0]->SpecifyTextSubOffsets(0, -1, FALSE);
 
 	// the begin profiling button
-	const wchar_t* const profiling_text = (iCurrentProfileMode == 0 || iCurrentProfileMode > 2 ? pImpButtonText[1] : pImpButtonText[22]);
+	ST::string profiling_text = (iCurrentProfileMode == 0 || iCurrentProfileMode > 2 ? pImpButtonText[1] : pImpButtonText[22]);
 	MakeButton(1, LAPTOPDIR "/button_2.sti", profiling_text, dx + 136, dy + 174, BtnIMPMainPageBeginCallback);
 
-	// the personality button
-	MakeButton(2, LAPTOPDIR "/button_8.sti", pImpButtonText[2], dx + 13, dy + 245, BtnIMPMainPagePersonalityCallback);
+	// the personality/specialties button
+	ST::string btnText = gamepolicy(imp_pick_skills_directly) ? pImpButtonText[26] : pImpButtonText[2];
+	MakeButton(2, LAPTOPDIR "/button_8.sti", btnText, dx + 13, dy + 245, BtnIMPMainPagePersonalityCallback);
 
 	// the attribs button
 	MakeButton(3, LAPTOPDIR "/button_8.sti", pImpButtonText[3], dx + 133, dy + 245, BtnIMPMainPageAttributesCallback);
@@ -170,14 +174,14 @@ static void CreateIMPMainPageButtons(void)
 	MakeButton(4, LAPTOPDIR "/button_8.sti", pImpButtonText[4], dx + 253, dy + 245, BtnIMPMainPagePortraitCallback);
 
 	// the voice button
-	wchar_t sString[128];
+	ST::string sString;
 	if (iCurrentProfileMode == 5)
 	{
-		swprintf(sString, lengthof(sString), pImpButtonText[5], iCurrentVoices + 1);
+		sString = st_format_printf(pImpButtonText[5], iCurrentVoices + 1);
 	}
 	else
 	{
-		swprintf(sString, lengthof(sString), pImpButtonText[25]);
+		sString = pImpButtonText[25];
 	}
 	MakeButton(5, LAPTOPDIR "/button_8.sti", sString, dx + 373, dy + 245, BtnIMPMainPageVoiceCallback);
 }
@@ -213,11 +217,11 @@ static void DeleteIMPMainPageButtons(void)
 }
 
 
-static void BtnIMPMainPageBackCallback(GUI_BUTTON *btn, INT32 reason)
+static void BtnIMPMainPageBackCallback(GUI_BUTTON *btn, UINT32 reason)
 {
 	// btn callback for IMP Homepage About US button
 
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		iCurrentImpPage = IMP_HOME_PAGE;
 		fButtonPendingFlag = TRUE;
@@ -231,13 +235,13 @@ static void BtnIMPMainPageBackCallback(GUI_BUTTON *btn, INT32 reason)
 static void BeginMessageBoxCallBack(MessageBoxReturnValue);
 
 
-static void BtnIMPMainPageBeginCallback(GUI_BUTTON *btn, INT32 reason)
+static void BtnIMPMainPageBeginCallback(GUI_BUTTON *btn, UINT32 reason)
 {
 	// btn callback for Main Page Begin Profiling
 
 	// too far along to change gender
 
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		// are we going to change name, or do we have to start over from scratch
 		if (iCurrentProfileMode > 2)
@@ -266,7 +270,7 @@ static void BtnIMPMainPageBeginCallback(GUI_BUTTON *btn, INT32 reason)
 }
 
 
-static void BtnIMPMainPagePersonalityCallback(GUI_BUTTON *btn, INT32 reason)
+static void BtnIMPMainPagePersonalityCallback(GUI_BUTTON *btn, UINT32 reason)
 {
 	// btn callback for Main Page Begin Profiling
 
@@ -277,7 +281,7 @@ static void BtnIMPMainPagePersonalityCallback(GUI_BUTTON *btn, INT32 reason)
 		return;
 	}
 
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		iCurrentImpPage = IMP_PERSONALITY;
 		fButtonPendingFlag = TRUE;
@@ -285,7 +289,7 @@ static void BtnIMPMainPagePersonalityCallback(GUI_BUTTON *btn, INT32 reason)
 }
 
 
-static void BtnIMPMainPageAttributesCallback(GUI_BUTTON *btn, INT32 reason)
+static void BtnIMPMainPageAttributesCallback(GUI_BUTTON *btn, UINT32 reason)
 {
 	// btn callback for Main Page Begin Profiling
 
@@ -296,7 +300,7 @@ static void BtnIMPMainPageAttributesCallback(GUI_BUTTON *btn, INT32 reason)
 		return;
 	}
 
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		iCurrentImpPage = IMP_ATTRIBUTE_ENTRANCE;
 		fButtonPendingFlag = TRUE;
@@ -304,7 +308,7 @@ static void BtnIMPMainPageAttributesCallback(GUI_BUTTON *btn, INT32 reason)
 }
 
 
-void BtnIMPMainPagePortraitCallback(GUI_BUTTON *btn, INT32 reason)
+void BtnIMPMainPagePortraitCallback(GUI_BUTTON *btn, UINT32 reason)
 {
 	// btn callback for Main Page Begin Profiling
 
@@ -315,7 +319,7 @@ void BtnIMPMainPagePortraitCallback(GUI_BUTTON *btn, INT32 reason)
 		return;
 	}
 
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		iCurrentImpPage = IMP_PORTRAIT;
 		fButtonPendingFlag = TRUE;
@@ -323,7 +327,7 @@ void BtnIMPMainPagePortraitCallback(GUI_BUTTON *btn, INT32 reason)
 }
 
 
-void BtnIMPMainPageVoiceCallback(GUI_BUTTON *btn, INT32 reason)
+void BtnIMPMainPageVoiceCallback(GUI_BUTTON *btn, UINT32 reason)
 {
 	// btn callback for Main Page Begin Profiling
 
@@ -334,7 +338,7 @@ void BtnIMPMainPageVoiceCallback(GUI_BUTTON *btn, INT32 reason)
 		return;
 	}
 
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		iCurrentImpPage = IMP_VOICE;
 		fButtonPendingFlag = TRUE;
@@ -430,7 +434,7 @@ static void BeginMessageBoxCallBack(MessageBoxReturnValue const bExitValue)
 }
 
 
-static void IMPMainPageNotSelectableBtnCallback(MOUSE_REGION* pRegion, INT32 iReason);
+static void IMPMainPageNotSelectableBtnCallback(MOUSE_REGION* pRegion, UINT32 iReason);
 
 
 static void CreateMouseRegionsForIMPMainPageBasedOnCharGenStatus(void)
@@ -459,9 +463,9 @@ static void DestoryMouseRegionsForIMPMainPageBasedOnCharGenStatus(void)
 }
 
 
-static void IMPMainPageNotSelectableBtnCallback(MOUSE_REGION* pRegion, INT32 iReason)
+static void IMPMainPageNotSelectableBtnCallback(MOUSE_REGION* pRegion, UINT32 iReason)
 {
-	if(iReason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if(iReason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		DoLapTopMessageBox( MSG_BOX_IMP_STYLE, pImpPopUpStrings[ 4 ], LAPTOP_SCREEN, MSG_BOX_FLAG_OK, BeginMessageBoxCallBack);
 	}
@@ -470,8 +474,7 @@ static void IMPMainPageNotSelectableBtnCallback(MOUSE_REGION* pRegion, INT32 iRe
 
 SGPVObject* LoadIMPPortait()
 {
-	SGPFILENAME filename;
-	snprintf(filename, lengthof(filename), FACESDIR "/%d.sti", 200 + iPortraitNumber);
+	ST::string filename = ST::format(FACESDIR "/{}.sti", 200 + iPortraitNumber);
 	return AddVideoObjectFromFile(filename);
 }
 

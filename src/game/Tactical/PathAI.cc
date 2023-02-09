@@ -9,7 +9,6 @@
 #include "Font_Control.h"
 #include "Isometric_Utils.h"
 #include "Overhead.h"
-#include "MemMan.h"
 #include "Overhead_Types.h"
 #include "Soldier_Control.h"
 #include "Animation_Cache.h"
@@ -23,7 +22,6 @@
 #include "WorldDef.h"
 #include "WorldMan.h"
 #include "PathAI.h"
-#include "PathAIDebug.h"
 #include "Points.h"
 #include "AI.h"
 #include "Random.h"
@@ -32,7 +30,7 @@
 #include "Keys.h"
 #include "GameSettings.h"
 #include "Buildings.h"
-#include "slog/slog.h"
+#include "Logger.h"
 
 // skiplist has extra level of pointers every 4 elements, so a level 5is optimized for
 // 4 to the power of 5 elements, or 2 to the power of 10, 1024
@@ -42,6 +40,8 @@
 //#define PATHAI_SKIPLIST_DEBUG
 
 #ifdef PATHAI_VISIBLE_DEBUG
+#include "JAScreens.h"
+#include "RenderWorld.h"
 #include "Video.h"
 
 extern INT16 gsCoverValue[WORLD_MAX];
@@ -49,7 +49,9 @@ BOOLEAN gfDisplayCoverValues = TRUE;
 static BOOLEAN gfDrawPathPoints = FALSE;
 #endif
 
-#include "slog/slog.h"
+#include "Logger.h"
+
+#include <algorithm>
 
 BOOLEAN gfPlotPathToExitGrid = FALSE;
 BOOLEAN gfRecalculatingExistingPathCost = FALSE;
@@ -58,14 +60,14 @@ UINT8 gubGlobalPathFlags = 0;
 UINT8 gubBuildingInfoToSet;
 
 // ABSOLUTE maximums
-#define ABSMAX_SKIPLIST_LEVEL			5
-#define ABSMAX_TRAIL_TREE			(16384)
-#define ABSMAX_PATHQ				(512)
+#define ABSMAX_SKIPLIST_LEVEL			6
+#define ABSMAX_TRAIL_TREE			(65536)
+#define ABSMAX_PATHQ				(1024)
 
 // STANDARD maximums... configurable!
-#define MAX_SKIPLIST_LEVEL			5
-#define MAX_TRAIL_TREE				(4096)
-#define MAX_PATHQ				(512)
+#define MAX_SKIPLIST_LEVEL			6
+#define MAX_TRAIL_TREE				(16384)
+#define MAX_PATHQ				(1024)
 
 INT32 iMaxSkipListLevel = MAX_SKIPLIST_LEVEL;
 INT32 iMaxTrailTree = MAX_TRAIL_TREE;
@@ -115,14 +117,17 @@ static INT32  queRequests;
 static INT32  iSkipListSize;
 static INT32  iClosedListSize;
 static INT8   bSkipListLevel;
-static INT32  iSkipListLevelLimit[8] = {0, 4, 16, 64, 256, 1024, 4192, 16384 };
+static INT32  iSkipListLevelLimit[9] = {0, 4, 16, 64, 256, 1024, 4096, 16384, 65536};
 
-#define ESTIMATE0				((dx>dy) ?       (dx)      :       (dy))
-#define ESTIMATE1				((dx<dy) ? ((dx*14)/10+dy) : ((dy*14)/10+dx) )
-#define ESTIMATE2				FLATCOST*( (dx<dy) ? ((dx*14)/10+dy) : ((dy*14)/10+dx) )
-#define ESTIMATEn				((int)(FLATCOST*sqrt(dx*dx+dy*dy)))
-#define ESTIMATEC				( ( (dx<dy) ? (TRAVELCOST_BUMPY * (dx * 14 + dy * 10) / 10) : ( TRAVELCOST_BUMPY * (dy * 14 + dx * 10) / 10 ) ) )
-//#define ESTIMATEC 				(((dx<dy) ? ( (TRAVELCOST_FLAT * dx * 14) / 10 + dy) : (TRAVELCOST_FLAT * dy * 14 ) / 10 + dx) ) )
+// The estimated cost must never exceed the real cost, otherwise you lose the
+// guarantee that you're getting the least-cost path from start to goal. (issue #375)
+#define LOWESTCOST				(EASYWATERCOST)
+
+#define ESTIMATE0				( (dx>dy) ?       (dx)      :       (dy) )
+#define ESTIMATE1				( (dx<dy) ? (dx+(dy*10)/14) : (dy+(dx*10)/14) )
+#define ESTIMATE2				LOWESTCOST*( (dx<dy) ? (dx+(dy*10)/14) : (dy+(dx*10)/14) )
+#define ESTIMATEn				((int)(LOWESTCOST * std::hypot(dx, dy)))
+#define ESTIMATEC				( (dx<dy) ? (LOWESTCOST * (dx * 14 + dy * 10) / 14) : (LOWESTCOST * (dy * 14 + dx * 10) / 14) )
 #define ESTIMATE				ESTIMATEC
 
 #define MAXCOST				(9990)
@@ -132,7 +137,7 @@ static INT32  iSkipListLevelLimit[8] = {0, 4, 16, 64, 256, 1024, 4192, 16384 };
 #define XLOC(a)				(a%MAPWIDTH)
 #define YLOC(a)				(a/MAPWIDTH)
 //#define LEGDISTANCE(a,b)			( abs( XLOC(b)-XLOC(a) ) + abs( YLOC(b)-YLOC(a) ) )
-#define LEGDISTANCE( x1, y1, x2, y2 )		( ABS( x2 - x1 ) + ABS( y2 - y1 ) )
+#define LEGDISTANCE(x1, y1, x2, y2)		(std::abs(x2 - x1) + std::abs(y2 - y1))
 //#define FARTHER(ndx,NDX)			( LEGDISTANCE( ndx->sLocation,sDestination) > LEGDISTANCE(NDX->sLocation,sDestination) )
 #define FARTHER(ndx,NDX)			( ndx->ubLegDistance > NDX->ubLegDistance )
 
@@ -183,7 +188,7 @@ static path_t *pClosedHead;
 	{\
 		pNew = pathQ + (queRequests);\
 		queRequests++;\
-		memset( pNew->pNext, 0, sizeof( path_t *) * ABSMAX_SKIPLIST_LEVEL );\
+		std::fill_n(pNew->pNext, ABSMAX_SKIPLIST_LEVEL, nullptr);\
 		pNew->bLevel = RandomSkipListLevel();\
 	}\
 	else if (iClosedListSize > 0)\
@@ -193,7 +198,7 @@ static path_t *pClosedHead;
 		pNew->pNext[0]->pNext[1] = pNew->pNext[1];\
 		iClosedListSize--;\
 		queRequests++;\
-		memset( pNew->pNext, 0, sizeof( path_t *) * ABSMAX_SKIPLIST_LEVEL );\
+		std::fill_n(pNew->pNext, ABSMAX_SKIPLIST_LEVEL, nullptr);\
 		pNew->bLevel = RandomSkipListLevel();\
 	}\
 	else\
@@ -225,7 +230,7 @@ static path_t *pClosedHead;
 		pClosedHead->pNext[0] = pNew->pNext[0];\
 		iClosedListSize--;\
 		queRequests++;\
-		memset( pNew->pNext, 0, sizeof( path_t *) * ABSMAX_SKIPLIST_LEVEL );\
+		std::fill_n(pNew->pNext, ABSMAX_SKIPLIST_LEVEL, nullptr);\
 		pNew->bLevel = RandomSkipListLevel();\
 	}\
 	else\
@@ -251,7 +256,7 @@ static path_t *pClosedHead;
 	{\
 		pNew = pathQ + (queRequests);\
 		queRequests++;\
-		memset( pNew->pNext, 0, sizeof( path_t *) * ABSMAX_SKIPLIST_LEVEL );\
+		std::fill_n(pNew->pNext, ABSMAX_SKIPLIST_LEVEL, nullptr);\
 		pNew->bLevel = RandomSkipListLevel();\
 	}\
 	else if (iClosedListSize > 0)\
@@ -261,7 +266,7 @@ static path_t *pClosedHead;
 		pNew->pNext[0]->pNext[1] = pNew->pNext[1];\
 		iClosedListSize--;\
 		queRequests++;\
-		memset( pNew->pNext, 0, sizeof( path_t *) * ABSMAX_SKIPLIST_LEVEL );\
+		std::fill_n(pNew->pNext, ABSMAX_SKIPLIST_LEVEL, nullptr);\
 		pNew->bLevel = RandomSkipListLevel();\
 	}\
 	else\
@@ -273,7 +278,7 @@ static path_t *pClosedHead;
 #define SkipListRemoveHead()\
 {\
 	pDel = pQueueHead->pNext[0];\
-	for (iLoop = 0; iLoop < __min( bSkipListLevel, pDel->bLevel ); iLoop++)\
+	for (iLoop = 0; iLoop < std::min(bSkipListLevel, pDel->bLevel); iLoop++)\
 	{\
 		pQueueHead->pNext[iLoop] = pDel->pNext[iLoop];\
 	}\
@@ -285,7 +290,7 @@ static path_t *pClosedHead;
 {\
 	pCurr = pQueueHead;\
 	uiCost = TOTALCOST( pNew );\
-	memset( pUpdate, 0, MAX_SKIPLIST_LEVEL * sizeof( path_t *) );\
+	std::fill_n(pUpdate, MAX_SKIPLIST_LEVEL, nullptr);\
 	for (iCurrLevel = bSkipListLevel - 1; iCurrLevel >= 0; iCurrLevel--)\
 	{\
 		pNext = pCurr->pNext[iCurrLevel];\
@@ -338,8 +343,8 @@ static path_t *pClosedHead;
 
 #define REMAININGCOST(ptr)\
 (\
-	(dy = ABS(iDestY-iLocY)),\
-	(dx = ABS(iDestX-iLocX)),\
+	(dy = std::abs(iDestY-iLocY)),\
+	(dx = std::abs(iDestX-iLocX)),\
 	ESTIMATE\
 )
 /*
@@ -347,8 +352,8 @@ static path_t *pClosedHead;
 (\
 	(locY = (ptr)->iLocation/MAPWIDTH),\
 	(locX = (ptr)->iLocation%MAPWIDTH),\
-	(dy = ABS(iDestY-locY)),\
-	(dx = ABS(iDestX-locX)),\
+	(dy = std::abs(iDestY-locY)),\
+	(dx = std::abs(iDestX-locX)),\
 	ESTIMATE\
 )*/
 
@@ -402,10 +407,10 @@ static INT8 RandomSkipListLevel(void)
 
 void InitPathAI(void)
 {
-	pathQ         = MALLOCN( path_t,        ABSMAX_PATHQ);
-	trailCost     = MALLOCN( TRAILCELLTYPE, MAPLENGTH);
-	trailCostUsed = MALLOCNZ(UINT8,         MAPLENGTH);
-	trailTree     = MALLOCN( trail_t,       ABSMAX_TRAIL_TREE);
+	pathQ         = new path_t[ABSMAX_PATHQ]{};
+	trailCost     = new TRAILCELLTYPE[MAPLENGTH]{};
+	trailCostUsed = new UINT8[MAPLENGTH]{};
+	trailTree     = new trail_t[ABSMAX_TRAIL_TREE]{};
 	pQueueHead = &(pathQ[QHEADNDX]);
 	pClosedHead = &(pathQ[QPOOLNDX]);
 }
@@ -413,26 +418,26 @@ void InitPathAI(void)
 
 void ShutDownPathAI( void )
 {
-	MemFree( pathQ );
-	MemFree( trailCostUsed );
-	MemFree( trailCost );
-	MemFree( trailTree );
+	delete[] pathQ;
+	delete[] trailCostUsed;
+	delete[] trailCost;
+	delete[] trailTree;
 }
 
 
 static void ReconfigurePathAI(INT32 iNewMaxSkipListLevel, INT32 iNewMaxTrailTree, INT32 iNewMaxPathQ)
 {
 	// make sure the specified parameters are reasonable
-	iNewMaxSkipListLevel = __max( iNewMaxSkipListLevel, ABSMAX_SKIPLIST_LEVEL );
-	iNewMaxTrailTree = __max( iNewMaxTrailTree, ABSMAX_TRAIL_TREE );
-	iNewMaxPathQ = __max( iNewMaxPathQ, ABSMAX_PATHQ );
+	iNewMaxSkipListLevel = std::clamp(iNewMaxSkipListLevel, 0, ABSMAX_SKIPLIST_LEVEL);
+	iNewMaxTrailTree = std::clamp(iNewMaxTrailTree, 0, ABSMAX_TRAIL_TREE);
+	iNewMaxPathQ = std::clamp(iNewMaxPathQ, 0, ABSMAX_PATHQ);
 	// assign them
 	iMaxSkipListLevel = iNewMaxSkipListLevel;
 	iMaxTrailTree = iNewMaxTrailTree;
 	iMaxPathQ = iNewMaxPathQ;
 	// relocate the head of the closed list to the end of the array portion being used
 	pClosedHead = &(pathQ[QPOOLNDX]);
-	memset( pClosedHead, 0, sizeof( path_t ) );
+	*pClosedHead = path_t{};
 }
 
 
@@ -443,7 +448,7 @@ static void RestorePathAIToDefaults(void)
 	iMaxPathQ = MAX_PATHQ;
 	// relocate the head of the closed list to the end of the array portion being used
 	pClosedHead = &(pathQ[QPOOLNDX]);
-	memset( pClosedHead, 0, sizeof( path_t ) );
+	*pClosedHead = path_t{};
 }
 
 ///////////////////////////////////////////////////////////////////////
@@ -468,7 +473,8 @@ INT32 FindBestPath(SOLDIERTYPE* s, INT16 sDestination, INT8 ubLevel, INT16 usMov
 	#ifdef VEHICLE
 		//BOOLEAN fTurnSlow = FALSE;
 		//BOOLEAN fReverse = FALSE; // stuff for vehicles turning
-		BOOLEAN fMultiTile, fVehicle;
+		BOOLEAN fMultiTile;
+		//BOOLEAN fVehicle;
 		//INT32 ubLastDir, iPrevToLastDir;
 		//INT8 bVehicleCheckDir;
 		//UINT16 adjLoc;
@@ -494,7 +500,7 @@ INT32 FindBestPath(SOLDIERTYPE* s, INT16 sDestination, INT8 ubLevel, INT16 usMov
 	BOOLEAN fVisitSpotsOnlyOnce;
 	INT32 iOriginationX, iOriginationY, iX, iY;
 
-	BOOLEAN fTurnBased;
+	//BOOLEAN fTurnBased;
 	BOOLEAN fPathingForPlayer;
 	INT32   iDoorGridNo=-1;
 	BOOLEAN fDoorIsObstacleIfClosed= 0; // if false, door is obstacle if it is open
@@ -511,27 +517,23 @@ INT32 FindBestPath(SOLDIERTYPE* s, INT16 sDestination, INT8 ubLevel, INT16 usMov
 	UINT16  usMovementModeToUseForAPs;
 	INT16   sClosePathLimit = -1; // XXX HACK000E
 
-#ifdef PATHAI_SKIPLIST_DEBUG
-	CHAR8 zTempString[1000], zTS[50];
-#endif
-
 #ifdef PATHAI_VISIBLE_DEBUG
 	UINT16 usCounter = 0;
 #endif
 
-	fVehicle = FALSE;
+	//fVehicle = FALSE;
 	iOriginationX = iOriginationY = 0;
 	iOrigination = (INT32) s->sGridNo;
 
-	if (iOrigination < 0 || iOrigination > WORLD_MAX)
+	if (iOrigination < 0 || iOrigination >= WORLD_MAX)
 	{
-		SLOGE(DEBUG_TAG_AI, "Trying to calculate path from off-world gridno %d to %d",
+		SLOGE("Trying to calculate path from off-world gridno {} to {}",
 			iOrigination, sDestination );
 		return( 0 );
 	}
 	else if (!GridNoOnVisibleWorldTile( (INT16) iOrigination ) )
 	{
-		SLOGE(DEBUG_TAG_AI, "Trying to calculate path from non-visible gridno %d to %d",
+		SLOGE("Trying to calculate path from non-visible gridno {} to {}",
 			iOrigination, sDestination );
 		return( 0 );
 	}
@@ -546,7 +548,7 @@ INT32 FindBestPath(SOLDIERTYPE* s, INT16 sDestination, INT8 ubLevel, INT16 usMov
 		fFlags |= gubGlobalPathFlags;
 	}
 
-	fTurnBased = (gTacticalStatus.uiFlags & INCOMBAT);
+	//fTurnBased = (gTacticalStatus.uiFlags & INCOMBAT);
 
 	fPathingForPlayer = ( (s->bTeam == OUR_TEAM) && (!gTacticalStatus.fAutoBandageMode) && !(s->uiStatusFlags & SOLDIER_PCUNDERAICONTROL) );
 	fNonFenceJumper = !( IS_MERC_BODY_TYPE( s ) );
@@ -562,7 +564,7 @@ INT32 FindBestPath(SOLDIERTYPE* s, INT16 sDestination, INT8 ubLevel, INT16 usMov
 	fCloseGoodEnough = ( (fFlags & PATH_CLOSE_GOOD_ENOUGH) != 0);
 	if ( fCloseGoodEnough )
 	{
-		sClosePathLimit = __min( PythSpacesAway( (INT16)s->sGridNo, sDestination ) - 1,  PATH_CLOSE_RADIUS );
+		sClosePathLimit = std::min(PythSpacesAway( (INT16)s->sGridNo, sDestination ) - 1,  PATH_CLOSE_RADIUS);
 		if ( sClosePathLimit <= 0 )
 		{
 			return( 0 );
@@ -595,7 +597,7 @@ INT32 FindBestPath(SOLDIERTYPE* s, INT16 sDestination, INT8 ubLevel, INT16 usMov
 	if (gubGlobalPathCount == 255)
 	{
 		// reset arrays!
-		memset( trailCostUsed, 0, MAPLENGTH );
+		std::fill_n(trailCostUsed, MAPLENGTH, 0);
 		gubGlobalPathCount = 1;
 	}
 	else
@@ -660,7 +662,7 @@ INT32 FindBestPath(SOLDIERTYPE* s, INT16 sDestination, INT8 ubLevel, INT16 usMov
 
 		if ( pStructureFileRef )
 		{
-			fVehicle = ( (s->uiStatusFlags & SOLDIER_VEHICLE) != 0 );
+			//fVehicle = ( (s->uiStatusFlags & SOLDIER_VEHICLE) != 0 );
 
 			fContinuousTurnNeeded = ( ( s->uiStatusFlags & (SOLDIER_MONSTER | SOLDIER_ANIMAL | SOLDIER_VEHICLE) ) != 0 );
 
@@ -678,13 +680,9 @@ INT32 FindBestPath(SOLDIERTYPE* s, INT16 sDestination, INT8 ubLevel, INT16 usMov
 			{
 				usOKToAddStructID = IGNORE_PEOPLE_STRUCTURE_ID;
 			}
-			else if ( s->pLevelNode != NULL && s->pLevelNode->pStructureData != NULL )
-			{
-				usOKToAddStructID = s->pLevelNode->pStructureData->usStructureID;
-			}
 			else
 			{
-				usOKToAddStructID = INVALID_STRUCTURE_ID;
+				usOKToAddStructID = GetStructureID(s);
 			}
 
 		}
@@ -714,13 +712,13 @@ INT32 FindBestPath(SOLDIERTYPE* s, INT16 sDestination, INT8 ubLevel, INT16 usMov
 	queRequests = 2;
 
 	//initialize the path data structures
-	memset( pathQ, 0, iMaxPathQ * sizeof( path_t ) );
-	memset( trailTree, 0, iMaxTrailTree * sizeof( trail_t ) );
+	std::fill_n(pathQ, iMaxPathQ, path_t{});
+	std::fill_n(trailTree, iMaxTrailTree, trail_t{});
 
 #if defined( PATHAI_VISIBLE_DEBUG )
 	if (gfDisplayCoverValues && gfDrawPathPoints)
 	{
-		memset( gsCoverValue, 0x7F, sizeof( INT16 ) * WORLD_MAX );
+		std::fill_n(gsCoverValue, WORLD_MAX, 0x7F7F);
 	}
 #endif
 
@@ -972,6 +970,11 @@ INT32 FindBestPath(SOLDIERTYPE* s, INT16 sDestination, INT8 ubLevel, INT16 usMov
 
 			newLoc = curLoc + DirIncrementer[ubCnt];
 
+			if ( newLoc < 0 || newLoc >= GRIDSIZE )
+			{
+				SLOGW("Path Finding algorithm tried to go out of bounds at {}, in an attempt to find path from {} to {}", newLoc, iOrigination, iDestination);
+				goto NEXTDIR;
+			}
 
 			if ( fVisitSpotsOnlyOnce && trailCostUsed[newLoc] == gubGlobalPathCount )
 			{
@@ -1249,12 +1252,6 @@ INT32 FindBestPath(SOLDIERTYPE* s, INT16 sDestination, INT8 ubLevel, INT16 usMov
 			else
 			{
 				nextCost = TRAVELCOST_FLAT;
-			}
-
-			if ( newLoc > GRIDSIZE )
-			{
-				// WHAT THE??? hack.
-				goto NEXTDIR;
 			}
 
 			// if contemplated tile is NOT final dest and someone there, disqualify route
@@ -1561,7 +1558,7 @@ INT32 FindBestPath(SOLDIERTYPE* s, INT16 sDestination, INT8 ubLevel, INT16 usMov
 				{
 					pNewPtr = pathQ + (queRequests);
 					queRequests++;
-					memset( pNewPtr->pNext, 0, sizeof( path_t *) * ABSMAX_SKIPLIST_LEVEL );
+					std::fill_n(pNewPtr->pNext, ABSMAX_SKIPLIST_LEVEL, nullptr);
 					pNewPtr->bLevel = RandomSkipListLevel();
 				}
 				else if (iClosedListSize > 0)
@@ -1570,7 +1567,7 @@ INT32 FindBestPath(SOLDIERTYPE* s, INT16 sDestination, INT8 ubLevel, INT16 usMov
 					pClosedHead->pNext[0] = pNewPtr->pNext[0];
 					iClosedListSize--;
 					queRequests++;
-					memset( pNewPtr->pNext, 0, sizeof( path_t *) * ABSMAX_SKIPLIST_LEVEL );
+					std::fill_n(pNewPtr->pNext, ABSMAX_SKIPLIST_LEVEL, nullptr);
 					pNewPtr->bLevel = RandomSkipListLevel();
 				}
 				else
@@ -1655,7 +1652,7 @@ INT32 FindBestPath(SOLDIERTYPE* s, INT16 sDestination, INT8 ubLevel, INT16 usMov
 				{
 					pCurr = pQueueHead;
 					uiCost = TOTALCOST( pNewPtr );
-					memset( pUpdate, 0, MAX_SKIPLIST_LEVEL * sizeof( path_t *) );
+					std::fill_n(pUpdate, MAX_SKIPLIST_LEVEL, nullptr);
 					for (iCurrLevel = bSkipListLevel - 1; iCurrLevel >= 0; iCurrLevel--)
 					{
 						pNext = pCurr->pNext[iCurrLevel];
@@ -1705,20 +1702,19 @@ INT32 FindBestPath(SOLDIERTYPE* s, INT16 sDestination, INT8 ubLevel, INT16 usMov
 #ifdef PATHAI_SKIPLIST_DEBUG
 					// print out contents of queue
 					{
-						INT32 iLoop;
 						INT8  bTemp;
-
-						zTempString[0] = '\0';
+						ST::string zTempString;
+						ST::string zTS;
 						pCurr = pQueueHead;
-						iLoop = 0;
+						INT32 iLoop = 0;
 						while( pCurr )
 						{
-							sprintf( zTS, "\t%ld", pCurr->sPathNdx );
+							zTS = ST::format("\t{d}", pCurr->sPathNdx);
 							if (pCurr == pNewPtr)
 							{
-								strcat( zTS, "*" );
+								zTS += "*";
 							}
-							strcat( zTempString, zTS );
+							zTempString += zTS;
 							pCurr = pCurr->pNext[0];
 							iLoop++;
 							if (iLoop > 50)
@@ -1726,16 +1722,16 @@ INT32 FindBestPath(SOLDIERTYPE* s, INT16 sDestination, INT8 ubLevel, INT16 usMov
 								break;
 							}
 						}
-						SLOGD(DEBUG_TAG_PATHAI, zTempString );
+						SLOGD(zTempString.c_str());
 
 
-						zTempString[0] = '\0';
+						zTempString = "";
 						pCurr = pQueueHead;
 						iLoop = 0;
 						while( pCurr )
 						{
-							sprintf( zTS, "\t%d", pCurr->bLevel );
-							strcat( zTempString, zTS );
+							zTS = ST::format("\t{d}", pCurr->bLevel);
+							zTempString += zTS;
 							pCurr = pCurr->pNext[0];
 							iLoop++;
 							if (iLoop > 50)
@@ -1743,9 +1739,9 @@ INT32 FindBestPath(SOLDIERTYPE* s, INT16 sDestination, INT8 ubLevel, INT16 usMov
 								break;
 							}
 						}
-						SLOGD(DEBUG_TAG_PATHAI, zTempString );
+						SLOGD(zTempString.c_str());
 
-						zTempString[0] = '\0';
+						zTempString = "";
 						bTemp = pQueueHead->bLevel;
 						pCurr = pQueueHead;
 						iLoop = 0;
@@ -1756,8 +1752,8 @@ INT32 FindBestPath(SOLDIERTYPE* s, INT16 sDestination, INT8 ubLevel, INT16 usMov
 							{
 								bTemp--;
 							}
-							sprintf( zTS, "\t%d", bTemp );
-							strcat( zTempString, zTS );
+							zTS = ST::format("\t{d}", bTemp);
+							zTempString += zTS;
 							pCurr = pCurr->pNext[0];
 							iLoop++;
 							if (iLoop > 50)
@@ -1765,8 +1761,8 @@ INT32 FindBestPath(SOLDIERTYPE* s, INT16 sDestination, INT8 ubLevel, INT16 usMov
 								break;
 							}
 						}
-						SLOGD(DEBUG_TAG_PATHAI, zTempString );
-						SLOGD(DEBUG_TAG_PATHAI, "------" );
+						SLOGD(zTempString.c_str());
+						SLOGD("------" );
 					}
 #endif
 
@@ -1848,14 +1844,14 @@ ENDOFLOOP:
 		{
 
 			z=_z;
-
-			for (ubCnt=0; z != 0; ubCnt++)
+			UINT16 iCnt;
+			for (iCnt = 0; z != 0 && iCnt < lengthof(guiPathingData); iCnt++)
 			{
-				guiPathingData[ ubCnt ] = trailTree[z].stepDir;
+				guiPathingData[ iCnt ] = trailTree[z].stepDir;
 
 				z = trailTree[z].nextLink;
 			}
-
+			ubCnt = iCnt;
 			giPathDataSize = ubCnt;
 
 		}
@@ -1912,7 +1908,7 @@ void GlobalReachableTest( INT16 sStartGridNo )
 {
 	SOLDIERTYPE s;
 
-	memset( &s, 0, sizeof( SOLDIERTYPE ) );
+	s = SOLDIERTYPE{};
 	s.sGridNo = sStartGridNo;
 	s.bLevel = 0;
 	s.bTeam = 1;
@@ -1934,7 +1930,7 @@ void LocalReachableTest( INT16 sStartGridNo, INT8 bRadius )
 	INT32 iCurrentGridNo = 0;
 	INT32 iX, iY;
 
-	memset( &s, 0, sizeof( SOLDIERTYPE ) );
+	s = SOLDIERTYPE{};
 	s.sGridNo = sStartGridNo;
 
 	//if we are moving on the gorund level
@@ -1955,7 +1951,7 @@ void LocalReachableTest( INT16 sStartGridNo, INT8 bRadius )
 		for ( iX = -bRadius; iX <= bRadius; iX++ )
 		{
 			iCurrentGridNo = sStartGridNo + iX + iY * MAXCOL;
-			if ( iCurrentGridNo >= 0 && iCurrentGridNo <= WORLD_MAX )
+			if (iCurrentGridNo >= 0 && iCurrentGridNo < WORLD_MAX)
 			{
 				gpWorldLevelData[ iCurrentGridNo ].uiFlags &= ~( MAPELEMENT_REACHABLE );
 			}
@@ -1974,7 +1970,7 @@ void GlobalItemsReachableTest( INT16 sStartGridNo1, INT16 sStartGridNo2 )
 {
 	SOLDIERTYPE s;
 
-	memset( &s, 0, sizeof( SOLDIERTYPE ) );
+	s = SOLDIERTYPE{};
 	s.sGridNo = sStartGridNo1;
 	s.bLevel = 0;
 	s.bTeam = 1;
@@ -1999,7 +1995,7 @@ void RoofReachableTest( INT16 sStartGridNo, UINT8 ubBuildingID )
 {
 	SOLDIERTYPE s;
 
-	memset( &s, 0, sizeof( SOLDIERTYPE ) );
+	s = SOLDIERTYPE{};
 	s.sGridNo = sStartGridNo;
 	s.bLevel = 1;
 	s.bTeam = 1;
@@ -2072,7 +2068,7 @@ void ErasePath()
 	//	Grid[cnt].fstep = 0;
 
 	giPlotCnt = 0;
-	memset(guiPlottedPath,0,256*sizeof(UINT32));
+	std::fill_n(guiPlottedPath, 256, 0);
 }
 
 
@@ -2304,9 +2300,8 @@ INT16 PlotPath(SOLDIERTYPE* const pSold, const INT16 sDestGridno, const INT8 bCo
 
 			//if (gTacticalStatus.uiFlags & INCOMBAT) // OR USER OPTION "show paths" ON... ***
 			{
-				if (bPlot && iCnt < iLastGrid - 1)
+				if (bPlot && iCnt < iLastGrid - 1 && giPlotCnt < static_cast<INT32>(lengthof(guiPlottedPath)))
 				{
-					Assert(giPlotCnt < lengthof(guiPlottedPath)); // XXX TODO001C
 					guiPlottedPath[giPlotCnt++] = sTempGrid;
 
 					// we need a footstep graphic ENTERING the next tile

@@ -6,6 +6,7 @@
 #include "Structure_Internals.h"
 #include "Overhead_Types.h"
 #include "Sound_Control.h"
+#include "string_theory/string"
 
 #define NOTHING_BLOCKING			0
 #define BLOCKING_REDUCE_RANGE			1
@@ -18,11 +19,17 @@
 #define BLOCKING_TOPLEFT_OPEN_WINDOW		90
 #define BLOCKING_TOPRIGHT_OPEN_WINDOW		100
 
+enum StructureDamageResult
+{
+    STRUCTURE_NOT_DAMAGED, // structure not damaged
+    STRUCTURE_DESTROYED,   // structure to be deleted
+    STRUCTURE_DAMAGED      // structure to be replaced with damaged graphics
+};
 
 // ATE: Increased to allow corpses to not collide with soldiers
-// 100 == MAX_CORPSES
-#define INVALID_STRUCTURE_ID			( TOTAL_SOLDIERS + 100 )
-#define IGNORE_PEOPLE_STRUCTURE_ID		(TOTAL_SOLDIERS+101)
+// 200 == MAX_ROTTING_CORPSES, see Rotting_Corpses.h
+constexpr UINT16 INVALID_STRUCTURE_ID = TOTAL_SOLDIERS + 200;
+constexpr UINT16 IGNORE_PEOPLE_STRUCTURE_ID = INVALID_STRUCTURE_ID + 1;
 
 enum StructureDamageReason
 {
@@ -32,7 +39,7 @@ enum StructureDamageReason
 
 
 // functions at the structure database level
-STRUCTURE_FILE_REF* LoadStructureFile(const char* szFileName);
+STRUCTURE_FILE_REF* LoadStructureFile(ST::string const& fileName);
 void FreeAllStructureFiles( void );
 void FreeStructureFile(STRUCTURE_FILE_REF*);
 
@@ -88,7 +95,7 @@ void AddZStripInfoToVObject(HVOBJECT, STRUCTURE_FILE_REF const*, BOOLEAN fFromAn
 // FUNCTIONS FOR DETERMINING STUFF THAT BLOCKS VIEW FOR TILE_bASED LOS
 INT8 GetBlockingStructureInfo( INT16 sGridNo, INT8 bDir, INT8 bNextDir, INT8 bLevel, INT8 *pStructHeight, STRUCTURE ** ppTallestStructure, BOOLEAN fWallsBlock );
 
-BOOLEAN DamageStructure(STRUCTURE*, UINT8 damage, StructureDamageReason, GridNo, INT16 x, INT16 y, SOLDIERTYPE* owner);
+StructureDamageResult DamageStructure(STRUCTURE*, UINT8 damage, StructureDamageReason, GridNo, INT16 x, INT16 y, SOLDIERTYPE* owner);
 
 // Material armour type enumeration
 enum

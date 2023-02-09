@@ -17,12 +17,17 @@
 #include "LaptopSave.h"
 #include "Text.h"
 #include "Speck_Quotes.h"
-#include "Multi_Language_Graphic_Utils.h"
+#include "GameRes.h"
 #include "Button_System.h"
 #include "Video.h"
 #include "VSurface.h"
 #include "ScreenIDs.h"
 #include "Font_Control.h"
+#include "GameInstance.h"
+#include "ContentManager.h"
+
+#include <string_theory/format>
+#include <string_theory/string>
 
 
 #define MERC_ACCOUNT_TEXT_FONT		FONT14ARIAL
@@ -79,7 +84,7 @@ GUIButtonRef guiMercAuthorizeBoxButton;
 GUIButtonRef guiMercBackBoxButton;
 
 
-static GUIButtonRef MakeButton(const wchar_t* text, INT16 x, GUI_CALLBACK click)
+static GUIButtonRef MakeButton(const ST::string& text, INT16 x, GUI_CALLBACK click)
 {
 	const INT16 shadow_col = DEFAULT_SHADOW;
 	GUIButtonRef const btn = CreateIconAndTextButton(guiMercAuthorizeButtonImage, text, FONT12ARIAL, MERC_BUTTON_UP_COLOR, shadow_col, MERC_BUTTON_DOWN_COLOR, shadow_col, x, MERC_AC_BUTTON_Y, MSYS_PRIORITY_HIGH, click);
@@ -88,8 +93,8 @@ static GUIButtonRef MakeButton(const wchar_t* text, INT16 x, GUI_CALLBACK click)
 }
 
 
-static void BtnMercAuthorizeButtonCallback(GUI_BUTTON* btn, INT32 reason);
-static void BtnMercBackButtonCallback(GUI_BUTTON* btn, INT32 reason);
+static void BtnMercAuthorizeButtonCallback(GUI_BUTTON* btn, UINT32 reason);
+static void BtnMercBackButtonCallback(GUI_BUTTON* btn, UINT32 reason);
 
 
 void EnterMercsAccount()
@@ -97,8 +102,7 @@ void EnterMercsAccount()
 	InitMercBackGround();
 
 	// load the Arrow graphic and add it
-	const char* const ImageFile = GetMLGFilename(MLG_ORDERGRID);
-	guiMercOrderGrid = AddVideoObjectFromFile(ImageFile);
+	guiMercOrderGrid = AddVideoObjectFromFile(MLG_ORDERGRID);
 
 	// load the Arrow graphic and add it
 	guiAccountNumberGrid = AddVideoObjectFromFile(LAPTOPDIR "/accountnumber.sti");
@@ -134,7 +138,7 @@ void HandleMercsAccount()
 	{
 		gfMercPlayerDoesntHaveEnoughMoney_DisplayWarning = FALSE;
 
-		DoLapTopMessageBox( MSG_BOX_BLUE_ON_GREY, L"Transfer failed.  No funds available.", LAPTOP_SCREEN, MSG_BOX_FLAG_OK, NULL );
+		DoLapTopMessageBox( MSG_BOX_BLUE_ON_GREY, "Transfer failed.  No funds available.", LAPTOP_SCREEN, MSG_BOX_FLAG_OK, NULL );
 	}
 }
 
@@ -144,7 +148,7 @@ static void DisplayHiredMercs(void);
 
 void RenderMercsAccount()
 {
-	wchar_t		sText[100];
+	ST::string sText;
 
 	DrawMecBackGround();
 
@@ -152,7 +156,7 @@ void RenderMercsAccount()
 	BltVideoObject(FRAME_BUFFER, guiAccountNumberGrid, 0, MERC_AC_ACCOUNT_NUMBER_X, MERC_AC_ACCOUNT_NUMBER_Y);
 
 	//Display Players account number
-	swprintf(sText, lengthof(sText), L"%ls %05d", MercAccountText[MERC_ACCOUNT_ACCOUNT], LaptopSaveInfo.guiPlayersMercAccountNumber);
+	sText = ST::format("{} {05d}", MercAccountText[MERC_ACCOUNT_ACCOUNT], LaptopSaveInfo.guiPlayersMercAccountNumber);
 	DrawTextToScreen(sText, MERC_AC_ACCOUNT_NUMBER_TEXT_X, MERC_AC_ACCOUNT_NUMBER_TEXT_Y, 0, MERC_ACCOUNT_TEXT_FONT, MERC_ACCOUNT_TEXT_COLOR, FONT_MCOLOR_BLACK, LEFT_JUSTIFIED);
 
 	//Display the order grid titles
@@ -181,26 +185,26 @@ void RenderMercsAccount()
 static void MercAuthorizePaymentMessageBoxCallBack(MessageBoxReturnValue);
 
 
-static void BtnMercAuthorizeButtonCallback(GUI_BUTTON *btn, INT32 reason)
+static void BtnMercAuthorizeButtonCallback(GUI_BUTTON *btn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
-		wchar_t wzAuthorizeString[512];
-		wchar_t wzDollarAmount[128];
+		ST::string wzAuthorizeString;
+		ST::string wzDollarAmount;
 
-		SPrintMoney(wzDollarAmount, giMercTotalContractCharge);
+		wzDollarAmount = SPrintMoney(giMercTotalContractCharge);
 
 		//create the string to show to the user
-		swprintf(wzAuthorizeString, lengthof(wzAuthorizeString), MercAccountText[MERC_ACCOUNT_AUTHORIZE_CONFIRMATION], wzDollarAmount);
+		wzAuthorizeString = st_format_printf(MercAccountText[MERC_ACCOUNT_AUTHORIZE_CONFIRMATION], wzDollarAmount);
 
 		DoLapTopMessageBox(MSG_BOX_BLUE_ON_GREY, wzAuthorizeString, LAPTOP_SCREEN, MSG_BOX_FLAG_YESNO, MercAuthorizePaymentMessageBoxCallBack);
 	}
 }
 
 
-static void BtnMercBackButtonCallback(GUI_BUTTON *btn, INT32 reason)
+static void BtnMercBackButtonCallback(GUI_BUTTON *btn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		guiCurrentLaptopMode = LAPTOP_MODE_MERC;
 		gubArrivedFromMercSubSite = MERC_CAME_FROM_ACCOUNTS_PAGE;
@@ -212,20 +216,15 @@ static void DisplayHiredMercs(void)
 {
 	UINT16	usPosY;
 	UINT32	uiContractCharge;
-	wchar_t	sTemp[20];
-	UINT8	i;
+	ST::string sTemp;
 	UINT8	ubFontColor;
 
 	giMercTotalContractCharge = 0;
 
 	usPosY = MERC_AC_FIRST_ROW_Y + 3;
-	for(i=0; i<=10; i++)
+	for (const MERCListingModel* m : GCM->getMERCListings())
 	{
-		//if it larry Roach burn advance.  ( cause larry is in twice, a sober larry and a stoned larry )
-		if( i == MERC_LARRY_ROACHBURN )
-			continue;
-
-		ProfileID         const  pid = GetMercIDFromMERCArray(i);
+		ProfileID         const  pid = GetProfileIDFromMERCListing(m);
 		MERCPROFILESTRUCT const& p   = GetProfile(pid);
 
 		//is the merc on the team, or is owed money
@@ -242,16 +241,16 @@ static void DisplayHiredMercs(void)
 
 			//Display The # of days the merc has worked since last paid
 
-			swprintf(sTemp, lengthof(sTemp), L"%d", p.iMercMercContractLength );
+			sTemp =  ST::format("{}", p.iMercMercContractLength);
 			DrawTextToScreen(sTemp, MERC_AC_SECOND_COLUMN_X, usPosY, MERC_AC_SECOND_COLUMN_WIDTH, MERC_ACCOUNT_DYNAMIC_TEXT_FONT, ubFontColor, FONT_MCOLOR_BLACK, CENTER_JUSTIFIED);
 
 			//Display the mercs rate
-			swprintf(sTemp, lengthof(sTemp), L"$%6d", p.sSalary);
+			sTemp = ST::format("${6d}", p.sSalary);
 			DrawTextToScreen(sTemp, MERC_AC_THIRD_COLUMN_X, usPosY, MERC_AC_THIRD_COLUMN_WIDTH, MERC_ACCOUNT_DYNAMIC_TEXT_FONT, ubFontColor, FONT_MCOLOR_BLACK, CENTER_JUSTIFIED);
 
 			//Display the total charge
 			uiContractCharge = p.sSalary * p.iMercMercContractLength;
-			swprintf(sTemp, lengthof(sTemp), L"$%6d", uiContractCharge );
+			sTemp = ST::format("${6d}", uiContractCharge);
 			DrawTextToScreen(sTemp, MERC_AC_FOURTH_COLUMN_X, usPosY, MERC_AC_FOURTH_COLUMN_WIDTH, MERC_ACCOUNT_DYNAMIC_TEXT_FONT, ubFontColor, FONT_MCOLOR_BLACK, CENTER_JUSTIFIED);
 
 			giMercTotalContractCharge += uiContractCharge;
@@ -259,7 +258,7 @@ static void DisplayHiredMercs(void)
 		}
 	}
 
-	swprintf(sTemp, lengthof(sTemp), L"$%6d", giMercTotalContractCharge );
+	sTemp = ST::format("${6d}", giMercTotalContractCharge);
 	DrawTextToScreen(sTemp, MERC_AC_FOURTH_COLUMN_X, MERC_AC_TOTAL_COST_Y, MERC_AC_FOURTH_COLUMN_WIDTH, MERC_ACCOUNT_DYNAMIC_TEXT_FONT, MERC_ACCOUNT_DYNAMIC_TEXT_COLOR, FONT_MCOLOR_BLACK, CENTER_JUSTIFIED);
 }
 
@@ -267,16 +266,14 @@ static void DisplayHiredMercs(void)
 static void SettleMercAccounts(void)
 {
 	//SOLDIERTYPE *pSoldier;
-	INT16	i;
-	UINT8 ubMercID;
 	INT32	iPartialPayment=0;
 	INT32	iContractCharge=0;
 
 
 	//loop through all the MERC mercs the player has on the team
-	for(i=0; i<NUMBER_OF_MERCS; i++)
+	for (const MERCListingModel* m : GCM->getMERCListings())
 	{
-		ubMercID = GetMercIDFromMERCArray( (UINT8) i );
+		ProfileID ubMercID = GetProfileIDFromMERCListing(m);
 
 		//if the merc is on the team, or does the player owe money for a fired merc
 		if( IsMercOnTeam( ubMercID ) || ( gMercProfiles[ ubMercID ].iMercMercContractLength != 0 ) )
@@ -306,8 +303,8 @@ static void SettleMercAccounts(void)
 	}
 
 	// add the transaction to the finance page
-	AddTransactionToPlayersBook( PAY_SPECK_FOR_MERC, GetMercIDFromMERCArray( gubCurMercIndex ), GetWorldTotalMin(), -iPartialPayment );
-	AddHistoryToPlayersLog( HISTORY_SETTLED_ACCOUNTS_AT_MERC, GetMercIDFromMERCArray( gubCurMercIndex ), GetWorldTotalMin(), -1, -1 );
+	AddTransactionToPlayersBook( PAY_SPECK_FOR_MERC, GetProfileIDFromMERCListingIndex( gubCurMercIndex ), GetWorldTotalMin(), -iPartialPayment );
+	AddHistoryToPlayersLog(HISTORY_SETTLED_ACCOUNTS_AT_MERC, GetProfileIDFromMERCListingIndex( gubCurMercIndex ), GetWorldTotalMin(), SGPSector(-1, -1));
 
 	//Increment the amount of money paid to speck
 	LaptopSaveInfo.uiTotalMoneyPaidToSpeck += iPartialPayment;
@@ -373,7 +370,7 @@ static void SettleMercAccounts(void)
 		{
 			// add the transaction to the finance page
 			AddTransactionToPlayersBook( PAY_SPECK_FOR_MERC, GetMercIDFromMERCArray( gubCurMercIndex ), GetWorldTotalMin(), -iPartialPayment );
-			AddHistoryToPlayersLog( HISTORY_SETTLED_ACCOUNTS_AT_MERC, GetMercIDFromMERCArray( gubCurMercIndex ), GetWorldTotalMin(), -1, -1 );
+			AddHistoryToPlayersLog(HISTORY_SETTLED_ACCOUNTS_AT_MERC, GetMercIDFromMERCArray( gubCurMercIndex ), GetWorldTotalMin(), SGPSector(-1, -1));
 		}
 
 
@@ -389,7 +386,7 @@ static void SettleMercAccounts(void)
 
 	// add the transaction to the finance page
 	AddTransactionToPlayersBook( PAY_SPECK_FOR_MERC, GetMercIDFromMERCArray( gubCurMercIndex ), GetWorldTotalMin(), -giMercTotalContractCharge);
-	AddHistoryToPlayersLog( HISTORY_SETTLED_ACCOUNTS_AT_MERC, GetMercIDFromMERCArray( gubCurMercIndex ), GetWorldTotalMin(), -1, -1 );
+	AddHistoryToPlayersLog(HISTORY_SETTLED_ACCOUNTS_AT_MERC, GetMercIDFromMERCArray( gubCurMercIndex ), GetWorldTotalMin(), SGPSector(-1, -1));
 
 	//reset all the mercs time
 	for(i=0; i<NUMBER_OF_MERCS; i++)
@@ -429,23 +426,12 @@ static void MercAuthorizePaymentMessageBoxCallBack(MessageBoxReturnValue const b
 
 UINT32	CalculateHowMuchPlayerOwesSpeck()
 {
-	UINT8  i=0;
 	UINT32 uiContractCharge=0;
-	UINT16 usMercID;
-
-
-	for(i=0; i<10; i++)
+	for (auto m : GCM->getMERCListings())
 	{
-		//if it larry Roach burn advance.  ( cause larry is in twice, a sober larry and a stoned larry )
-		if( i == MERC_LARRY_ROACHBURN )
-			continue;
-
-		usMercID = GetMercIDFromMERCArray( i );
-		//if( IsMercOnTeam( (UINT8)usMercID ) )
-		{
-			//Calc salary for the # of days the merc has worked since last paid
-			uiContractCharge += gMercProfiles[ usMercID ].sSalary * gMercProfiles[ usMercID ].iMercMercContractLength;
-		}
+		ProfileID usMercID = GetProfileIDFromMERCListing(m);
+		//Calc salary for the # of days the merc has worked since last paid
+		uiContractCharge += gMercProfiles[ usMercID ].sSalary * gMercProfiles[ usMercID ].iMercMercContractLength;
 	}
 
 	return( uiContractCharge );

@@ -1,5 +1,3 @@
-#include <stdexcept>
-
 #include "Debug_Pages.h"
 #include "Animation_Data.h"
 #include "Environment.h"
@@ -22,28 +20,17 @@
 #include "Random.h"
 #include "Render_Fun.h"
 #include "GameSettings.h"
-#include "MemMan.h"
 
-
-static UINT32 guiLNCount[9];
-static const wchar_t gzLevelString[][15] =
-{
-	L"",
-	L"Land",
-	L"Object",
-	L"Struct",
-	L"Shadow",
-	L"Merc",
-	L"Roof",
-	L"Onroof",
-	L"Topmost",
-};
+#include <string_theory/format>
+#include <string_theory/string>
+#include <numeric>
+#include <stdexcept>
 
 
 // LEVEL NODE MANIPLULATION FUNCTIONS
 static LEVELNODE* CreateLevelNode(void)
 {
-	LEVELNODE* const Node = MALLOCZ(LEVELNODE);
+	LEVELNODE* const Node = new LEVELNODE{};
 	Node->ubShadeLevel        = LightGetAmbient();
 	Node->ubNaturalShadeLevel = LightGetAmbient();
 	Node->pSoldier            = NULL;
@@ -54,13 +41,8 @@ static LEVELNODE* CreateLevelNode(void)
 }
 
 
-void CountLevelNodes(void)
+static void CountLevelNodes(int (&guiLNCount)[9])
 {
-	for (UINT32 uiLoop2 = 0; uiLoop2 < 9; uiLoop2++)
-	{
-		guiLNCount[uiLoop2] = 0;
-	}
-
 	FOR_EACH_WORLD_TILE(pME)
 	{
 		// start at 1 to skip land head ptr; 0 stores total
@@ -69,26 +51,40 @@ void CountLevelNodes(void)
 			for (const LEVELNODE* pLN = pME->pLevelNodes[uiLoop2]; pLN != NULL; pLN = pLN->pNext)
 			{
 				guiLNCount[uiLoop2]++;
-				guiLNCount[0]++;
 			}
 		}
 	}
+	guiLNCount[0] = std::accumulate(guiLNCount + 1, guiLNCount + 9, 0);
 }
 
 
 void DebugLevelNodePage(void)
 {
-	MPageHeader(L"DEBUG LEVELNODES PAGE 1 OF 1");
+	int guiLNCount[9] {};
+	const ST::string levelString[]
+	{
+		ST_LITERAL("Land"),
+		ST_LITERAL("Object"),
+		ST_LITERAL("Struct"),
+		ST_LITERAL("Shadow"),
+		ST_LITERAL("Merc"),
+		ST_LITERAL("Roof"),
+		ST_LITERAL("Onroof"),
+		ST_LITERAL("Topmost")
+	};
+
+	MPageHeader("DEBUG LEVELNODES PAGE 1 OF 1");
 	INT32 y = DEBUG_PAGE_START_Y;
 	INT32 h = DEBUG_PAGE_LINE_HEIGHT;
+	CountLevelNodes(guiLNCount);
 
 	for (UINT32 uiLoop = 1; uiLoop < 9; uiLoop++)
 	{
-		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, gzLevelString[uiLoop], guiLNCount[uiLoop]);
+		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, levelString[uiLoop - 1], guiLNCount[uiLoop]);
 	}
-	mprintf(DEBUG_PAGE_FIRST_COLUMN, y += h, L"%d land nodes in excess of world max (25600)", guiLNCount[1] - WORLD_MAX);
-	mprintf(DEBUG_PAGE_FIRST_COLUMN, y += h, L"Total # levelnodes %d, %d bytes each", guiLNCount[0], sizeof(LEVELNODE));
-	mprintf(DEBUG_PAGE_FIRST_COLUMN, y += h, L"Total memory for levelnodes %d", guiLNCount[0] * sizeof(LEVELNODE));
+	MPrint(DEBUG_PAGE_FIRST_COLUMN, y += h, ST::format("{} land nodes in excess of world max (25600)", guiLNCount[1] - WORLD_MAX));
+	MPrint(DEBUG_PAGE_FIRST_COLUMN, y += h, ST::format("Total # levelnodes {}, {} bytes each", guiLNCount[0], sizeof(LEVELNODE)));
+	MPrint(DEBUG_PAGE_FIRST_COLUMN, y += h, ST::format("Total memory for levelnodes {}", guiLNCount[0] * sizeof(LEVELNODE)));
 }
 
 
@@ -161,7 +157,7 @@ BOOLEAN RemoveObject(UINT32 iMapIndex, UINT16 usIndex)
 
 			CheckForAndDeleteTileCacheStructInfo(pObject, usIndex);
 
-			MemFree(pObject);
+			delete pObject;
 
 			//Add the index to the maps temp file so we can remove it after reloading the map
 			AddRemoveObjectToMapTempFile(iMapIndex, usIndex);
@@ -306,7 +302,7 @@ static void RemoveLandEx(UINT32 iMapIndex, UINT16 usIndex)
 				pLand->pNext->pPrevNode = pLand->pPrevNode;
 			}
 
-			MemFree(pLand);
+			delete pLand;
 			break;
 		}
 	}
@@ -473,10 +469,9 @@ void InsertLandIndexAtLevel(const UINT32 iMapIndex, const UINT16 usIndex, const 
 }
 
 
-void RemoveHigherLandLevels(UINT32 const map_idx, UINT32 const src_type, UINT32*& out_higher_types, UINT8& out_n_higher_types)
+void RemoveHigherLandLevels(UINT32 const map_idx, UINT32 const src_type, std::vector<UINT32>& out_higher_types)
 {
-	out_n_higher_types = 0;
-	out_higher_types   = 0;
+	out_higher_types.clear();
 
 	// Get tail
 	LEVELNODE* tail = 0;
@@ -496,9 +491,7 @@ void RemoveHigherLandLevels(UINT32 const map_idx, UINT32 const src_type, UINT32*
 
 		RemoveLand(map_idx, l.usIndex);
 
-		out_higher_types = REALLOC(out_higher_types, UINT32, out_n_higher_types + 1);
-		out_higher_types[out_n_higher_types] = tile_type;
-		++out_n_higher_types;
+		out_higher_types.push_back(tile_type);
 	}
 
 	AdjustForFullTile(map_idx);
@@ -517,7 +510,7 @@ static LEVELNODE* AddNodeToWorld(UINT32 const iMapIndex, UINT16 const usIndex, I
 
 	if (AddStructureToWorld(iMapIndex, level, sr, n)) return n;
 
-	MemFree(n);
+	delete n;
 	throw FailedToAddNode();
 }
 
@@ -693,7 +686,7 @@ void ForceRemoveStructFromTail(UINT32 const iMapIndex)
 			//If we have to, make sure to remove this node when we reload the map from a saved game
 			RemoveStructFromMapTempFile(iMapIndex, usIndex);
 
-			MemFree(pStruct);
+			delete pStruct;
 
 			RemoveShadowBuddy(iMapIndex, usIndex);
 			return;
@@ -718,7 +711,7 @@ static void InternalRemoveStruct(UINT32 const map_idx, LEVELNODE** const anchor)
 	RemoveStructFromMapTempFile(map_idx, idx);
 
 	RemoveShadowBuddy(map_idx, idx);
-	MemFree(removee);
+	delete removee;
 }
 
 
@@ -983,7 +976,7 @@ static BOOLEAN RemoveShadow(UINT32 iMapIndex, UINT16 usIndex)
 				pOldShadow->pNext = pShadow->pNext;
 			}
 
-			MemFree(pShadow);
+			delete pShadow;
 			return TRUE;
 		}
 
@@ -1014,7 +1007,7 @@ BOOLEAN RemoveShadowFromLevelNode(UINT32 iMapIndex, LEVELNODE* pNode)
 				pOldShadow->pNext = pShadow->pNext;
 			}
 
-			MemFree(pShadow);
+			delete pShadow;
 			return TRUE;
 		}
 
@@ -1132,7 +1125,7 @@ BOOLEAN AddMercStructureInfoFromAnimSurface(const INT16 sGridNo, SOLDIERTYPE* co
 	bool const success = AddStructureToWorld(sGridNo, s->bLevel, sr, n);
 	if (!success)
 	{
-		SLOGD(DEBUG_TAG_WORLDDEF, "add struct info for merc %d (%ls), at %d direction %d failed",
+		SLOGD("add struct info for merc {} ({}), at {} direction {} failed",
 					s->ubID, s->name, sGridNo, s->bDirection);
 	}
 
@@ -1159,15 +1152,7 @@ BOOLEAN OKToAddMercToWorld( SOLDIERTYPE *pSoldier, INT8 bDirection )
 		if (pStructFileRef != NULL)
 		{
 			//Try adding struct to this location, if we can it's good!
-			UINT16 usOKToAddStructID;
-			if (pSoldier->pLevelNode && pSoldier->pLevelNode->pStructureData != NULL)
-			{
-				usOKToAddStructID = pSoldier->pLevelNode->pStructureData->usStructureID;
-			}
-			else
-			{
-				usOKToAddStructID = INVALID_STRUCTURE_ID;
-			}
+			UINT16 const usOKToAddStructID = GetStructureID(pSoldier);
 
 			if (!OkayToAddStructureToWorld(pSoldier->sGridNo, pSoldier->bLevel, &pStructFileRef->pDBStructureRef[OneCDirection(bDirection)], usOKToAddStructID))
 			{
@@ -1212,7 +1197,7 @@ void RemoveMerc(UINT32 const map_idx, SOLDIERTYPE& s, bool const placeholder)
 			DeleteStructureFromWorld(merc->pStructureData);
 		}
 
-		MemFree(merc);
+		delete merc;
 		break;
 	}
 	// XXX exception?
@@ -1277,7 +1262,7 @@ BOOLEAN RemoveRoof(UINT32 iMapIndex, UINT16 usIndex)
 			}
 
 			DeleteStructureFromWorld(pRoof->pStructureData);
-			MemFree(pRoof);
+			delete pRoof;
 			return TRUE;
 		}
 
@@ -1444,7 +1429,7 @@ BOOLEAN RemoveOnRoof(UINT32 iMapIndex, UINT16 usIndex)
 				pOldOnRoof->pNext = pOnRoof->pNext;
 			}
 
-			MemFree(pOnRoof);
+			delete pOnRoof;
 			return TRUE;
 		}
 
@@ -1476,7 +1461,7 @@ BOOLEAN RemoveOnRoofFromLevelNode( UINT32 iMapIndex, LEVELNODE *pNode )
 				pOldOnRoof->pNext = pOnRoof->pNext;
 			}
 
-			MemFree(pOnRoof);
+			delete pOnRoof;
 			return TRUE;
 		}
 
@@ -1587,7 +1572,7 @@ BOOLEAN RemoveTopmost(UINT32 iMapIndex, UINT16 usIndex)
 				pOldTopmost->pNext = pTopmost->pNext;
 			}
 
-			MemFree(pTopmost);
+			delete pTopmost;
 			return TRUE;
 		}
 
@@ -1619,7 +1604,7 @@ BOOLEAN RemoveTopmostFromLevelNode(UINT32 iMapIndex, LEVELNODE* pNode)
 				pOldTopmost->pNext = pTopmost->pNext;
 			}
 
-			MemFree(pTopmost);
+			delete pTopmost;
 			return TRUE;
 		}
 

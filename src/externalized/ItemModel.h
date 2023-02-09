@@ -1,8 +1,9 @@
 #pragma once
-
-#include <string>
-
-#include "game/Tactical/Item_Types.h"
+#include "Item_Types.h"
+#include "ItemStrings.h"
+#include "InventoryGraphicsModel.h"
+#include "TilesetTileIndexModel.h"
+#include <string_theory/string>
 
 class JsonObject;
 class JsonObjectReader;
@@ -13,19 +14,22 @@ struct ItemModel
 {
 	ItemModel(
 		uint16_t itemIndex,
-		const char* internalName,
+		ST::string internalName,
 		uint32_t usItemClass,
 		uint8_t classIndex=0,
 		ItemCursor cursor=INVALIDCURS);
 
 	ItemModel(
 		uint16_t   itemIndex,
-		const char* internalName,
+		ST::string internalName,
+		ST::string shortName,
+		ST::string name,
+		ST::string description,
 		uint32_t   usItemClass,
 		uint8_t    ubClassIndex,
 		ItemCursor ubCursor,
-		uint8_t    ubGraphicType,
-		uint8_t    ubGraphicNum,
+		InventoryGraphicsModel inventoryGraphics,
+		TilesetTileIndexModel tileGraphic,
 		uint8_t    ubWeight,
 		uint8_t    ubPerPocket,
 		uint16_t   usPrice,
@@ -37,14 +41,18 @@ struct ItemModel
 	// This could be default in C++11
 	virtual ~ItemModel();
 
-	const virtual std::string& getInternalName() const;
+	const virtual ST::string& getInternalName() const;
+	const virtual ST::string& getShortName() const;
+	const virtual ST::string& getName() const;
+	const virtual ST::string& getDescription() const;
 
 	virtual uint16_t        getItemIndex() const;
 	virtual uint32_t        getItemClass() const;
 	virtual uint8_t         getClassIndex() const;
 	virtual ItemCursor      getCursor() const;
-	virtual uint8_t         getGraphicType() const;
-	virtual uint8_t         getGraphicNum() const;
+	virtual const GraphicModel& getInventoryGraphicSmall() const;
+	virtual const GraphicModel& getInventoryGraphicBig() const;
+	virtual const TilesetTileIndexModel& getTileGraphic() const;
 	virtual uint8_t         getWeight() const;
 	virtual uint8_t         getPerPocket() const;
 	virtual uint16_t        getPrice() const;
@@ -82,14 +90,23 @@ struct ItemModel
 	/** Check if the given attachment can be attached to the item. */
 	virtual bool canBeAttached(uint16_t attachment) const;
 
+	virtual void serializeTo(JsonObject &obj) const;
+
+	static ST::string deserializeShortName(JsonObjectReader &obj, const VanillaItemStrings& vanillaItemStrings);
+	static ST::string deserializeName(JsonObjectReader &obj, const VanillaItemStrings& vanillaItemStrings);
+	static ST::string deserializeDescription(JsonObjectReader &obj, const VanillaItemStrings& vanillaItemStrings);
+	static const ItemModel* deserialize(JsonObjectReader &obj, const VanillaItemStrings& vanillaItemStrings);
 protected:
 	uint16_t   itemIndex;
-	std::string internalName;
+	ST::string internalName;
+	ST::string shortName;
+	ST::string name;
+	ST::string description;
 	uint32_t   usItemClass;
 	uint8_t    ubClassIndex;
 	ItemCursor ubCursor;
-	uint8_t    ubGraphicType;
-	uint8_t    ubGraphicNum;
+	InventoryGraphicsModel inventoryGraphics;
+	TilesetTileIndexModel tileGraphic;
 	uint8_t    ubWeight; //2 units per kilogram; roughly 1 unit per pound
 	uint8_t    ubPerPocket;
 	uint16_t   usPrice;

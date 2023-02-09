@@ -1,25 +1,39 @@
-#include "sgp/VObject.h"
 #include "CharProfile.h"
+#include "ContentManager.h"
+#include "Cursors.h"
 #include "Directories.h"
+#include "FileMan.h"
+#include "Font_Control.h"
 #include "Font.h"
+#include "GameInstance.h"
 #include "HImage.h"
 #include "IMP_Begin_Screen.h"
 #include "IMP_MainPage.h"
-#include "SGPStrings.h"
 #include "IMPVideoObjects.h"
-#include "Timer_Control.h"
-#include "Render_Dirty.h"
-#include "Cursors.h"
 #include "Laptop.h"
-#include "IMP_Finish.h"
-#include "Text_Input.h"
-#include "Soldier_Profile_Type.h"
-#include "IMP_Attribute_Selection.h"
+#include "LaptopSave.h"
 #include "Line.h"
+#include "Render_Dirty.h"
+#include "SaveLoadGame.h"
+#include "SGPStrings.h"
+#include "Soldier_Control.h"
+#include "Soldier_Profile_Type.h"
+#include "Soldier_Profile.h"
+#include "IMP_Attribute_Selection.h"
+#include "IMP_Compile_Character.h"
+#include "IMP_Finish.h"
+#include "IMP_Portraits.h"
+#include "Text_Input.h"
 #include "Text.h"
+#include "Timer_Control.h"
 #include "Video.h"
 #include "VSurface.h"
-#include "Font_Control.h"
+
+#include "policy/GamePolicy.h"
+#include "sgp/VObject.h"
+
+#include <string_theory/string>
+
 
 #define FULL_NAME_INPUT_X LAPTOP_SCREEN_UL_X + 196
 #define FULL_NAME_INPUT_Y LAPTOP_SCREEN_UL_Y + 153
@@ -49,8 +63,8 @@ enum {
 };
 
 // beginning character stats
-wchar_t pFullNameString[NAME_LENGTH];
-wchar_t pNickNameString[NICKNAME_LENGTH];
+ST::string pFullNameString;
+ST::string pNickNameString;
 
 
 // non gender
@@ -187,8 +201,8 @@ void ExitIMPBeginScreen( void )
 
 	KillTextInputMode();
 
-	wcscpy( pFullName, pFullNameString );
-	wcscpy( pNickName, pNickNameString );
+	pFullName = pFullNameString;
+	pNickName = pNickNameString;
 
 	// set gender
 	fCharacterIsMale = bGenderFlag;
@@ -221,7 +235,7 @@ void HandleIMPBeginScreen( void )
 }
 
 
-static void BtnIMPBeginScreenDoneCallback(GUI_BUTTON* btn, INT32 reason);
+static void BtnIMPBeginScreenDoneCallback(GUI_BUTTON* btn, UINT32 reason);
 
 
 static void CreateIMPBeginScreenButtons(void)
@@ -255,19 +269,19 @@ static void RemoveIMPBeginScreenButtons(void)
 static void CopyFirstNameIntoNickName(void);
 
 
-static void BtnIMPBeginScreenDoneCallback(GUI_BUTTON *btn, INT32 reason)
+static void BtnIMPBeginScreenDoneCallback(GUI_BUTTON *btn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		// back to mainpage
-		CopyTrimmedString(pFullNameString, NAME_LENGTH, GetStringFromField(0));
-		CopyTrimmedString(pNickNameString, NICKNAME_LENGTH, GetStringFromField(1));
+		pFullNameString = GetStringFromField(0).trim();
+		pNickNameString = GetStringFromField(1).trim();
 
 		// check to see if a name has been selected, if not, do not allow player to proceed with more char generation
-		if (wcslen(pFullNameString) != 0 && bGenderFlag != -1)
+		if (!pFullNameString.empty() && bGenderFlag != -1)
 		{
 			// valid full name, check to see if nick name
-			if (wcslen(pNickNameString) == 0)
+			if (pNickNameString.empty())
 			{
 				// no nick name
 				// copy first name to nick name
@@ -286,6 +300,16 @@ static void BtnIMPBeginScreenDoneCallback(GUI_BUTTON *btn, INT32 reason)
 			iCurrentImpPage = IMP_MAIN_PAGE;
 			fButtonPendingFlag = TRUE;
 		}
+		else if (GCM->getGamePolicy()->imp_load_saved_merc_by_nickname && IMPSavedProfileDoesFileExist(pNickNameString))
+		{
+			fLoadingCharacterForPreviousImpProfile = true;
+			LaptopSaveInfo.iVoiceId = IMPSavedProfileLoadMercProfile(pNickNameString);
+			MERCPROFILESTRUCT& profile_saved = gMercProfiles[PLAYER_GENERATED_CHARACTER_ID + LaptopSaveInfo.iVoiceId];
+			iPortraitNumber = profile_saved.ubFaceIndex - 200;
+			fCharacterIsMale = ( profile_saved.bSex == MALE );
+			iCurrentImpPage = IMP_CONFIRM;
+			fButtonPendingFlag = TRUE;
+		}
 		else
 		{
 			// invalid name, reset current mode
@@ -300,7 +324,7 @@ static void GetPlayerKeyBoardInputForIMPBeginScreen(void)
 	InputAtom InputEvent;
 
 	// handle input events
-	while( DequeueEvent(&InputEvent) )
+	while( DequeueSpecificEvent(&InputEvent, KEYBOARD_EVENTS) )
 	{
 		if(!HandleTextInput( &InputEvent ) && (InputEvent.usEvent == KEY_DOWN || InputEvent.usEvent == KEY_REPEAT) )
 		{
@@ -349,17 +373,20 @@ static void DisplayFemaleCheckboxFocus(void)
 static void CopyFirstNameIntoNickName(void)
 {
 	// this procedure will copy the characters first name in to the nickname for the character
-	UINT32 iCounter=0;
-	while( ( pFullNameString[ iCounter ] != L' ' ) && ( iCounter < NICKNAME_LENGTH) && ( pFullNameString[ iCounter ] != 0 ) )
+	// FIXME it should only copy NICKNAME_LENGTH, but which type? (char/char16_t/char32_t)
+	auto i = pFullNameString.find(' ');
+	if (i == -1)
 	{
-		// copy charcters into nick name
-		pNickNameString[ iCounter ] = pFullNameString[ iCounter ];
-		iCounter++;
+		pNickNameString = pFullNameString;
+	}
+	else
+	{
+		pNickNameString = pFullNameString.substr(0, i);
 	}
 }
 
-static void SelectFemaleRegionCallBack(MOUSE_REGION* pRegion, INT32 iReason);
-static void SelectMaleRegionCallBack(MOUSE_REGION* pRegion, INT32 iReason);
+static void SelectFemaleRegionCallBack(MOUSE_REGION* pRegion, UINT32 iReason);
+static void SelectMaleRegionCallBack(MOUSE_REGION* pRegion, UINT32 iReason);
 
 static void CreateIMPBeginScreenMouseRegions(void)
 {
@@ -372,7 +399,7 @@ static void CreateIMPBeginScreenMouseRegions(void)
 		MALE_BOX_Y + MALE_BOX_HEIGHT,
 		MSYS_PRIORITY_HIGH,
 		CURSOR_WWW,
-		NULL,
+		MSYS_NO_CALLBACK,
 		SelectMaleRegionCallBack
 	);
 
@@ -385,7 +412,7 @@ static void CreateIMPBeginScreenMouseRegions(void)
 		MALE_BOX_Y + MALE_BOX_HEIGHT,
 		MSYS_PRIORITY_HIGH,
 		CURSOR_WWW,
-		NULL,
+		MSYS_NO_CALLBACK,
 		SelectFemaleRegionCallBack
 	);
 }
@@ -396,9 +423,9 @@ static void DestroyIMPBeginScreenMouseRegions()
 	FOR_EACH(MOUSE_REGION, i, gIMPBeginScreenMouseRegions) MSYS_RemoveRegion(&*i);
 }
 
-static void SelectMaleRegionCallBack(MOUSE_REGION* pRegion, INT32 iReason)
+static void SelectMaleRegionCallBack(MOUSE_REGION* pRegion, UINT32 iReason)
 {
-	if (iReason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (iReason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		// set mode to nick name type in
 		bGenderFlag = IMP_MALE;
@@ -407,9 +434,9 @@ static void SelectMaleRegionCallBack(MOUSE_REGION* pRegion, INT32 iReason)
 }
 
 
-static void SelectFemaleRegionCallBack(MOUSE_REGION* pRegion, INT32 iReason)
+static void SelectFemaleRegionCallBack(MOUSE_REGION* pRegion, UINT32 iReason)
 {
-	if (iReason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (iReason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		// set mode to nick name type in
 		bGenderFlag = IMP_FEMALE;
@@ -432,7 +459,7 @@ static void RenderGender(void)
 	}
 	SetFontBackground(FONT_BLACK);
 	SetFontAttributes(FONT14ARIAL, 184);
-	MPrint(x, MALE_BOX_Y + 6, L"X");
+	MPrint(x, MALE_BOX_Y + 6, "X");
 }
 
 

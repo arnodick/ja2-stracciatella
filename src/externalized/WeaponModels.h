@@ -1,14 +1,15 @@
 #pragma once
 
-#include <stdint.h>
-
-#include <map>
-#include <string>
-
 // XXX
 #include "game/Tactical/Weapons.h"
 
 #include "ItemModel.h"
+#include "ItemStrings.h"
+
+#include <string_theory/string>
+
+#include <map>
+#include <stdint.h>
 
 class JsonObject;
 class JsonObjectReader;
@@ -19,19 +20,27 @@ struct MagazineModel;
 #define NO_WEAPON_SOUND ((SoundID)-1)
 #define NO_WEAPON_SOUND_STR ("")
 
+#define WEAPON_TYPE_NOWEAPON ("NOWEAPON")
+#define WEAPON_TYPE_PUNCH ("PUNCH")
+#define WEAPON_TYPE_THROWN ("THROWN")
+
 struct WeaponModel : ItemModel
 {
 	WeaponModel(uint32_t itemClass,
 			uint8_t weaponType,
 			uint8_t cursor,
 			uint16_t itemIndex,
-			const char* internalName,
-			const char* internalType);
+			ST::string internalName,
+			ST::string shortName,
+			ST::string name,
+			ST::string description,
+			ST::string internalType);
 
 	virtual void serializeTo(JsonObject &obj) const;
 
 	static WeaponModel* deserialize(JsonObjectReader &obj,
-	const std::map<std::string, const CalibreModel*> &calibreMap);
+	const std::map<ST::string, const CalibreModel*> &calibreMap,
+	const VanillaItemStrings& vanillaItemStrings);
 
 	virtual const WeaponModel* asWeapon() const   { return this; }
 
@@ -39,20 +48,19 @@ struct WeaponModel : ItemModel
 	bool matches(const MagazineModel *mag) const;
 	bool isSameMagCapacity(const MagazineModel *mag) const;
 
-	bool hasSound() const;
-	bool hasBurstSound() const;
-
 	/** Check if the given attachment can be attached to the item. */
 	virtual bool canBeAttached(uint16_t attachment) const;
 
 	/** Get standard replacement gun name. */
-	virtual const std::string & getStandardReplacement() const;
+	virtual const ST::string & getStandardReplacement() const;
 
 	int getRateOfFire() const;
 
-	std::string sound;
-	std::string burstSound;
-	std::string standardReplacement;
+	ST::string sound;
+	ST::string burstSound;
+	ST::string silencedSound;
+	ST::string silencedBurstSound;
+	ST::string standardReplacement;
 	bool attachSilencer;
 	bool attachSniperScope;
 	bool attachLaserScope;
@@ -63,7 +71,7 @@ struct WeaponModel : ItemModel
 	bool attachGunBarrelExtender;
 	int m_rateOfFire;
 
-	char     internalType[20];
+	ST::string internalType;
 	UINT8    ubWeaponClass;    // handgun/shotgun/rifle/knife
 	UINT8    ubWeaponType;     // exact type (for display purposes)
 	const CalibreModel *calibre;  // type of ammunition needed
@@ -81,6 +89,7 @@ struct WeaponModel : ItemModel
 	UINT8    ubHitVolume;
 	SoundID  sReloadSound;
 	SoundID  sLocknLoadSound;
+	UINT16   usSmokeEffect;    // item index of the smoke effect on ammo miss
 
 protected:
 	void serializeAttachments(JsonObject &obj) const;
@@ -88,14 +97,20 @@ protected:
 
 struct NoWeapon : WeaponModel
 {
-	NoWeapon(uint16_t indexIndex, const char * internalName, uint16_t Range);
+	NoWeapon(uint16_t indexIndex, const ST::string& internalName);
+
+	NoWeapon(uint16_t itemIndex, const ST::string& internalName, uint32_t itemClass, uint8_t cursor);
 
 	virtual void serializeTo(JsonObject &obj) const;
 };
 
 struct Pistol : WeaponModel
 {
-	Pistol(uint16_t indexIndex, const char * internalName,
+	Pistol(uint16_t indexIndex,
+		ST::string internalName,
+		ST::string shortName,
+		ST::string name,
+		ST::string description,
 		const CalibreModel *calibre,
 		uint8_t BulletSpeed,
 		uint8_t Impact,
@@ -106,16 +121,21 @@ struct Pistol : WeaponModel
 		uint16_t Range,
 		uint8_t AttackVolume,
 		uint8_t HitVolume,
-		const char * Sound);
+		ST::string Sound,
+		ST::string SilencedSound);
 
-	virtual void serializeTo(JsonObject &obj) const;
+	void serializeTo(JsonObject &obj) const override;
 };
 
 
 
 struct MPistol : WeaponModel
 {
-	MPistol(uint16_t indexIndex, const char * internalName,
+	MPistol(uint16_t indexIndex,
+		ST::string internalName,
+		ST::string shortName,
+		ST::string name,
+		ST::string description,
 		const CalibreModel *calibre,
 		uint8_t BulletSpeed,
 		uint8_t Impact,
@@ -128,17 +148,23 @@ struct MPistol : WeaponModel
 		uint16_t Range,
 		uint8_t AttackVolume,
 		uint8_t HitVolume,
-		const char * Sound,
-		const char * BurstSound);
+		ST::string Sound,
+		ST::string BurstSound,
+		ST::string SilencedSound,
+		ST::string SilencedBurstSound);
 
-	virtual void serializeTo(JsonObject &obj) const;
+	void serializeTo(JsonObject &obj) const override;
 };
 
 
 
 struct SMG : WeaponModel
 {
-	SMG(uint16_t indexIndex, const char * internalName,
+	SMG(uint16_t indexIndex,
+		ST::string internalName,
+		ST::string shortName,
+		ST::string name,
+		ST::string description,
 		const CalibreModel *calibre,
 		uint8_t BulletSpeed,
 		uint8_t Impact,
@@ -151,35 +177,46 @@ struct SMG : WeaponModel
 		uint16_t Range,
 		uint8_t AttackVolume,
 		uint8_t HitVolume,
-		const char * Sound,
-		const char * BurstSound);
+		ST::string Sound,
+		ST::string BurstSound,
+		ST::string SilencedSound,
+		ST::string SilencedBurstSound);
 
-	virtual void serializeTo(JsonObject &obj) const;
+	void serializeTo(JsonObject &obj) const override;
 };
 
 
 struct SniperRifle : WeaponModel
 {
-	SniperRifle(uint16_t indexIndex, const char * internalName,
-			const CalibreModel *calibre,
-			uint8_t BulletSpeed,
-			uint8_t Impact,
-			uint8_t ReadyTime,
-			uint8_t ShotsPer4Turns,
-			uint8_t Deadliness,
-			uint8_t MagSize,
-			uint16_t Range,
-			uint8_t AttackVolume,
-			uint8_t HitVolume,
-			const char * Sound);
+	SniperRifle(uint16_t indexIndex,
+		ST::string internalName,
+		ST::string shortName,
+		ST::string name,
+		ST::string description,
+		const CalibreModel *calibre,
+		uint8_t BulletSpeed,
+		uint8_t Impact,
+		uint8_t ReadyTime,
+		uint8_t ShotsPer4Turns,
+		uint8_t Deadliness,
+		uint8_t MagSize,
+		uint16_t Range,
+		uint8_t AttackVolume,
+		uint8_t HitVolume,
+		ST::string Sound,
+		ST::string SilencedSound);
 
-	virtual void serializeTo(JsonObject &obj) const;
+	void serializeTo(JsonObject &obj) const override;
 };
 
 
 struct Rifle : WeaponModel
 {
-	Rifle(uint16_t indexIndex, const char * internalName,
+	Rifle(uint16_t indexIndex,
+		ST::string internalName,
+		ST::string shortName,
+		ST::string name,
+		ST::string description,
 		const CalibreModel *calibre,
 		uint8_t BulletSpeed,
 		uint8_t Impact,
@@ -190,37 +227,48 @@ struct Rifle : WeaponModel
 		uint16_t Range,
 		uint8_t AttackVolume,
 		uint8_t HitVolume,
-		const char * Sound);
+		ST::string Sound,
+		ST::string SilencedSound);
 
-	virtual void serializeTo(JsonObject &obj) const;
+	void serializeTo(JsonObject &obj) const override;
 };
 
 
 struct AssaultRifle : WeaponModel
 {
-	AssaultRifle(uint16_t indexIndex, const char * internalName,
-			const CalibreModel *calibre,
-			uint8_t BulletSpeed,
-			uint8_t Impact,
-			uint8_t ReadyTime,
-			uint8_t ShotsPer4Turns,
-			uint8_t ShotsPerBurst,
-			uint8_t BurstPenalty,
-			uint8_t Deadliness,
-			uint8_t MagSize,
-			uint16_t Range,
-			uint8_t AttackVolume,
-			uint8_t HitVolume,
-			const char * Sound,
-			const char * BurstSound);
+	AssaultRifle(uint16_t indexIndex,
+		ST::string internalName,
+		ST::string shortName,
+		ST::string name,
+		ST::string description,
+		const CalibreModel *calibre,
+		uint8_t BulletSpeed,
+		uint8_t Impact,
+		uint8_t ReadyTime,
+		uint8_t ShotsPer4Turns,
+		uint8_t ShotsPerBurst,
+		uint8_t BurstPenalty,
+		uint8_t Deadliness,
+		uint8_t MagSize,
+		uint16_t Range,
+		uint8_t AttackVolume,
+		uint8_t HitVolume,
+		ST::string Sound,
+		ST::string BurstSound,
+		ST::string SilencedSound,
+		ST::string SilencedBurstSound);
 
-	virtual void serializeTo(JsonObject &obj) const;
+	void serializeTo(JsonObject &obj) const override;
 };
 
 
 struct Shotgun : WeaponModel
 {
-	Shotgun(uint16_t indexIndex, const char * internalName,
+	Shotgun(uint16_t indexIndex,
+		ST::string internalName,
+		ST::string shortName,
+		ST::string name,
+		ST::string description,
 		const CalibreModel *calibre,
 		uint8_t BulletSpeed,
 		uint8_t Impact,
@@ -233,16 +281,22 @@ struct Shotgun : WeaponModel
 		uint16_t Range,
 		uint8_t AttackVolume,
 		uint8_t HitVolume,
-		const char * Sound,
-		const char * BurstSound);
+		ST::string Sound,
+		ST::string BurstSound,
+		ST::string SilencedSound,
+		ST::string SilencedBurstSound);
 
-	virtual void serializeTo(JsonObject &obj) const;
+	void serializeTo(JsonObject &obj) const override;
 };
 
 
 struct LMG : WeaponModel
 {
-	LMG(uint16_t indexIndex, const char * internalName,
+	LMG(uint16_t indexIndex,
+		ST::string internalName,
+		ST::string shortName,
+		ST::string name,
+		ST::string description,
 		const CalibreModel *calibre,
 		uint8_t BulletSpeed,
 		uint8_t Impact,
@@ -255,73 +309,95 @@ struct LMG : WeaponModel
 		uint16_t Range,
 		uint8_t AttackVolume,
 		uint8_t HitVolume,
-		const char * Sound,
-		const char * BurstSound);
+		ST::string Sound,
+		ST::string BurstSound,
+		ST::string SilencedSound,
+		ST::string SilencedBurstSound);
 
-	virtual void serializeTo(JsonObject &obj) const;
+	void serializeTo(JsonObject &obj) const override;
 };
 
 
 struct Blade : WeaponModel
 {
-	Blade(uint16_t indexIndex, const char * internalName,
+	Blade(uint16_t indexIndex,
+		ST::string internalName,
+		ST::string shortName,
+		ST::string name,
+		ST::string description,
 		uint8_t Impact,
 		uint8_t ShotsPer4Turns,
 		uint8_t Deadliness,
 		uint16_t Range,
 		uint8_t AttackVolume,
-		const char * Sound);
+		ST::string Sound);
 
-	virtual void serializeTo(JsonObject &obj) const;
+	void serializeTo(JsonObject &obj) const override;
 };
 
 
 struct ThrowingBlade : WeaponModel
 {
-	ThrowingBlade(uint16_t indexIndex, const char * internalName,
-			uint8_t Impact,
-			uint8_t ShotsPer4Turns,
-			uint8_t Deadliness,
-			uint16_t Range,
-			uint8_t AttackVolume,
-			const char * Sound);
+	ThrowingBlade(uint16_t indexIndex,
+		ST::string internalName,
+		ST::string shortName,
+		ST::string name,
+		ST::string description,
+		uint8_t Impact,
+		uint8_t ShotsPer4Turns,
+		uint8_t Deadliness,
+		uint16_t Range,
+		uint8_t AttackVolume,
+		ST::string Sound);
 
-	virtual void serializeTo(JsonObject &obj) const;
+	void serializeTo(JsonObject &obj) const override;
 };
 
 
 struct PunchWeapon : WeaponModel
 {
-	PunchWeapon(uint16_t indexIndex, const char * internalName,
-			uint8_t Impact,
-			uint8_t ShotsPer4Turns,
-			uint8_t Deadliness,
-			uint8_t AttackVolume,
-			const char * Sound);
+	PunchWeapon(uint16_t indexIndex,
+		ST::string internalName,
+		ST::string shortName,
+		ST::string name,
+		ST::string description,
+		uint8_t Impact,
+		uint8_t ShotsPer4Turns,
+		uint8_t Deadliness,
+		uint8_t AttackVolume,
+		ST::string Sound);
 
-	virtual void serializeTo(JsonObject &obj) const;
+	void serializeTo(JsonObject &obj) const override;
 };
 
 
 struct Launcher : WeaponModel
 {
-	Launcher(uint16_t indexIndex, const char * internalName,
-			uint8_t BulletSpeed,
-			uint8_t ReadyTime,
-			uint8_t ShotsPer4Turns,
-			uint8_t Deadliness,
-			uint16_t Range,
-			uint8_t AttackVolume,
-			uint8_t HitVolume,
-			const char * Sound);
+	Launcher(uint16_t indexIndex,
+		ST::string internalName,
+		ST::string shortName,
+		ST::string name,
+		ST::string description,
+		uint8_t BulletSpeed,
+		uint8_t ReadyTime,
+		uint8_t ShotsPer4Turns,
+		uint8_t Deadliness,
+		uint16_t Range,
+		uint8_t AttackVolume,
+		uint8_t HitVolume,
+		ST::string Sound);
 
-	virtual void serializeTo(JsonObject &obj) const;
+	void serializeTo(JsonObject &obj) const override;
 };
 
 
 struct LAW : WeaponModel
 {
-	LAW(uint16_t indexIndex, const char * internalName,
+	LAW(uint16_t indexIndex,
+		ST::string internalName,
+		ST::string shortName,
+		ST::string name,
+		ST::string description,
 		uint8_t BulletSpeed,
 		uint8_t ReadyTime,
 		uint8_t ShotsPer4Turns,
@@ -329,15 +405,19 @@ struct LAW : WeaponModel
 		uint16_t Range,
 		uint8_t AttackVolume,
 		uint8_t HitVolume,
-		const char * Sound);
+		ST::string Sound);
 
-	virtual void serializeTo(JsonObject &obj) const;
+	void serializeTo(JsonObject &obj) const override;
 };
 
 
 struct Cannon : WeaponModel
 {
-	Cannon(uint16_t indexIndex, const char * internalName,
+	Cannon(uint16_t indexIndex,
+		ST::string internalName,
+		ST::string shortName,
+		ST::string name,
+		ST::string description,
 		uint8_t BulletSpeed,
 		uint8_t ReadyTime,
 		uint8_t ShotsPer4Turns,
@@ -345,24 +425,29 @@ struct Cannon : WeaponModel
 		uint16_t Range,
 		uint8_t AttackVolume,
 		uint8_t HitVolume,
-		const char * Sound);
+		ST::string Sound);
 
-	virtual void serializeTo(JsonObject &obj) const;
+	void serializeTo(JsonObject &obj) const override;
 };
 
 
 struct MonsterSpit : WeaponModel
 {
-	MonsterSpit(uint16_t indexIndex, const char * internalName,
-			const CalibreModel *calibre,
-			uint8_t Impact,
-			uint8_t ShotsPer4Turns,
-			uint8_t Deadliness,
-			uint8_t MagSize,
-			uint16_t Range,
-			uint8_t AttackVolume,
-			uint8_t HitVolume,
-			const char * Sound);
+	MonsterSpit(uint16_t indexIndex,
+		ST::string internalName,
+		ST::string shortName,
+		ST::string name,
+		ST::string description,
+		const CalibreModel *calibre,
+		uint8_t Impact,
+		uint8_t ShotsPer4Turns,
+		uint8_t Deadliness,
+		uint8_t MagSize,
+		uint16_t Range,
+		uint8_t AttackVolume,
+		uint8_t HitVolume,
+		ST::string Sound,
+		uint16_t smokeEffect);
 
-	virtual void serializeTo(JsonObject &obj) const;
+	void serializeTo(JsonObject &obj) const override;
 };

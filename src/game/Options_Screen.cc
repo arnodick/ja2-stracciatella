@@ -32,13 +32,15 @@
 #include "Exit_Grids.h"
 #include "Text.h"
 #include "Message.h"
-#include "Multi_Language_Graphic_Utils.h"
+#include "GameRes.h"
 #include "Map_Information.h"
 #include "SmokeEffects.h"
 #include "Button_System.h"
 #include "VSurface.h"
 #include "WorldMan.h"
 #include "UILayout.h"
+
+#include <string_theory/string>
 
 
 #define OPT_MAIN_FONT				FONT12ARIAL
@@ -146,7 +148,7 @@ static GUIButtonRef guiDoneButton;
 
 //checkbox to toggle tracking mode on or off
 static GUIButtonRef guiOptionsToggles[NUM_GAME_OPTIONS];
-static void BtnOptionsTogglesCallback(GUI_BUTTON* btn, INT32 reason);
+static void BtnOptionsTogglesCallback(GUI_BUTTON* btn, UINT32 reason);
 
 
 //Mouse regions for the name of the option
@@ -203,7 +205,7 @@ ScreenID OptionsScreenHandle()
 
 	// ATE: Put here to save RECTS before any fast help being drawn...
 	SaveBackgroundRects( );
-	RenderButtonsFastHelp();
+	RenderFastHelp();
 
 
 	ExecuteBaseDirtyRectQueue();
@@ -223,20 +225,20 @@ ScreenID OptionsScreenHandle()
 }
 
 
-static GUIButtonRef MakeButton(INT16 x, GUI_CALLBACK click, const wchar_t* text)
+static GUIButtonRef MakeButton(INT16 x, GUI_CALLBACK click, const ST::string& text)
 {
 	return CreateIconAndTextButton(giOptionsButtonImages, text, OPT_BUTTON_FONT, OPT_BUTTON_ON_COLOR, DEFAULT_SHADOW, OPT_BUTTON_OFF_COLOR, DEFAULT_SHADOW, x, OPT_BTN_Y, MSYS_PRIORITY_HIGH, click);
 }
 
 
-static void BtnOptGotoSaveGameCallback(GUI_BUTTON* btn, INT32 reason);
-static void BtnOptGotoLoadGameCallback(GUI_BUTTON* btn, INT32 reason);
-static void BtnOptQuitCallback(GUI_BUTTON* btn, INT32 reason);
-static void BtnDoneCallback(GUI_BUTTON* btn, INT32 reason);
+static void BtnOptGotoSaveGameCallback(GUI_BUTTON* btn, UINT32 reason);
+static void BtnOptGotoLoadGameCallback(GUI_BUTTON* btn, UINT32 reason);
+static void BtnOptQuitCallback(GUI_BUTTON* btn, UINT32 reason);
+static void BtnDoneCallback(GUI_BUTTON* btn, UINT32 reason);
 static void MusicSliderChangeCallBack(INT32 iNewValue);
-static void SelectedOptionTextRegionCallBack(MOUSE_REGION* pRegion, INT32 iReason);
-static void SelectedOptionTextRegionMovementCallBack(MOUSE_REGION* pRegion, INT32 reason);
-static void SelectedToggleBoxAreaRegionMovementCallBack(MOUSE_REGION* pRegion, INT32 reason);
+static void SelectedOptionTextRegionCallBack(MOUSE_REGION* pRegion, UINT32 iReason);
+static void SelectedOptionTextRegionMovementCallBack(MOUSE_REGION* pRegion, UINT32 reason);
+static void SelectedToggleBoxAreaRegionMovementCallBack(MOUSE_REGION* pRegion, UINT32 reason);
 static void SetOptionsScreenToggleBoxes(void);
 static void SoundFXSliderChangeCallBack(INT32 iNewValue);
 static void SpeechSliderChangeCallBack(INT32 iNewValue);
@@ -265,8 +267,7 @@ static void EnterOptionsScreen(void)
 	guiOptionBackGroundImage = AddVideoObjectFromFile(INTERFACEDIR "/optionscreenbase.sti");
 
 	// load button, title graphic and add it
-	const char* const ImageFile = GetMLGFilename(MLG_OPTIONHEADER);
-	guiOptionsAddOnImages = AddVideoObjectFromFile(ImageFile);
+	guiOptionsAddOnImages = AddVideoObjectFromFile(MLG_OPTIONHEADER);
 
 	giOptionsButtonImages = LoadButtonImage(INTERFACEDIR "/optionscreenaddons.sti", 2, 3);
 
@@ -511,14 +512,9 @@ static void SetOptionsExitScreen(ScreenID);
 
 static void GetOptionsScreenUserInput(void)
 {
-	SGPPoint MousePos;
-	GetMousePos(&MousePos);
-
 	InputAtom Event;
-	while( DequeueEvent( &Event ) )
+	while( DequeueSpecificEvent(&Event, KEYBOARD_EVENTS) )
 	{
-		MouseSystemHook(Event.usEvent, MousePos.iX, MousePos.iY);
-
 		if( !HandleTextInput( &Event ) && Event.usEvent == KEY_DOWN )
 		{
 			switch( Event.usParam )
@@ -553,9 +549,9 @@ static void SetOptionsExitScreen(ScreenID const uiExitScreen)
 }
 
 
-static void BtnOptGotoSaveGameCallback(GUI_BUTTON* btn, INT32 reason)
+static void BtnOptGotoSaveGameCallback(GUI_BUTTON* btn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		SetOptionsExitScreen( SAVE_LOAD_SCREEN );
 		gfSaveGame = TRUE;
@@ -563,9 +559,9 @@ static void BtnOptGotoSaveGameCallback(GUI_BUTTON* btn, INT32 reason)
 }
 
 
-static void BtnOptGotoLoadGameCallback(GUI_BUTTON* btn, INT32 reason)
+static void BtnOptGotoLoadGameCallback(GUI_BUTTON* btn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		SetOptionsExitScreen( SAVE_LOAD_SCREEN );
 		gfSaveGame = FALSE;
@@ -574,12 +570,12 @@ static void BtnOptGotoLoadGameCallback(GUI_BUTTON* btn, INT32 reason)
 
 
 static void ConfirmQuitToMainMenuMessageBoxCallBack(MessageBoxReturnValue);
-static void DoOptionsMessageBox(wchar_t const* zString, ScreenID uiExitScreen, MessageBoxFlags, MSGBOX_CALLBACK ReturnCallback);
+static void DoOptionsMessageBox(const ST::string& str, ScreenID uiExitScreen, MessageBoxFlags, MSGBOX_CALLBACK ReturnCallback);
 
 
-static void BtnOptQuitCallback(GUI_BUTTON* btn, INT32 reason)
+static void BtnOptQuitCallback(GUI_BUTTON* btn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		//Confirm the Exit to the main menu screen
 		DoOptionsMessageBox(zOptionsText[OPT_RETURN_TO_MAIN], OPTIONS_SCREEN, MSG_BOX_FLAG_YESNO, ConfirmQuitToMainMenuMessageBoxCallBack);
@@ -587,9 +583,9 @@ static void BtnOptQuitCallback(GUI_BUTTON* btn, INT32 reason)
 }
 
 
-static void BtnDoneCallback(GUI_BUTTON* btn, INT32 reason)
+static void BtnDoneCallback(GUI_BUTTON* btn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		SetOptionsExitScreen(guiPreviousOptionScreen);
 	}
@@ -599,14 +595,14 @@ static void BtnDoneCallback(GUI_BUTTON* btn, INT32 reason)
 static void HandleOptionToggle(UINT8 button_id, bool state, bool down, bool play_sound);
 
 
-static void BtnOptionsTogglesCallback(GUI_BUTTON* btn, INT32 reason)
+static void BtnOptionsTogglesCallback(GUI_BUTTON* btn, UINT32 reason)
 {
 	bool down;
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		down = false;
 	}
-	else if (reason & MSYS_CALLBACK_REASON_LBUTTON_DWN)
+	else if (reason & MSYS_CALLBACK_REASON_POINTER_DWN)
 	{
 		down = true;
 	}
@@ -628,7 +624,7 @@ static void HandleOptionToggle(UINT8 const button_id, bool const state, bool con
 	b.uiFlags &= ~BUTTON_CLICKED_ON;
 	b.uiFlags |= state ? BUTTON_CLICKED_ON : 0;
 
-	if (down) b.DrawCheckBoxOnOff(state);
+	if (down) b.Draw();
 
 	/* Check if the user is unselecting either the spech or subtitles toggle.
 	 * Make sure that at least one of the toggles is still enabled. */
@@ -674,19 +670,19 @@ static void MusicSliderChangeCallBack(INT32 iNewValue)
 }
 
 
-void DoOptionsMessageBoxWithRect(wchar_t const* const zString, ScreenID const uiExitScreen, MessageBoxFlags const usFlags, MSGBOX_CALLBACK const ReturnCallback, SGPBox const* const centering_rect)
+void DoOptionsMessageBoxWithRect(const ST::string& str, ScreenID uiExitScreen, MessageBoxFlags usFlags, MSGBOX_CALLBACK ReturnCallback, SGPBox const* centering_rect)
 {
 	// reset exit mode
 	gfExitOptionsDueToMessageBox = TRUE;
 
 	// do message box and return
-	DoMessageBox(MSG_BOX_BASIC_STYLE, zString, uiExitScreen, usFlags, ReturnCallback, centering_rect);
+	DoMessageBox(MSG_BOX_BASIC_STYLE, str, uiExitScreen, usFlags, ReturnCallback, centering_rect);
 }
 
 
-static void DoOptionsMessageBox(wchar_t const* const zString, ScreenID const uiExitScreen, MessageBoxFlags const usFlags, MSGBOX_CALLBACK const ReturnCallback)
+static void DoOptionsMessageBox(const ST::string& str, ScreenID uiExitScreen, MessageBoxFlags usFlags, MSGBOX_CALLBACK ReturnCallback)
 {
-	DoOptionsMessageBoxWithRect(zString, uiExitScreen, usFlags, ReturnCallback, NULL);
+	DoOptionsMessageBoxWithRect(str, uiExitScreen, usFlags, ReturnCallback, NULL);
 }
 
 
@@ -769,23 +765,23 @@ static void HandleSliderBarMovementSounds(void)
 }
 
 
-static void SelectedOptionTextRegionCallBack(MOUSE_REGION* pRegion, INT32 iReason)
+static void SelectedOptionTextRegionCallBack(MOUSE_REGION* pRegion, UINT32 iReason)
 {
 	UINT8	ubButton = (UINT8)MSYS_GetRegionUserData( pRegion, 0 );
 
-	if (iReason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (iReason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		HandleOptionToggle(ubButton, !gGameSettings.fOptions[ubButton], FALSE, true);
 		InvalidateRegion(pRegion->RegionTopLeftX, pRegion->RegionTopLeftY, pRegion->RegionBottomRightX, pRegion->RegionBottomRightY);
 	}
-	else if( iReason & MSYS_CALLBACK_REASON_LBUTTON_DWN )
+	else if( iReason & MSYS_CALLBACK_REASON_POINTER_DWN )
 	{
 		HandleOptionToggle(ubButton, gGameSettings.fOptions[ubButton], TRUE, true);
 	}
 }
 
 
-static void SelectedOptionTextRegionMovementCallBack(MOUSE_REGION* pRegion, INT32 reason)
+static void SelectedOptionTextRegionMovementCallBack(MOUSE_REGION* pRegion, UINT32 reason)
 {
 	INT8	bButton = (INT8)MSYS_GetRegionUserData( pRegion, 0 );
 
@@ -875,7 +871,7 @@ static void HandleHighLightedText(BOOLEAN fHighLight)
 }
 
 
-static void SelectedToggleBoxAreaRegionMovementCallBack(MOUSE_REGION* pRegion, INT32 reason)
+static void SelectedToggleBoxAreaRegionMovementCallBack(MOUSE_REGION* pRegion, UINT32 reason)
 {
 	if (reason & MSYS_CALLBACK_REASON_GAIN_MOUSE)
 	{

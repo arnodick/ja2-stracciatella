@@ -3,6 +3,8 @@
 
 #include "Types.h"
 
+#include <vector>
+
 
 #define MAXVOLUME 127
 
@@ -20,7 +22,7 @@ void InitializeSoundManager(void);
 void ShutdownSoundManager(void);
 
 
-UINT32 SoundPlayFromBuffer(INT16* pbuffer, UINT32 size, UINT32 volume, UINT32 pan, UINT32 loop, void (*end_callback)(void*), void* data);
+UINT32 SoundPlayFromSmackBuff(const char* name, UINT8 channels, UINT8 depth, UINT32 rate, std::vector<UINT8>& buf, UINT32 volume, UINT32 pan, UINT32 loop, void (*end_callback)(void*), void* data);
 
 
 /* Starts a sample playing. If the sample is not loaded in the cache, it will
@@ -29,16 +31,8 @@ UINT32 SoundPlayFromBuffer(INT16* pbuffer, UINT32 size, UINT32 volume, UINT32 pa
  * Returns: If the sound was started, it returns a sound ID unique to that
  *          instance of the sound If an error occured, SOUND_ERROR will be
  *          returned
- *
- * !!Note:  Can no longer play streamed files */
+ */
 UINT32 SoundPlay(const char* pFilename, UINT32 volume, UINT32 pan, UINT32 loop, void (*end_callback)(void*), void* data);
-
-/* The sample will be played as a double-buffered sample.
- *
- * Returns: If the sound was started, it returns a sound ID unique to that
- *          instance of the sound If an error occured, SOUND_ERROR will be
- *          returned */
-UINT32 SoundPlayStreamedFile(const char* pFilename, UINT32 volume, UINT32 pan, UINT32 loop, void (*end_callback)(void*), void* data);
 
 /* Registers a sample to be played randomly within the specified parameters.
  *
@@ -106,5 +100,6 @@ UINT32 SoundGetPosition(UINT32 uiSoundID);
 
 // Allows or disallows the startup of the sound hardware.
 void SoundEnableSound(BOOLEAN fEnable);
+bool IsSoundEnabled();
 
 #endif

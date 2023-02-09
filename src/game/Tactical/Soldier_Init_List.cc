@@ -30,9 +30,13 @@
 #include "AI.h"
 #include "NPC.h"
 #include "Scheduling.h"
-#include "MemMan.h"
 #include "FileMan.h"
-#include "slog/slog.h"
+#include "Logger.h"
+#include "MercProfile.h"
+
+#include "ContentManager.h"
+#include "GameInstance.h"
+#include "externalized/strategic/BloodCatSpawnsModel.h"
 
 BOOLEAN gfOriginalList = TRUE;
 
@@ -63,9 +67,9 @@ void KillSoldierInitList()
 
 SOLDIERINITNODE* AddBasicPlacementToSoldierInitList(BASIC_SOLDIERCREATE_STRUCT const& bp)
 {
-	SOLDIERINITNODE* const si = MALLOCZ(SOLDIERINITNODE);
+	SOLDIERINITNODE* const si = new SOLDIERINITNODE{};
 
-	si->pBasicPlacement  = MALLOC(BASIC_SOLDIERCREATE_STRUCT);
+	si->pBasicPlacement  = new BASIC_SOLDIERCREATE_STRUCT{};
 	*si->pBasicPlacement = bp;
 
 	// It is impossible to set up detailed placement stuff now. If there is any
@@ -105,12 +109,12 @@ void RemoveSoldierNodeFromInitList( SOLDIERINITNODE *pNode )
 		gMapInformation.ubNumIndividuals--;
 	if( pNode->pBasicPlacement )
 	{
-		MemFree( pNode->pBasicPlacement );
+		delete pNode->pBasicPlacement;
 		pNode->pBasicPlacement = NULL;
 	}
 	if( pNode->pDetailedPlacement )
 	{
-		MemFree( pNode->pDetailedPlacement );
+		delete pNode->pDetailedPlacement;
 		pNode->pDetailedPlacement = NULL;
 	}
 	if( pNode->pSoldier )
@@ -140,7 +144,7 @@ void RemoveSoldierNodeFromInitList( SOLDIERINITNODE *pNode )
 		pNode->prev->next = pNode->next;
 		pNode->next->prev = pNode->prev;
 	}
-	MemFree( pNode );
+	delete pNode;
 }
 
 
@@ -220,7 +224,7 @@ void LoadSoldiersFromMap(HWFILE const f, bool stracLinuxFormat)
 		{
 			// Add the static detailed placement information in the same newly created
 			// node as the basic placement.
-			SOLDIERCREATE_STRUCT* const sc = MALLOC(SOLDIERCREATE_STRUCT);
+			SOLDIERCREATE_STRUCT* const sc = new SOLDIERCREATE_STRUCT{};
 			ExtractSoldierCreateFromFile(f, sc, stracLinuxFormat);
 
 			if (sc->ubProfile != NO_PROFILE)
@@ -238,9 +242,8 @@ void LoadSoldiersFromMap(HWFILE const f, bool stracLinuxFormat)
 
 	if (cow_in_sector)
 	{
-		char str[40];
-		sprintf(str, SOUNDSDIR "/cowmoo%d.wav", Random(3) + 1);
-		PlayJA2SampleFromFile(str, MIDVOLUME, 1, MIDDLEPAN);
+		ST::string str = ST::format(SOUNDSDIR "/cowmoo{}.wav", Random(3) + 1);
+		PlayJA2SampleFromFile(str.c_str(), MIDVOLUME, 1, MIDDLEPAN);
 	}
 }
 
@@ -423,7 +426,7 @@ static void SortSoldierInitList(void)
 bool AddPlacementToWorld(SOLDIERINITNODE* const init)
 {
 	SOLDIERCREATE_STRUCT dp;
-	memset(&dp, 0, sizeof(dp));
+	dp = SOLDIERCREATE_STRUCT{};
 
 	// First check if this guy has a profile and if so check his location such that it matches
 	if (SOLDIERCREATE_STRUCT* const init_dp = init->pDetailedPlacement)
@@ -434,9 +437,7 @@ bool AddPlacementToWorld(SOLDIERINITNODE* const init)
 			if (pid != NO_PROFILE)
 			{
 				MERCPROFILESTRUCT& p = GetProfile(pid);
-				if (p.sSectorX != gWorldSectorX)  return false;
-				if (p.sSectorY != gWorldSectorY)  return false;
-				if (p.bSectorZ != gbWorldSectorZ) return false;
+				if (p.sSector != gWorldSector)  return false;
 				if (p.ubMiscFlags & (PROFILE_MISC_FLAG_RECRUITED | PROFILE_MISC_FLAG_EPCACTIVE)) return false;
 				if (p.bLife == 0)                 return false;
 				if (p.fUseProfileInsertionInfo)   return false;
@@ -450,9 +451,7 @@ bool AddPlacementToWorld(SOLDIERINITNODE* const init)
 				// Check to see if Hamous is here and not recruited. If so, add truck
 				MERCPROFILESTRUCT& hamous = GetProfile(HAMOUS);
 				// If not here, do not add
-				if (hamous.sSectorX != gWorldSectorX) return true;
-				if (hamous.sSectorY != gWorldSectorY) return true;
-				if (hamous.bSectorZ != 0)             return true;
+				if (hamous.sSector != gWorldSector) return true;
 				// Check to make sure he isn't recruited.
 				if (hamous.ubMiscFlags & PROFILE_MISC_FLAG_RECRUITED) return true;
 			}
@@ -469,10 +468,11 @@ bool AddPlacementToWorld(SOLDIERINITNODE* const init)
 		if (dp.bTeam == CIV_TEAM)
 		{
 			// Quest-related overrides
-			INT16 const x = gWorldSectorX;
-			INT16 const y = gWorldSectorY;
-			INT8  const z = gbWorldSectorZ;
-			if (x == 5 && y == MAP_ROW_C)
+			static const SGPSector kingpin(5, MAP_ROW_C);
+			static const SGPSector queen(3, MAP_ROW_P);
+			static const SGPSector tixa(TIXA_SECTOR_X, TIXA_SECTOR_Y);
+			static const SGPSector kids(13, MAP_ROW_C);
+			if (gWorldSector == kingpin)
 			{
 				// Kinpin guys might be guarding Tony
 				if (dp.ubCivilianGroup == KINGPIN_CIV_GROUP && (
@@ -519,7 +519,7 @@ bool AddPlacementToWorld(SOLDIERINITNODE* const init)
 					}
 				}
 			}
-			else if (x == 3 && y == MAP_ROW_P && z == 0 && !gfInMeanwhile)
+			else if (gWorldSector == queen && !gfInMeanwhile)
 			{
 				// Special civilian setup for queen's palace
 				if (gubFact[FACT_QUEEN_DEAD])
@@ -540,11 +540,11 @@ bool AddPlacementToWorld(SOLDIERINITNODE* const init)
 					}
 				}
 			}
-			else if (x == TIXA_SECTOR_X && y == TIXA_SECTOR_Y && z == 0)
+			else if (gWorldSector == tixa)
 			{
 				// Tixa prison, once liberated, should not have any civs without
 				// profiles unless they are kids
-				if (!StrategicMap[TIXA_SECTOR_X + TIXA_SECTOR_Y * MAP_WORLD_X].fEnemyControlled &&
+				if (!StrategicMap[tixa.AsStrategicIndex()].fEnemyControlled &&
 					dp.ubProfile == NO_PROFILE &&
 					dp.bBodyType != HATKIDCIV &&
 					dp.bBodyType != KIDCIV)
@@ -553,7 +553,7 @@ bool AddPlacementToWorld(SOLDIERINITNODE* const init)
 					return true;
 				}
 			}
-			else if (x == 13 && y == MAP_ROW_C && z == 0)
+			else if (gWorldSector == kids)
 			{
 				if (CheckFact(FACT_KIDS_ARE_FREE, 0) &&
 					(dp.bBodyType == HATKIDCIV || dp.bBodyType == KIDCIV))
@@ -584,8 +584,7 @@ bool AddPlacementToWorld(SOLDIERINITNODE* const init)
 	}
 	else
 	{
-		SLOGD(DEBUG_TAG_SOLDIER,
-			"Failed to create soldier using TacticalCreateSoldier within AddPlacementToWorld");
+		SLOGD("Failed to create soldier using TacticalCreateSoldier within AddPlacementToWorld");
 		return false;
 	}
 }
@@ -913,7 +912,7 @@ void AddSoldierInitListEnemyDefenceSoldiers( UINT8 ubTotalAdmin, UINT8 ubTotalTr
 				ubTotalAdmin--;
 			}
 			else
-				SLOGE(DEBUG_TAG_ASSERTS, "AddSoldierInitListEnemyDefenceSoldiers: something wrong with random");
+				SLOGA("AddSoldierInitListEnemyDefenceSoldiers: something wrong with random");
 			if( AddPlacementToWorld( curr ) )
 			{
 				ubMaxNum--;
@@ -1020,11 +1019,11 @@ void AddSoldierInitListEnemyDefenceSoldiers( UINT8 ubTotalAdmin, UINT8 ubTotalTr
 					ubTotalAdmin--;
 				}
 				else
-					SLOGE(DEBUG_TAG_ASSERTS, "AddSoldierInitListEnemyDefenceSoldiers: something wrong with random");
+					SLOGA("AddSoldierInitListEnemyDefenceSoldiers: something wrong with random");
 				/* DISABLE THE OVERRIDE FOR NOW...
 				if( curr->pDetailedPlacement )
 				{ //delete the detailed placement information.
-					MemFree( curr->pDetailedPlacement );
+					delete curr->pDetailedPlacement;
 					curr->pDetailedPlacement = NULL;
 					curr->pBasicPlacement->fDetailedPlacement = FALSE;
 				}
@@ -1107,7 +1106,7 @@ void AddSoldierInitListMilitia( UINT8 ubNumGreen, UINT8 ubNumRegs, UINT8 ubNumEl
 				if( curr->pDetailedPlacement )
 				{
 					//delete the detailed placement information.
-					MemFree( curr->pDetailedPlacement );
+					delete curr->pDetailedPlacement;
 					curr->pDetailedPlacement = NULL;
 					curr->pBasicPlacement->fDetailedPlacement = FALSE;
 					RandomizeRelativeLevel( &( curr->pBasicPlacement->bRelativeAttributeLevel ), curr->pBasicPlacement->ubSoldierClass );
@@ -1255,15 +1254,14 @@ void AddSoldierInitListMilitia( UINT8 ubNumGreen, UINT8 ubNumRegs, UINT8 ubNumEl
 					ubNumGreen--;
 				}
 				else
-					SLOGE(DEBUG_TAG_ASSERTS,
-						"AddSoldierInitListMilitia: something wrong with random");
+					SLOGE("AddSoldierInitListMilitia: something wrong with random");
 				curr->pBasicPlacement->bTeam = MILITIA_TEAM;
 				curr->pBasicPlacement->bOrders = STATIONARY;
 				curr->pBasicPlacement->bAttitude = (INT8) Random( MAXATTITUDES );
 				if( curr->pDetailedPlacement )
 				{
 					//delete the detailed placement information.
-					MemFree( curr->pDetailedPlacement );
+					delete curr->pDetailedPlacement;
 					curr->pDetailedPlacement = NULL;
 					curr->pBasicPlacement->fDetailedPlacement = FALSE;
 					RandomizeRelativeLevel( &( curr->pBasicPlacement->bRelativeAttributeLevel), curr->pBasicPlacement->ubSoldierClass );
@@ -1312,7 +1310,7 @@ void AddSoldierInitListCreatures(BOOLEAN fQueen, UINT8 ubNumLarvae, UINT8 ubNumI
 		}
 		if( !fQueen )
 		{
-			SLOGE(DEBUG_TAG_SOLDIER, "Couldn't place the queen.");
+			SLOGE("Couldn't place the queen.");
 		}
 	}
 
@@ -1405,10 +1403,10 @@ void AddSoldierInitListCreatures(BOOLEAN fQueen, UINT8 ubNumLarvae, UINT8 ubNumI
 					curr->pBasicPlacement->bBodyType = ADULTFEMALEMONSTER;
 				}
 				else
-					SLOGE(DEBUG_TAG_ASSERTS, "AddSoldierInitListCreatures: something wrong with random");
+					SLOGA("AddSoldierInitListCreatures: something wrong with random");
 				if( curr->pDetailedPlacement )
 				{ //delete the detailed placement information.
-					MemFree( curr->pDetailedPlacement );
+					delete curr->pDetailedPlacement;
 					curr->pDetailedPlacement = NULL;
 					curr->pBasicPlacement->fDetailedPlacement = FALSE;
 				}
@@ -1486,7 +1484,7 @@ void EvaluateDeathEffectsToSoldierInitList(SOLDIERTYPE const& s)
 	if (s.bTeam == MILITIA_TEAM) return;
 	SOLDIERINITNODE* const curr = FindSoldierInitNodeBySoldier(s);
 	if (!curr || !curr->pDetailedPlacement) return;
-	MemFree(curr->pDetailedPlacement);
+	delete curr->pDetailedPlacement;
 	curr->pDetailedPlacement = 0;
 	curr->pSoldier           = 0;
 }
@@ -1502,7 +1500,7 @@ void SaveSoldierInitListLinks(HWFILE const hfile)
 	//count the number of soldier init nodes...
 	CFOR_EACH_SOLDIERINITNODE(curr) ++ubSlots;
 	//...and save it.
-	FileWrite(hfile, &ubSlots, 1);
+	hfile->write(&ubSlots, 1);
 	//Now, go through each node, and save just the ubSoldierID, if that soldier is alive.
 	FOR_EACH_SOLDIERINITNODE(curr)
 	{
@@ -1510,8 +1508,8 @@ void SaveSoldierInitListLinks(HWFILE const hfile)
 		{
 			curr->ubSoldierID = 0;
 		}
-		FileWrite(hfile, &curr->ubNodeID,    1);
-		FileWrite(hfile, &curr->ubSoldierID, 1);
+		hfile->write(&curr->ubNodeID,    1);
+		hfile->write(&curr->ubSoldierID, 1);
 	}
 }
 
@@ -1519,13 +1517,13 @@ void SaveSoldierInitListLinks(HWFILE const hfile)
 void LoadSoldierInitListLinks(HWFILE const f)
 {
 	UINT8 slots;
-	FileRead(f, &slots, 1);
+	f->read(&slots, 1);
 	for (UINT8 n = slots; n != 0; --n)
 	{
 		UINT8 node_id;
 		UINT8 soldier_id;
-		FileRead(f, &node_id,    1);
-		FileRead(f, &soldier_id, 1);
+		f->read(&node_id,    1);
+		f->read(&soldier_id, 1);
 
 		if (!(gTacticalStatus.uiFlags & LOADING_SAVED_GAME)) continue;
 
@@ -1553,12 +1551,12 @@ void AddSoldierInitListBloodcats()
 	SECTORINFO *pSector;
 	UINT8 ubSectorID;
 
-	if( gbWorldSectorZ )
+	if (gWorldSector.z)
 	{
 		return; //no bloodcats underground.
 	}
 
-	ubSectorID = (UINT8)SECTOR( gWorldSectorX, gWorldSectorY );
+	ubSectorID = gWorldSector.AsByte();
 	pSector = &SectorInfo[ ubSectorID ];
 
 	if( !pSector->bBloodCatPlacements )
@@ -1577,8 +1575,9 @@ void AddSoldierInitListBloodcats()
 				bBloodCatPlacements++;
 			}
 		}
-		if( bBloodCatPlacements != pSector->bBloodCatPlacements &&
-			ubSectorID != SEC_I16 && ubSectorID != SEC_N5 )
+
+		auto spawns = GCM->getBloodCatSpawnsOfSector( ubSectorID );
+		if( bBloodCatPlacements != pSector->bBloodCatPlacements && spawns == NULL )
 		{
 			pSector->bBloodCatPlacements = bBloodCatPlacements;
 			pSector->bBloodCats = -1;
@@ -1701,15 +1700,16 @@ static SOLDIERINITNODE* FindSoldierInitListNodeByProfile(UINT8 ubProfile)
 // doing it this way is the GetProfile(i).fUseProfileInsertionInfo.
 void AddProfilesUsingProfileInsertionData()
 {
-	for (INT32 i = FIRST_RPC; i != PROF_HUMMER; ++i)
+	for (const MercProfile* prof : GCM->listMercProfiles())
 	{
+		if (!prof->isNPCorRPC() && !prof->isVehicle())   continue;
+
 		// Perform various checks to make sure the soldier is actually in the same
 		// sector, alive and so on. More importantly, the flag to use profile
 		// insertion data must be set.
-		MERCPROFILESTRUCT const& p = GetProfile(i);
-		if (p.sSectorX != gWorldSectorX)                 continue;
-		if (p.sSectorY != gWorldSectorY)                 continue;
-		if (p.bSectorZ != gbWorldSectorZ)                continue;
+		ProfileID                i = prof->getID();
+		MERCPROFILESTRUCT const& p = prof->getStruct();
+		if (p.sSector != gWorldSector)                   continue;
 		if (p.ubMiscFlags & PROFILE_MISC_FLAG_RECRUITED) continue;
 		if (p.ubMiscFlags & PROFILE_MISC_FLAG_EPCACTIVE) continue;
 		if (p.bLife == 0)                                continue;
@@ -1720,12 +1720,10 @@ void AddProfilesUsingProfileInsertionData()
 		{
 			// Create a new soldier, as this one doesn't exist
 			SOLDIERCREATE_STRUCT c;
-			memset(&c, 0, sizeof(c));
+			c = SOLDIERCREATE_STRUCT{};
 			c.bTeam     = CIV_TEAM;
 			c.ubProfile = i;
-			c.sSectorX  = gWorldSectorX;
-			c.sSectorY  = gWorldSectorY;
-			c.bSectorZ  = gbWorldSectorZ;
+			c.sSector  = gWorldSector;
 			ps = TacticalCreateSoldier(c);
 			if (!ps) continue; // XXX exception?
 		}
@@ -1734,7 +1732,7 @@ void AddProfilesUsingProfileInsertionData()
 		// Insert the soldier
 		s.ubStrategicInsertionCode = p.ubStrategicInsertionCode;
 		s.usStrategicInsertionData = p.usStrategicInsertionData;
-		UpdateMercInSector(s, gWorldSectorX, gWorldSectorY, gbWorldSectorZ);
+		UpdateMercInSector(s, gWorldSector);
 
 		// check action ID values
 		if (p.ubQuoteRecord != 0)
@@ -1789,13 +1787,13 @@ void AddProfilesNotUsingProfileInsertionData()
 void NewWayOfLoadingEnemySoldierInitListLinks(HWFILE const f)
 {
 	UINT8 slots;
-	FileRead(f, &slots, 1);
+	f->read(&slots, 1);
 	for (UINT8 n = slots; n != 0; --n)
 	{
 		UINT8 node_id;
 		UINT8 soldier_id;
-		FileRead(f, &node_id,    1);
-		FileRead(f, &soldier_id, 1);
+		f->read(&node_id,    1);
+		f->read(&soldier_id, 1);
 
 		if (!(gTacticalStatus.uiFlags & LOADING_SAVED_GAME)) continue;
 
@@ -1816,13 +1814,13 @@ void NewWayOfLoadingEnemySoldierInitListLinks(HWFILE const f)
 void NewWayOfLoadingCivilianInitListLinks(HWFILE const f)
 {
 	UINT8 slots;
-	FileRead(f, &slots, 1);
+	f->read(&slots, 1);
 	for (UINT8 n = slots; n != 0; --n)
 	{
 		UINT8 node_id;
 		UINT8 soldier_id;
-		FileRead(f, &node_id,    1);
-		FileRead(f, &soldier_id, 1);
+		f->read(&node_id,    1);
+		f->read(&soldier_id, 1);
 
 		if (!(gTacticalStatus.uiFlags & LOADING_SAVED_GAME)) continue;
 
@@ -1842,14 +1840,14 @@ void NewWayOfLoadingCivilianInitListLinks(HWFILE const f)
 
 void StripEnemyDetailedPlacementsIfSectorWasPlayerLiberated()
 {
-	if (!gfWorldLoaded || gbWorldSectorZ != 0)
+	if (!gfWorldLoaded || gWorldSector.z != 0)
 	{
 		// No world loaded or underground.  Underground sectors don't matter seeing
 		// enemies (not creatures) never rejuvenate underground.
 		return;
 	}
 
-	SECTORINFO const& sector = SectorInfo[SECTOR(gWorldSectorX, gWorldSectorY)];
+	SECTORINFO const& sector = SectorInfo[gWorldSector.AsByte()];
 	if (sector.uiTimeLastPlayerLiberated == 0)
 	{
 		// The player has never owned the sector.
@@ -1866,7 +1864,7 @@ void StripEnemyDetailedPlacementsIfSectorWasPlayerLiberated()
 		if (bp.bTeam != ENEMY_TEAM) continue;
 		if (!si.pDetailedPlacement) continue;
 
-		MemFree(si.pDetailedPlacement);
+		delete si.pDetailedPlacement;
 		si.pDetailedPlacement = 0;
 		bp.fDetailedPlacement = FALSE;
 		bp.fPriorityExistance = FALSE;

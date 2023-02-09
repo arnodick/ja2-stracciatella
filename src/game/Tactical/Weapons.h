@@ -13,7 +13,8 @@ struct CalibreModel;
 
 #define BAD_DODGE_POSITION_PENALTY			20
 
-#define GUN_BARREL_RANGE_BONUS				100
+#define GUN_BARREL_RANGE_BONUS				(gamepolicy(range_bonus_barrel_extender))
+#define SILENCER_RANGE_PENALTY				(gamepolicy(range_penalty_silencer))
 
 // Special deaths can only occur within a limited distance to the target
 #define MAX_DISTANCE_FOR_MESSY_DEATH			7
@@ -120,7 +121,7 @@ enum
 #define PUNCH_REAL_DAMAGE_PORTION		4
 
 #define AIM_BONUS_SAME_TARGET			10 // chance-to-hit bonus (in %)
-#define AIM_BONUS_PER_AP			10 // chance-to-hit bonus (in %) for aim
+#define AIM_BONUS_PER_AP			gamepolicy(aim_bonus_per_std_ap)
 #define AIM_BONUS_CROUCHING			10
 #define AIM_BONUS_PRONE				20
 #define AIM_BONUS_TWO_HANDED_PISTOL		5
@@ -159,6 +160,11 @@ struct EXPLOSIVETYPE
 	UINT8 ubAnimationID; // Animation enum to use
 };
 
+enum class FireWeaponResult
+{
+	FAILED, FIRED, FIREABLE, JAMMED, UNJAMMED
+};
+
 //GLOBALS
 
 extern ARMOURTYPE    const Armour[];
@@ -166,27 +172,29 @@ extern EXPLOSIVETYPE const Explosive[];
 
 INT8 EffectiveArmour(const OBJECTTYPE* pObj);
 extern INT8 ArmourVersusExplosivesPercent( SOLDIERTYPE * pSoldier );
-extern BOOLEAN FireWeapon( SOLDIERTYPE *pSoldier , INT16 sTargetGridNo );
+FireWeaponResult FireWeapon(SOLDIERTYPE * pSoldier, GridNo sTargetGridNo);
 void WeaponHit(SOLDIERTYPE* target, UINT16 usWeaponIndex, INT16 sDamage, INT16 sBreathLoss, UINT16 usDirection, INT16 sXPos, INT16 sYPos, INT16 sZPos, INT16 sRange, SOLDIERTYPE* attacker, UINT8 ubSpecial, UINT8 ubHitLocation);
-void StructureHit(BULLET* b, INT16 sXPos, INT16 sYPos, INT16 sZPos, UINT16 usStructureID, INT32 iImpact, BOOLEAN fStopped);
+void StructureHit(BULLET* b, UINT16 usStructureID, INT32 iImpact, BOOLEAN fStopped);
 extern void WindowHit( INT16 sGridNo, UINT16 usStructureID, BOOLEAN fBlowWindowSouth, BOOLEAN fLargeForce );
 extern INT32 BulletImpact( SOLDIERTYPE *pFirer, SOLDIERTYPE * pTarget, UINT8 ubHitLocation, INT32 iImpact, INT16 sHitBy, UINT8 * pubSpecial );
 BOOLEAN InRange(const SOLDIERTYPE* pSoldier, INT16 sGridNo);
 void ShotMiss(const BULLET* b);
-extern UINT32 CalcChanceToHitGun(SOLDIERTYPE *pSoldier, UINT16 sGridNo, UINT8 ubAimTime, UINT8 ubAimPos );
+extern UINT32 CalcChanceToHitGun(SOLDIERTYPE *pSoldier, UINT16 sGridNo, UINT8 ubAimTime, UINT8 ubAimPos, BOOLEAN fModify);
 extern UINT32 AICalcChanceToHitGun(SOLDIERTYPE *pSoldier, UINT16 sGridNo, UINT8 ubAimTime, UINT8 ubAimPos );
-extern UINT32 CalcChanceToPunch(SOLDIERTYPE *pAttacker, SOLDIERTYPE * pDefender, UINT8 ubAimTime);
+extern UINT32 CalcChanceToPunch(SOLDIERTYPE *pAttacker, SOLDIERTYPE * pDefender, UINT8 ubAimTime, bool skipSafetyCheck = false);
 extern UINT32 CalcChanceToStab(SOLDIERTYPE * pAttacker,SOLDIERTYPE *pDefender, UINT8 ubAimTime);
 void ReloadWeapon(SOLDIERTYPE*, UINT8 inv_pos);
 bool IsGunBurstCapable(SOLDIERTYPE const*, UINT8 inv_pos);
+void EnsureConsistentWeaponMode(SOLDIERTYPE*);
+bool HasLauncher(SOLDIERTYPE const*);
 extern INT32 CalcBodyImpactReduction( UINT8 ubAmmoType, UINT8 ubHitLocation );
 INT32 TotalArmourProtection(SOLDIERTYPE&, UINT8 ubHitLocation, INT32 iImpact, UINT8 ubAmmoType);
 INT8 ArmourPercent(const SOLDIERTYPE* pSoldier);
 
 extern void GetTargetWorldPositions( SOLDIERTYPE *pSoldier, INT16 sTargetGridNo, FLOAT *pdXPos, FLOAT *pdYPos, FLOAT *pdZPos );
 
-extern BOOLEAN	OKFireWeapon( SOLDIERTYPE *pSoldier );
-extern BOOLEAN CheckForGunJam( SOLDIERTYPE * pSoldier );
+FireWeaponResult OKFireWeapon(SOLDIERTYPE *);
+FireWeaponResult CheckForGunJam(SOLDIERTYPE *);
 
 INT32 CalcMaxTossRange(const SOLDIERTYPE* pSoldier, UINT16 usItem, BOOLEAN fArmed);
 extern UINT32 CalcThrownChanceToHit(SOLDIERTYPE *pSoldier, INT16 sGridNo, UINT8 ubAimTime, UINT8 ubAimPos );

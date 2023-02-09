@@ -2,9 +2,12 @@
 #define _SOLDIER_CREATE_H
 
 #include "JA2Types.h"
+#include "Observable.h"
 #include "Overhead_Types.h"
 #include "Item_Types.h"
 #include "Soldier_Control.h"
+
+#include <string_theory/string>
 
 
 //Kris:  SERIALIZING INFORMATION
@@ -48,8 +51,7 @@ struct SOLDIERCREATE_STRUCT
 	BOOLEAN fCopyProfileItemsOver;
 
 	//Location information
-	INT16   sSectorX;
-	INT16   sSectorY;
+	SGPSector sSector;
 	INT8    bDirection;
 	INT16   sInsertionGridNo;
 
@@ -81,10 +83,10 @@ struct SOLDIERCREATE_STRUCT
 	OBJECTTYPE Inv[ NUM_INV_SLOTS ];
 
 	//Palette information for soldiers.
-	PaletteRepID HeadPal;
-	PaletteRepID PantsPal;
-	PaletteRepID VestPal;
-	PaletteRepID SkinPal;
+	ST::string HeadPal;
+	ST::string PantsPal;
+	ST::string VestPal;
+	ST::string SkinPal;
 
 	//Waypoint information for patrolling
 	INT16   sPatrolGrid[ MAXPATROLGRIDS ];
@@ -92,13 +94,11 @@ struct SOLDIERCREATE_STRUCT
 
 	//Kris: Additions November 16, 1997 (padding down to 129 from 150)
 	BOOLEAN fVisible;
-	wchar_t name[ 10 ];
+	ST::string name;
 
 	UINT8   ubSoldierClass; //army, administrator, elite
 
 	BOOLEAN fOnRoof;
-
-	INT8    bSectorZ;
 
 	UINT8   ubCivilianGroup;
 
@@ -109,6 +109,7 @@ struct SOLDIERCREATE_STRUCT
 	BOOLEAN fHasKeys;
 };
 
+extern Observable<SOLDIERTYPE*> OnCreateSoldier;
 
 //Original functions currently used throughout the game.
 void TacticalRemoveSoldier(SOLDIERTYPE&);
@@ -131,7 +132,7 @@ SOLDIERTYPE* TacticalCreateCreature( INT8 bCreatureBodyType );
 void RandomizeRelativeLevel( INT8 *pbRelLevel, UINT8 ubSoldierClass );
 
 // get the pythag. distance from the passed sector to the palace..
-UINT8 GetPythDistanceFromPalace( INT16 sSectorX, INT16 sSectorY );
+UINT8 GetPythDistanceFromPalace(const SGPSector& sSector);
 
 
 //These following functions are currently used exclusively by the editor.
@@ -198,6 +199,8 @@ void InternalTacticalRemoveSoldier(SOLDIERTYPE&, BOOLEAN fRemoveVehicle);
 void OkayToUpgradeEliteToSpecialProfiledEnemy( SOLDIERCREATE_STRUCT *pp );
 extern BOOLEAN gfProfiledEnemyAdded; //needs to be saved (used by the above function)
 
-void TrashAllSoldiers(void);
+// If team is -1, delete all tactical soldiers
+// Otherwise delete all soldiers of the given team
+void TrashAllSoldiers(int team = -1);
 
 #endif

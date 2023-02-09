@@ -2,26 +2,25 @@
 #include "FileMan.h"
 #include "Gap.h"
 #include "LoadSaveData.h"
-#include "MemMan.h"
 #include "SoundMan.h"
 #include "Sound_Control.h"
 
 #include "ContentManager.h"
 #include "GameInstance.h"
 
-#include "slog/slog.h"
+#include "Logger.h"
 
-static void AudioGapListInit(const char* zSoundFile, AudioGapList* pGapList)
+static void AudioGapListInit(const ST::string& zSoundFile, AudioGapList* pGapList)
 {
 	// This procedure will load in the appropriate .gap file, corresponding to
 	// the .wav file in szSoundEffects indexed by uiSampleNum.  The procedure
 	// will then allocate and load in the AUDIO_GAP information, while counting
 	// the number of elements loaded
 
-	SLOGD(DEBUG_TAG_GAP, "File is %s", zSoundFile);
+	SLOGD("File is {}", zSoundFile);
 
 	// strip .wav and change to .gap
-	std::string sFileName(FileMan::replaceExtension(std::string(zSoundFile), ".gap"));
+	ST::string sFileName(FileMan::replaceExtension(zSoundFile, "gap"));
 
 	try
 	{
@@ -29,20 +28,20 @@ static void AudioGapListInit(const char* zSoundFile, AudioGapList* pGapList)
 
 		// gap file exists
 		// now read in the AUDIO_GAPs
-		const UINT32 size = FileGetSize(f);
+		const UINT32 size = f->size();
 
 		const UINT32 count = size / 8;
 		if (count > 0)
 		{
-			BYTE *data = MALLOCN(BYTE, size);
-			FileRead(f, data, size);
+			BYTE *data = new BYTE[size]{};
+			f->read(data, size);
 
-			AUDIO_GAP* const gaps  = MALLOCN(AUDIO_GAP, count);
+			AUDIO_GAP* const gaps  = new AUDIO_GAP[count]{};
 
 			pGapList->gaps = gaps;
 			pGapList->end  = gaps + count;
 
-			const BYTE* d = data;
+			DataReader d{data};
 			for (UINT32 i = 0; i < count; ++i)
 			{
 				UINT32 start;
@@ -54,12 +53,13 @@ static void AudioGapListInit(const char* zSoundFile, AudioGapList* pGapList)
 				gaps[i].start = start;
 				gaps[i].end   = end;
 
-				SLOGD(DEBUG_TAG_GAP, "Gap Start %d and Ends %d", start, end);
+				SLOGD("Gap Start {} and Ends {}", start, end);
 			}
+			Assert(d.getConsumed() == size);
 
-			SLOGD(DEBUG_TAG_GAP, "gap list started from file %s", sFileName.c_str());
+			SLOGD("gap list started from file {}", sFileName);
 
-			MemFree(data);
+			delete[] data;
 			return;
 		}
 	}
@@ -73,10 +73,10 @@ static void AudioGapListInit(const char* zSoundFile, AudioGapList* pGapList)
 void AudioGapListDone(AudioGapList* pGapList)
 {
 	// Free the array and nullify the pointers in the AudioGapList
-	MemFree(pGapList->gaps);
+	delete[] pGapList->gaps;
 	pGapList->gaps = NULL;
 	pGapList->end  = NULL;
-	SLOGD(DEBUG_TAG_GAP, "Audio Gap List Deleted");
+	SLOGD("Audio Gap List Deleted");
 }
 
 
@@ -100,7 +100,7 @@ BOOLEAN PollAudioGap(UINT32 uiSampleNum, AudioGapList* pGapList)
 	if (i == NULL) return FALSE;
 
 	const UINT32 time = SoundGetPosition(uiSampleNum);
-	SLOGD(DEBUG_TAG_GAP, "Sound Sample Time is %d", time);
+	SLOGD("Sound Sample Time is {}", time);
 
 	// Check to see if we have fallen behind.  If so, catch up
 	const AUDIO_GAP* const end = pGapList->end;
@@ -113,7 +113,7 @@ BOOLEAN PollAudioGap(UINT32 uiSampleNum, AudioGapList* pGapList)
 	if (i->start < time && time < i->end)
 	{
 		// we are within the time frame
-		SLOGD(DEBUG_TAG_GAP, "Gap Started at %d", time);
+		SLOGD("Gap Started at {}", time);
 		return TRUE;
 	}
 	else
@@ -123,11 +123,11 @@ BOOLEAN PollAudioGap(UINT32 uiSampleNum, AudioGapList* pGapList)
 }
 
 
-UINT32 PlayJA2GapSample(const char* zSoundFile, UINT32 ubVolume, UINT32 ubLoops, UINT32 uiPan, AudioGapList* pData)
+UINT32 PlayJA2GapSample(const ST::string& zSoundFile, UINT32 ubVolume, UINT32 ubLoops, UINT32 uiPan, AudioGapList* pData)
 {
 	// Setup Gap Detection, if it is not null
 	if (pData != NULL) AudioGapListInit(zSoundFile, pData);
 
 	const UINT32 vol = CalculateSpeechVolume(ubVolume);
-	return SoundPlayStreamedFile(zSoundFile, vol, uiPan, ubLoops, NULL, NULL);
+	return SoundPlay(zSoundFile.c_str(), vol, uiPan, ubLoops, NULL, NULL);
 }

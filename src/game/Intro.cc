@@ -4,13 +4,15 @@
 #include "English.h"
 #include "FileMan.h"
 #include "Game_Init.h"
+#include "GameRes.h"
+#include "GameSettings.h"
 #include "Input.h"
+#include "Cursors.h"
 #include "Intro.h"
 #include "Local.h"
 #include "Line.h"
 #include "MainMenuScreen.h"
 #include "MouseSystem.h"
-#include "Multi_Language_Graphic_Utils.h"
 #include "Music_Control.h"
 #include "ContentMusic.h"
 #include "Render_Dirty.h"
@@ -22,14 +24,13 @@
 #include "VSurface.h"
 #include "UILayout.h"
 
-#include "GameSettings.h"
-#include "MessageBoxScreen.h"
 
 static BOOLEAN gfIntroScreenEntry = TRUE;
 static BOOLEAN gfIntroScreenExit;
 
 static ScreenID guiIntroExitScreen = INTRO_SCREEN;
 
+static MOUSE_REGION gIntroBackgroundRegion;
 
 extern	BOOLEAN	gfDoneWithSplashScreen;
 
@@ -129,7 +130,7 @@ ScreenID IntroScreenHandle(void)
 static INT32 GetNextIntroVideo(UINT32 uiCurrentVideo);
 static void PrepareToExitIntroScreen(void);
 static void StartPlayingIntroFlic(INT32 iIndexOfFlicToPlay);
-
+static void BackgroundRegionCallback(MOUSE_REGION* region, UINT32 reason);
 
 static void EnterIntroScreen(void)
 {
@@ -139,6 +140,8 @@ static void EnterIntroScreen(void)
 
 
 	SetCurrentCursorFromDatabase( VIDEO_NO_CURSOR );
+
+	MSYS_DefineRegion(&gIntroBackgroundRegion, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, MSYS_PRIORITY_NORMAL, CURSOR_NORMAL, MSYS_NO_CALLBACK, BackgroundRegionCallback);
 
 	// Don't play music....
 	SetMusicMode( MUSIC_NONE );
@@ -169,22 +172,19 @@ static void ExitIntroScreen(void)
 {
 	//shutdown smaker
 	SmkShutdown();
+
+	MSYS_RemoveRegion( &gIntroBackgroundRegion );
 }
 
 
 static void HandleIntroScreen(void)
 {
-	BOOLEAN	fFlicStillPlaying = FALSE;
-
 	//if we are exiting this screen, this frame, dont update the screen
 	if( gfIntroScreenExit )
 		return;
 
 	//handle smaker each frame
-	fFlicStillPlaying = SmkPollFlics();
-
-	//if the flic is not playing
-	if( !fFlicStillPlaying )
+	while (!SmkPollFlics())
 	{
 		INT32 iNextVideoToPlay = -1;
 
@@ -198,6 +198,7 @@ static void HandleIntroScreen(void)
 		{
 			PrepareToExitIntroScreen();
 			giCurrentIntroBeingPlayed = -1;
+			break;
 		}
 	}
 
@@ -207,14 +208,9 @@ static void HandleIntroScreen(void)
 
 static void GetIntroScreenUserInput(void)
 {
-	SGPPoint MousePos;
-	GetMousePos(&MousePos);
-
 	InputAtom Event;
-	while( DequeueEvent( &Event ) )
+	while( DequeueSpecificEvent(&Event, KEYBOARD_EVENTS) )
 	{
-		MouseSystemHook(Event.usEvent, MousePos.iX, MousePos.iY);
-
 		if( Event.usEvent == KEY_UP )
 		{
 			switch( Event.usParam )
@@ -224,10 +220,10 @@ static void GetIntroScreenUserInput(void)
 			}
 		}
 	}
+}
 
-	// if the user presses either mouse button
-	if( gfLeftButtonState || gfRightButtonState )
-	{
+static void BackgroundRegionCallback(MOUSE_REGION* region, UINT32 reason) {
+	if (reason & MSYS_CALLBACK_REASON_ANY_BUTTON_DWN) {
 		//advance to the next flic
 		SmkCloseFlic( gpSmackFlic );
 	}
@@ -353,15 +349,10 @@ static void StartPlayingIntroFlic(INT32 iIndexOfFlicToPlay)
 		//start playing a flic
 		gpSmackFlic = SmkPlayFlic( gpzSmackerFileNames[ iIndexOfFlicToPlay ], STD_SCREEN_X, STD_SCREEN_Y , TRUE );
 
-		if( gpSmackFlic != NULL )
-		{
-			giCurrentIntroBeingPlayed = iIndexOfFlicToPlay;
-		}
-		else
-		{
-			//do a check
-			DoScreenIndependantMessageBox(gzIntroScreen, MSG_BOX_FLAG_OK, CDromEjectionErrorMessageBoxCallBack);
-		}
+		// Urban Chaos support: UC contains some quasi-empty smacker videos for which
+		// SmkPlayFlic returns nullptr. Ignoring this result will cause us to continue
+		// with the next video.
+		giCurrentIntroBeingPlayed = iIndexOfFlicToPlay;
 	}
 }
 

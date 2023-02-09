@@ -38,7 +38,7 @@ struct SMOKEEFFECT
 SmokeEffectKind GetSmokeEffectOnTile(INT16 sGridNo, INT8 bLevel);
 
 // Decays all smoke effects...
-void DecaySmokeEffects( UINT32 uiTime );
+void DecaySmokeEffects(UINT32 uiTime, bool updateSightings);
 
 // Add smoke to gridno
 // ( Replacement algorithm uses distance away )
@@ -52,8 +52,8 @@ void NewSmokeEffect(INT16 sGridNo, UINT16 usItem, INT8 bLevel, SOLDIERTYPE* owne
 void LoadSmokeEffectsFromLoadGameFile(HWFILE, UINT32 savegame_version);
 
 
-void SaveSmokeEffectsToMapTempFile(INT16 sMapX, INT16 sMapY, INT8 bMapZ);
-void LoadSmokeEffectsFromMapTempFile(INT16 sMapX, INT16 sMapY, INT8 bMapZ);
+void SaveSmokeEffectsToMapTempFile(const SGPSector& sector);
+void LoadSmokeEffectsFromMapTempFile(const SGPSector& sector);
 
 void ResetSmokeEffects(void);
 

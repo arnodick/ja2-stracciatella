@@ -15,6 +15,10 @@
 #include "ContentManager.h"
 #include "GameInstance.h"
 
+#include <string_theory/string>
+
+#include <algorithm>
+
 #define AIM_ALUMNI_NAME_FILE		BINARYDATADIR "/alumname.edt"
 #define AIM_ALUMNI_FILE			BINARYDATADIR "/alumni.edt"
 
@@ -124,12 +128,12 @@ void EnterInitAimArchives()
 	gfDrawPopUpBox=FALSE;
 	gfDestroyPopUpBox = FALSE;
 
-	memset( &AimArchivesSubPagesVisitedFlag, 0, 3);
+	std::fill_n(AimArchivesSubPagesVisitedFlag, 3, 0);
 	AimArchivesSubPagesVisitedFlag[0] = TRUE;
 }
 
 
-static void BtnAlumniPageButtonCallback(GUI_BUTTON* btn, INT32 reason);
+static void BtnAlumniPageButtonCallback(GUI_BUTTON* btn, UINT32 reason);
 static void DisableAimArchiveButton(void);
 static void InitAlumniFaceRegions(void);
 
@@ -235,7 +239,7 @@ void RenderAimArchives()
 
 	// Draw the mug shot border and face
 	INT32 const start    = gubPageNum * MAX_NUMBER_OLD_MERCS_ON_PAGE;
-	INT32 const n_faces  = MIN(OLD_MERCS_COUNT - start, MAX_NUMBER_OLD_MERCS_ON_PAGE);
+	INT32 const n_faces  = std::min(OLD_MERCS_COUNT - start, MAX_NUMBER_OLD_MERCS_ON_PAGE);
 	INT32       face_idx = start;
 	for (INT32 i = 0; i != n_faces; ++i, ++face_idx)
 	{
@@ -246,8 +250,7 @@ void RenderAimArchives()
 		BltVideoObject(FRAME_BUFFER, guiAlumniFrame, 0,        x,     y);     // Blt the alumni frame background
 
 		// Display the merc's name
-		wchar_t sText[AIM_ALUMNI_NAME_SIZE];
-		GCM->loadEncryptedString(AIM_ALUMNI_NAME_FILE, sText, AIM_ALUMNI_NAME_SIZE * face_idx, AIM_ALUMNI_NAME_SIZE);
+		ST::string sText = GCM->loadEncryptedString(AIM_ALUMNI_NAME_FILE, AIM_ALUMNI_NAME_SIZE * face_idx, AIM_ALUMNI_NAME_SIZE);
 		DrawTextToScreen(sText, x + AIM_ALUMNI_NAME_OFFSET_X, y + AIM_ALUMNI_NAME_OFFSET_Y, AIM_ALUMNI_NAME_WIDTH, AIM_ALUMNI_NAME_FONT, AIM_ALUMNI_NAME_COLOR, FONT_MCOLOR_BLACK, CENTER_JUSTIFIED);
 	}
 
@@ -263,9 +266,9 @@ void RenderAimArchives()
 }
 
 
-static void SelectAlumniFaceRegionCallBack(MOUSE_REGION* pRegion, INT32 iReason)
+static void SelectAlumniFaceRegionCallBack(MOUSE_REGION* pRegion, UINT32 iReason)
 {
-	if (iReason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (iReason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		gfDrawPopUpBox = TRUE;
 		gfReDrawScreen = TRUE;
@@ -279,11 +282,11 @@ static void ChangingAimArchiveSubPage(UINT8 ubSubPageNumber);
 static void ResetAimArchiveButtons(void);
 
 
-static void BtnAlumniPageButtonCallback(GUI_BUTTON *btn, INT32 reason)
+static void BtnAlumniPageButtonCallback(GUI_BUTTON *btn, UINT32 reason)
 {
 	UINT8	const ubRetValue = btn->GetUserData();
 
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		RemoveAimAlumniFaceRegion();
 		ChangingAimArchiveSubPage(ubRetValue);
@@ -326,9 +329,8 @@ static void DisplayAlumniOldMercPopUp(void)
 	UINT16 usStringPixLength;
 
 	//Load the description
-	wchar_t sDesc[AIM_ALUMNI_DECRIPTION_SIZE];
 	uiStartLoc = AIM_ALUMNI_FILE_RECORD_SIZE * gubDrawOldMerc + AIM_ALUMNI_FULL_NAME_SIZE;
-	GCM->loadEncryptedString(AIM_ALUMNI_FILE, sDesc, uiStartLoc, AIM_ALUMNI_DECRIPTION_SIZE);
+	ST::string sDesc = GCM->loadEncryptedString(AIM_ALUMNI_FILE, uiStartLoc, AIM_ALUMNI_DECRIPTION_SIZE);
 
 	usStringPixLength = StringPixLength( sDesc, AIM_ALUMNI_POPUP_FONT);
 	ubNumDescLines = (UINT8) (usStringPixLength / AIM_POPUP_TEXT_WIDTH);
@@ -361,9 +363,8 @@ static void DisplayAlumniOldMercPopUp(void)
 	BltVideoObject(FRAME_BUFFER, guiOldAim,   gubDrawOldMerc, AIM_ALUMNI_FACE_PANEL_X + 1, AIM_ALUMNI_FACE_PANEL_Y + 1);
 
 	//Load and display the name
-	wchar_t	sName[AIM_ALUMNI_FULL_NAME_SIZE];
 	uiStartLoc = AIM_ALUMNI_FILE_RECORD_SIZE * gubDrawOldMerc;
-	GCM->loadEncryptedString(AIM_ALUMNI_FILE, sName, uiStartLoc, AIM_ALUMNI_FULL_NAME_SIZE);
+	ST::string sName = GCM->loadEncryptedString(AIM_ALUMNI_FILE, uiStartLoc, AIM_ALUMNI_FULL_NAME_SIZE);
 
 	DrawTextToScreen(sName, AIM_ALUMNI_POPUP_NAME_X, AIM_ALUMNI_POPUP_NAME_Y, 0, AIM_ALUMNI_POPUP_NAME_FONT, AIM_ALUMNI_POPUP_NAME_COLOR, FONT_MCOLOR_BLACK, LEFT_JUSTIFIED);
 
@@ -380,14 +381,14 @@ static void InitAlumniFaceRegions(void)
 	gfFaceMouseRegionsActive = TRUE;
 
 	INT32 const start    = gubPageNum * MAX_NUMBER_OLD_MERCS_ON_PAGE;
-	INT32 const n_faces  = MIN(OLD_MERCS_COUNT - start, MAX_NUMBER_OLD_MERCS_ON_PAGE);
+	INT32 const n_faces  = std::min(OLD_MERCS_COUNT - start, MAX_NUMBER_OLD_MERCS_ON_PAGE);
 	INT32       face_idx = start;
 	UINT16 const w        = AIM_ALUMNI_ALUMNI_FACE_WIDTH;
 	UINT16 const h        = AIM_ALUMNI_ALUMNI_FACE_HEIGHT;
-	for (size_t i = 0; i != n_faces; ++i, ++face_idx)
+	for (INT32 i = 0; i != n_faces; ++i, ++face_idx)
 	{
-		UINT16        const x = i % AIM_ALUMNI_NUM_FACE_COLS * AIM_ALUMNI_GRID_OFFSET_X + AIM_ALUMNI_START_GRID_X;
-		UINT16        const y = i / AIM_ALUMNI_NUM_FACE_COLS * AIM_ALUMNI_GRID_OFFSET_Y + AIM_ALUMNI_START_GRID_Y;
+		UINT16        const x = static_cast<UINT16>(i % AIM_ALUMNI_NUM_FACE_COLS * AIM_ALUMNI_GRID_OFFSET_X + AIM_ALUMNI_START_GRID_X);
+		UINT16        const y = static_cast<UINT16>(i / AIM_ALUMNI_NUM_FACE_COLS * AIM_ALUMNI_GRID_OFFSET_Y + AIM_ALUMNI_START_GRID_Y);
 		MOUSE_REGION* const r = &gMercAlumniFaceMouseRegions[i];
 		MSYS_DefineRegion(r, x, y, x + w, y + h, MSYS_PRIORITY_HIGH, CURSOR_WWW, MSYS_NO_CALLBACK, SelectAlumniFaceRegionCallBack);
 		MSYS_SetRegionUserData(r, 0, face_idx);
@@ -401,7 +402,7 @@ static void RemoveAimAlumniFaceRegion(void)
 	gfFaceMouseRegionsActive = FALSE;
 
 	size_t const start    = gubPageNum * MAX_NUMBER_OLD_MERCS_ON_PAGE;
-	size_t const n_faces  = MIN(OLD_MERCS_COUNT - start, MAX_NUMBER_OLD_MERCS_ON_PAGE);
+	size_t const n_faces  = std::min(OLD_MERCS_COUNT - start, size_t(MAX_NUMBER_OLD_MERCS_ON_PAGE));
 	for (size_t i = 0; i < n_faces; ++i)
 	{
 		MSYS_RemoveRegion(&gMercAlumniFaceMouseRegions[i]);
@@ -409,7 +410,7 @@ static void RemoveAimAlumniFaceRegion(void)
 }
 
 
-static void SelectAlumniDoneRegionCallBack(MOUSE_REGION* pRegion, INT32 iReason);
+static void SelectAlumniDoneRegionCallBack(MOUSE_REGION* pRegion, UINT32 iReason);
 
 
 static void CreateDestroyDoneMouseRegion(UINT16 usPosY)
@@ -434,9 +435,9 @@ static void CreateDestroyDoneMouseRegion(UINT16 usPosY)
 }
 
 
-static void SelectAlumniDoneRegionCallBack(MOUSE_REGION* pRegion, INT32 iReason)
+static void SelectAlumniDoneRegionCallBack(MOUSE_REGION* pRegion, UINT32 iReason)
 {
-	if (iReason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (iReason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		gfDestroyPopUpBox = TRUE;
 		gfDrawPopUpBox = FALSE;

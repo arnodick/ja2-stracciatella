@@ -1,35 +1,34 @@
-#include "Font_Control.h"
-#include "MapScreen.h"
-#include "Message.h"
 #include "Quests.h"
+
+#include "Arms_Dealer_Init.h"
+#include "Boxing.h"
+#include "Campaign.h"
+#include "ContentManager.h"
+#include "FactParamsModel.h"
+#include "FileMan.h"
 #include "Game_Clock.h"
-#include "StrategicMap.h"
-#include "Soldier_Profile.h"
-#include "LaptopSave.h"
-#include "Handle_Items.h"
-#include "Overhead.h"
+#include "GameInstance.h"
+#include "GameSettings.h"
+#include "History.h"
 #include "Interface_Dialogue.h"
 #include "Isometric_Utils.h"
-#include "Render_Fun.h"
-#include "History.h"
+#include "Items.h"
 #include "Map_Screen_Helicopter.h"
-#include "Strategic_Mines.h"
-#include "Boxing.h"
-#include "Campaign_Types.h"
-#include "Strategic_Town_Loyalty.h"
+#include "MapScreen.h"
+#include "Overhead.h"
 #include "Queen_Command.h"
-#include "Campaign.h"
-#include "GameSettings.h"
-#include "Arms_Dealer_Init.h"
-#include "Random.h"
-#include "Assignments.h"
+#include "Render_Fun.h"
+#include "ShippingDestinationModel.h"
+#include "Soldier_Profile.h"
+#include "Strategic_Event_Handler.h"
+#include "Strategic_Mines.h"
+#include "Strategic_Town_Loyalty.h"
+#include "StrategicMap.h"
 #include "Tactical_Save.h"
 #include "Town_Militia.h"
-#include "Strategic_Event_Handler.h"
-#include "FileMan.h"
-#include "Items.h"
-#include "BobbyRMailOrder.h"
 
+#include <algorithm>
+#include <iterator>
 
 #define TESTQUESTS
 
@@ -64,11 +63,10 @@ void SetFactFalse(Fact const usFact)
 
 static bool CheckForNewShipment(void)
 {
-	if (gWorldSectorX  != BOBBYR_SHIPPING_DEST_SECTOR_X) return false;
-	if (gWorldSectorY  != BOBBYR_SHIPPING_DEST_SECTOR_Y) return false;
-	if (gbWorldSectorZ != BOBBYR_SHIPPING_DEST_SECTOR_Z) return false;
+	auto shippingDest = GCM->getPrimaryShippingDestination();
+	if (gWorldSector != shippingDest->deliverySector) return false;
 
-	ITEM_POOL const* const ip = GetItemPool(BOBBYR_SHIPPING_DEST_GRIDNO, 0);
+	ITEM_POOL const* const ip = GetItemPool(shippingDest->deliverySectorGridNo, 0);
 	return ip && !IsItemPoolVisible(ip);
 }
 
@@ -388,21 +386,17 @@ static BOOLEAN CheckPlayerHasHead(void)
 }
 
 
-static BOOLEAN CheckNPCSector(UINT8 ubProfileID, INT16 sSectorX, INT16 sSectorY, INT8 bSectorZ)
+static BOOLEAN CheckNPCSector(UINT8 ubProfileID, const SGPSector& sector)
 {
 	const SOLDIERTYPE* const pSoldier = FindSoldierByProfileIDOnPlayerTeam(ubProfileID);
 	if( pSoldier )
 	{
-		if (pSoldier->sSectorX == sSectorX &&
-			pSoldier->sSectorY == sSectorY &&
-			pSoldier->bSectorZ == bSectorZ )
+		if (pSoldier->sSector == sector)
 		{
 			return( TRUE );
 		}
 	}
-	else if (gMercProfiles[ubProfileID].sSectorX == sSectorX &&
-		gMercProfiles[ubProfileID].sSectorY == sSectorY &&
-		gMercProfiles[ubProfileID].bSectorZ == bSectorZ )
+	else if (gMercProfiles[ubProfileID].sSector == sector)
 	{
 		return( TRUE );
 	}
@@ -490,7 +484,8 @@ static bool InTownSectorWithTrainingLoyalty(UINT8 const sector)
 BOOLEAN CheckFact(Fact const usFact, UINT8 const ubProfileID)
 {
 	INT8 bTown = -1;
-
+	auto factParams = GCM->getFactParams(usFact);
+	SGPSector sector;
 
 	switch( usFact )
 	{
@@ -548,7 +543,8 @@ BOOLEAN CheckFact(Fact const usFact, UINT8 const ubProfileID)
 			gubFact[FACT_IRA_TALKING] = (gubSrcSoldierProfile == IRA);
 			break;
 		case FACT_IRA_UNHIRED_AND_ALIVE:
-			if ( gMercProfiles[ IRA ].bMercStatus != MERC_IS_DEAD && CheckNPCSector( IRA, 10, 1, 1) && !(gMercProfiles[IRA].ubMiscFlags & PROFILE_MISC_FLAG_RECRUITED) )
+			sector = SGPSector(10, 1, 1);
+			if (gMercProfiles[IRA].bMercStatus != MERC_IS_DEAD && CheckNPCSector(IRA, sector) && !(gMercProfiles[IRA].ubMiscFlags & PROFILE_MISC_FLAG_RECRUITED) )
 			{
 				gubFact[FACT_IRA_UNHIRED_AND_ALIVE] = TRUE;
 			}
@@ -572,19 +568,22 @@ BOOLEAN CheckFact(Fact const usFact, UINT8 const ubProfileID)
 			break;
 
 		case FACT_PLAYER_HAS_HEAD_AND_CARMEN_IN_SAN_MONA:
-			gubFact[usFact] = (CheckNPCSector( CARMEN, 5, MAP_ROW_C, 0 ) && CheckPlayerHasHead() );
+			sector = SGPSector(5, MAP_ROW_C, 0);
+			gubFact[usFact] = CheckNPCSector(CARMEN, sector) && CheckPlayerHasHead();
 			break;
 
 		case FACT_PLAYER_HAS_HEAD_AND_CARMEN_IN_CAMBRIA:
-			gubFact[usFact] = (CheckNPCSector( CARMEN, 9, MAP_ROW_G, 0 ) && CheckPlayerHasHead() );
+			sector = SGPSector(9, MAP_ROW_G, 0);
+			gubFact[usFact] = CheckNPCSector(CARMEN, sector) && CheckPlayerHasHead();
 			break;
 
 		case FACT_PLAYER_HAS_HEAD_AND_CARMEN_IN_DRASSEN:
-			gubFact[usFact] = (CheckNPCSector( CARMEN, 13, MAP_ROW_C, 0 ) && CheckPlayerHasHead() );
+			sector = SGPSector(13, MAP_ROW_C, 0);
+			gubFact[usFact] = CheckNPCSector(CARMEN, sector) && CheckPlayerHasHead();
 			break;
 
 		case FACT_NPC_OWED_MONEY:
-			gubFact[FACT_NPC_OWED_MONEY] = (gMercProfiles[ubProfileID].iBalance < 0);
+			gubFact[FACT_NPC_OWED_MONEY] = ubProfileID < NUM_PROFILES && gMercProfiles[ubProfileID].iBalance < 0;
 			break;
 
 		case FACT_FATHER_DRUNK:
@@ -615,15 +614,16 @@ BOOLEAN CheckFact(Fact const usFact, UINT8 const ubProfileID)
 			gubFact[FACT_BRENDA_DEAD] = (GetProfile(BRENDA).bMercStatus == MERC_IS_DEAD);
 			break;
 		case FACT_NPC_IS_ENEMY:
-			gubFact[FACT_NPC_IS_ENEMY] = CheckNPCIsEnemy( ubProfileID ) || gMercProfiles[ ubProfileID ].ubMiscFlags2 & PROFILE_MISC_FLAG2_NEEDS_TO_SAY_HOSTILE_QUOTE;
+			gubFact[FACT_NPC_IS_ENEMY] = (ubProfileID < NUM_PROFILES) && (CheckNPCIsEnemy(ubProfileID) ||
+				gMercProfiles[ubProfileID].ubMiscFlags2 & PROFILE_MISC_FLAG2_NEEDS_TO_SAY_HOSTILE_QUOTE);
 			break;
 			/*
 		case FACT_SKYRIDER_CLOSE_TO_CHOPPER:
-			SetUpHelicopterForPlayer( 13, MAP_ROW_B );
+			SetUpHelicopterForPlayer(SGPSector(13, MAP_ROW_B));
 			break;
 			*/
 		case FACT_SPIKE_AT_DOOR:
-			gubFact[FACT_SPIKE_AT_DOOR] = CheckNPCAt(SPIKE, 9817);
+			gubFact[FACT_SPIKE_AT_DOOR] = CheckNPCAt(SPIKE, factParams->getGridNo(9817));
 			break;
 		case FACT_WOUNDED_MERCS_NEARBY:
 			gubFact[usFact] = (NumWoundedMercsNearby( ubProfileID ) > 0);
@@ -635,7 +635,7 @@ BOOLEAN CheckFact(Fact const usFact, UINT8 const ubProfileID)
 			gubFact[usFact] = (NumWoundedMercsNearby( ubProfileID ) > 1);
 			break;
 		case FACT_HANS_AT_SPOT:
-			gubFact[usFact] = CheckNPCAt(HANS, 13523);
+			gubFact[usFact] = CheckNPCAt(HANS, factParams->getGridNo(13523));
 			break;
 		case FACT_MULTIPLE_MERCS_CLOSE:
 			gubFact[usFact] = ( NumMercsNear( ubProfileID, 3 ) > 1 );
@@ -665,10 +665,12 @@ BOOLEAN CheckFact(Fact const usFact, UINT8 const ubProfileID)
 			gubFact[usFact] = CheckTalkerFemale();
 			break;
 		case FACT_CARMEN_IN_C5:
-			gubFact[usFact] = CheckNPCSector(CARMEN, 5, MAP_ROW_C, 0);
+			sector = SGPSector(5, MAP_ROW_C, 0);
+			gubFact[usFact] = CheckNPCSector(CARMEN, sector);
 			break;
 		case FACT_JOEY_IN_C5:
-			gubFact[usFact] = CheckNPCSector(JOEY, 5, MAP_ROW_C, 0);
+			sector = SGPSector(5, MAP_ROW_C, 0);
+			gubFact[usFact] = CheckNPCSector(JOEY, sector);
 			break;
 		case FACT_JOEY_NEAR_MARTHA:
 			gubFact[usFact] = CheckNPCWithin(JOEY, MARTHA, 5) && (CheckGuyVisible(MARTHA, JOEY) || CheckGuyVisible(JOEY, MARTHA));
@@ -683,19 +685,22 @@ BOOLEAN CheckFact(Fact const usFact, UINT8 const ubProfileID)
 			gubFact[usFact] = (gTacticalStatus.fCivGroupHostile[ REBEL_CIV_GROUP ] == CIV_GROUP_HOSTILE);
 			break;
 		case FACT_CURRENT_SECTOR_G9:
-			gubFact[usFact] = ( gWorldSectorX == 9 && gWorldSectorY == MAP_ROW_G && gbWorldSectorZ == 0 );
+			sector = SGPSector(9, MAP_ROW_G, 0);
+			gubFact[usFact] = gWorldSector == sector;
 			break;
 		case FACT_CURRENT_SECTOR_C5:
-			gubFact[usFact] = ( gWorldSectorX == 5 && gWorldSectorY == MAP_ROW_C && gbWorldSectorZ == 0 );
+			sector = SGPSector(5, MAP_ROW_C, 0);
+			gubFact[usFact] = gWorldSector == sector;
 			break;
 		case FACT_CURRENT_SECTOR_C13:
-			gubFact[usFact] = ( gWorldSectorX == 13 && gWorldSectorY == MAP_ROW_C && gbWorldSectorZ == 0 );
+			sector = SGPSector(13, MAP_ROW_C, 0);
+			gubFact[usFact] = gWorldSector == sector;
 			break;
 		case FACT_CARMEN_HAS_TEN_THOUSAND:
 			gubFact[usFact] = (GetProfile(CARMEN).uiMoney >= 10000);
 			break;
 		case FACT_SLAY_IN_SECTOR:
-			gubFact[usFact] = (gMercProfiles[ SLAY ].sSectorX == gWorldSectorX && gMercProfiles[ SLAY ].sSectorY == gWorldSectorY && gMercProfiles[ SLAY ].bSectorZ == gbWorldSectorZ );
+			gubFact[usFact] = gMercProfiles[SLAY].sSector == gWorldSector;
 			break;
 		case FACT_SLAY_HIRED_AND_WORKED_FOR_48_HOURS:
 			gubFact[usFact] = ( ( gMercProfiles[ SLAY ].ubMiscFlags & PROFILE_MISC_FLAG_RECRUITED ) && ( gMercProfiles[ SLAY ].usTotalDaysServed > 1 ) );
@@ -733,7 +738,8 @@ BOOLEAN CheckFact(Fact const usFact, UINT8 const ubProfileID)
 			gubFact[usFact] = IsHisMineAtMaxProduction( ubProfileID );
 			break;
 		case FACT_DYNAMO_IN_J9:
-			gubFact[usFact] = CheckNPCSector( DYNAMO, 9, MAP_ROW_J, 0 ) && NumEnemiesInAnySector( 9, 10, 0 );
+			sector = SGPSector(9, MAP_ROW_J);
+			gubFact[usFact] = CheckNPCSector(DYNAMO, sector) && NumEnemiesInAnySector(sector);
 			break;
 		case FACT_DYNAMO_ALIVE:
 			gubFact[usFact] = ( gMercProfiles[ DYNAMO ].bMercStatus != MERC_IS_DEAD );
@@ -779,7 +785,7 @@ BOOLEAN CheckFact(Fact const usFact, UINT8 const ubProfileID)
 			break;
 
 		case FACT_PLAYER_BEEN_TO_K4:
-			gubFact[usFact] = GetSectorFlagStatus(4, MAP_ROW_K, 1, SF_ALREADY_VISITED);
+			gubFact[usFact] = GetSectorFlagStatus(SGPSector(4, MAP_ROW_K, 1), SF_ALREADY_VISITED);
 			break;
 
 		case FACT_WARDEN_DEAD:
@@ -791,7 +797,7 @@ BOOLEAN CheckFact(Fact const usFact, UINT8 const ubProfileID)
 			break;
 
 		case FACT_LOYALTY_OKAY:
-			bTown = gMercProfiles[ ubProfileID ].bTown;
+			bTown = ubProfileID < NUM_PROFILES ? gMercProfiles[ubProfileID].bTown : BLANK_SECTOR;
 			if( ( bTown != BLANK_SECTOR ) && gTownLoyalty[ bTown ].fStarted && gfTownUsesLoyalty[ bTown ])
 			{
 				gubFact[usFact] = ( (gTownLoyalty[ bTown ].ubRating >= LOYALTY_LOW_THRESHOLD ) && (gTownLoyalty[ bTown ].ubRating < LOYALTY_OK_THRESHOLD ) );
@@ -803,7 +809,7 @@ BOOLEAN CheckFact(Fact const usFact, UINT8 const ubProfileID)
 			break;
 
 		case FACT_LOYALTY_LOW:
-			bTown = gMercProfiles[ ubProfileID ].bTown;
+			bTown = ubProfileID < NUM_PROFILES ? gMercProfiles[ubProfileID].bTown : BLANK_SECTOR;
 			if( ( bTown != BLANK_SECTOR ) && gTownLoyalty[ bTown ].fStarted && gfTownUsesLoyalty[ bTown ])
 			{
 				// if Skyrider, ignore low loyalty until he has monologues, and wait at least a day since the latest monologue to avoid a hot/cold attitude
@@ -824,7 +830,7 @@ BOOLEAN CheckFact(Fact const usFact, UINT8 const ubProfileID)
 			break;
 
 		case FACT_LOYALTY_HIGH:
-			bTown = gMercProfiles[ ubProfileID ].bTown;
+			bTown = ubProfileID < NUM_PROFILES ? gMercProfiles[ubProfileID].bTown : BLANK_SECTOR;
 			if( ( bTown != BLANK_SECTOR ) && gTownLoyalty[ bTown ].fStarted && gfTownUsesLoyalty[ bTown ])
 			{
 				gubFact[usFact] = (gTownLoyalty[ gMercProfiles[ ubProfileID ].bTown ].ubRating >= LOYALTY_HIGH_THRESHOLD );
@@ -896,19 +902,19 @@ BOOLEAN CheckFact(Fact const usFact, UINT8 const ubProfileID)
 			break;
 
 		case FACT_FIRST_BARTENDER:
-			gubFact[ usFact ] = ( gMercProfiles[ubProfileID].bNPCData == 1 || (gMercProfiles[ubProfileID].bNPCData == 0 && CountBartenders() == 0) );
+			gubFact[ usFact ] = ubProfileID < NUM_PROFILES && (gMercProfiles[ubProfileID].bNPCData == 1 || (gMercProfiles[ubProfileID].bNPCData == 0 && CountBartenders() == 0));
 			break;
 
 		case FACT_SECOND_BARTENDER:
-			gubFact[ usFact ] = ( gMercProfiles[ubProfileID].bNPCData == 2 || (gMercProfiles[ubProfileID].bNPCData == 0 && CountBartenders() == 1) );
+			gubFact[ usFact ] = ubProfileID < NUM_PROFILES && (gMercProfiles[ubProfileID].bNPCData == 2 || (gMercProfiles[ubProfileID].bNPCData == 0 && CountBartenders() == 1));
 			break;
 
 		case FACT_THIRD_BARTENDER:
-			gubFact[ usFact ] = ( gMercProfiles[ubProfileID].bNPCData == 3 || (gMercProfiles[ubProfileID].bNPCData == 0 && CountBartenders() == 2) );
+			gubFact[ usFact ] = ubProfileID < NUM_PROFILES && (gMercProfiles[ubProfileID].bNPCData == 3 || (gMercProfiles[ubProfileID].bNPCData == 0 && CountBartenders() == 2));
 			break;
 
 		case FACT_FOURTH_BARTENDER:
-			gubFact[ usFact ] = ( gMercProfiles[ubProfileID].bNPCData == 4 || (gMercProfiles[ubProfileID].bNPCData == 0 && CountBartenders() == 3) );
+			gubFact[ usFact ] = ubProfileID < NUM_PROFILES && (gMercProfiles[ubProfileID].bNPCData == 4 || (gMercProfiles[ubProfileID].bNPCData == 0 && CountBartenders() == 3));
 			break;
 
 		case FACT_NPC_NOT_UNDER_FIRE:
@@ -916,7 +922,8 @@ BOOLEAN CheckFact(Fact const usFact, UINT8 const ubProfileID)
 			break;
 
 		case FACT_KINGPIN_NOT_IN_OFFICE:
-			gubFact[usFact] = !( gWorldSectorX == 5 && gWorldSectorY == MAP_ROW_D && NPCInRoomRange( KINGPIN, 30, 39 ) );
+			sector = SGPSector(5, MAP_ROW_D);
+			gubFact[usFact] = !(gWorldSector == sector && NPCInRoomRange(KINGPIN, 30, 39));
 			// 30 to 39
 			break;
 
@@ -941,7 +948,8 @@ BOOLEAN CheckFact(Fact const usFact, UINT8 const ubProfileID)
 			break;
 
 		case FACT_TONY_IN_BUILDING:
-			gubFact[usFact] = CheckNPCSector( TONY, 5, MAP_ROW_C, 0 ) && NPCInRoom( TONY, 50 );
+			sector = SGPSector(5, MAP_ROW_C, 0);
+			gubFact[usFact] = CheckNPCSector(TONY, sector) && NPCInRoom(TONY, 50);
 			break;
 
 		case FACT_SHANK_SPEAKING:
@@ -985,7 +993,7 @@ BOOLEAN CheckFact(Fact const usFact, UINT8 const ubProfileID)
 			break;
 
 		case FACT_NPC_BANDAGED_TODAY:
-			gubFact[usFact] = (gMercProfiles[ ubProfileID ].ubMiscFlags2 & PROFILE_MISC_FLAG2_BANDAGED_TODAY) != 0;
+			gubFact[usFact] = ubProfileID < NUM_PROFILES && (gMercProfiles[ ubProfileID ].ubMiscFlags2 & PROFILE_MISC_FLAG2_BANDAGED_TODAY) != 0;
 			break;
 
 		case FACT_PLAYER_IN_SAME_ROOM:
@@ -996,39 +1004,39 @@ BOOLEAN CheckFact(Fact const usFact, UINT8 const ubProfileID)
 			gubFact[usFact] = SpokenToHeadMiner( MINE_DRASSEN );
 			break;
 		case FACT_PLAYER_IN_CONTROLLED_DRASSEN_MINE:
-			gubFact[usFact] = ( GetIdOfMineForSector( gWorldSectorX, gWorldSectorY, gbWorldSectorZ ) == MINE_DRASSEN && !(StrategicMap[ gWorldSectorX + MAP_WORLD_X * gWorldSectorY ].fEnemyControlled) );
+			gubFact[usFact] = GetIdOfMineForSector(gWorldSector) == MINE_DRASSEN && !StrategicMap[gWorldSector.AsStrategicIndex()].fEnemyControlled;
 			break;
 		case FACT_PLAYER_SPOKE_TO_CAMBRIA_MINER:
 			gubFact[usFact] = SpokenToHeadMiner( MINE_CAMBRIA );
 			break;
 		case FACT_PLAYER_IN_CONTROLLED_CAMBRIA_MINE:
-			gubFact[usFact] = ( GetIdOfMineForSector( gWorldSectorX, gWorldSectorY, gbWorldSectorZ ) == MINE_CAMBRIA && !(StrategicMap[ gWorldSectorX + MAP_WORLD_X * gWorldSectorY ].fEnemyControlled) );
+			gubFact[usFact] = (GetIdOfMineForSector(gWorldSector) == MINE_CAMBRIA && !(StrategicMap[gWorldSector.AsStrategicIndex()].fEnemyControlled) );
 			break;
 		case FACT_PLAYER_SPOKE_TO_CHITZENA_MINER:
 			gubFact[usFact] = SpokenToHeadMiner( MINE_CHITZENA );
 			break;
 		case FACT_PLAYER_IN_CONTROLLED_CHITZENA_MINE:
-			gubFact[usFact] = ( GetIdOfMineForSector( gWorldSectorX, gWorldSectorY, gbWorldSectorZ ) == MINE_CHITZENA && !(StrategicMap[ gWorldSectorX + MAP_WORLD_X * gWorldSectorY ].fEnemyControlled) );
+			gubFact[usFact] = (GetIdOfMineForSector(gWorldSector) == MINE_CHITZENA && !(StrategicMap[gWorldSector.AsStrategicIndex()].fEnemyControlled) );
 			break;
 		case FACT_PLAYER_SPOKE_TO_ALMA_MINER:
 			gubFact[usFact] = SpokenToHeadMiner( MINE_ALMA );
 			break;
 		case FACT_PLAYER_IN_CONTROLLED_ALMA_MINE:
-			gubFact[usFact] = ( GetIdOfMineForSector( gWorldSectorX, gWorldSectorY, gbWorldSectorZ ) == MINE_ALMA && !(StrategicMap[ gWorldSectorX + MAP_WORLD_X * gWorldSectorY ].fEnemyControlled) );
+			gubFact[usFact] = (GetIdOfMineForSector(gWorldSector) == MINE_ALMA && !(StrategicMap[gWorldSector.AsStrategicIndex()].fEnemyControlled) );
 			break;
 		case FACT_PLAYER_SPOKE_TO_GRUMM_MINER:
 			gubFact[usFact] = SpokenToHeadMiner( MINE_GRUMM );
 			break;
 		case FACT_PLAYER_IN_CONTROLLED_GRUMM_MINE:
-			gubFact[usFact] = ( GetIdOfMineForSector( gWorldSectorX, gWorldSectorY, gbWorldSectorZ ) == MINE_GRUMM && !(StrategicMap[ gWorldSectorX + MAP_WORLD_X * gWorldSectorY ].fEnemyControlled) );
+			gubFact[usFact] = (GetIdOfMineForSector(gWorldSector) == MINE_GRUMM && !(StrategicMap[gWorldSector.AsStrategicIndex()].fEnemyControlled) );
 			break;
 
 		case FACT_ENOUGH_LOYALTY_TO_TRAIN_MILITIA:
-			gubFact[usFact] = InTownSectorWithTrainingLoyalty(SECTOR(gWorldSectorX, gWorldSectorY));
+			gubFact[usFact] = InTownSectorWithTrainingLoyalty(gWorldSector.AsByte());
 			break;
 
 		case FACT_WALKER_AT_BAR:
-			gubFact[usFact] = (gMercProfiles[ FATHER ].sSectorX == 13 && gMercProfiles[ FATHER ].sSectorY == MAP_ROW_C);
+			gubFact[usFact] = (gMercProfiles[ FATHER ].sSector.x == 13 && gMercProfiles[ FATHER ].sSector.y == MAP_ROW_C);
 			break;
 
 		case FACT_JOEY_ALIVE:
@@ -1044,17 +1052,21 @@ BOOLEAN CheckFact(Fact const usFact, UINT8 const ubProfileID)
 			break;
 
 		case FACT_SKYRIDER_IN_B15:
-			gubFact[ usFact ] = CheckNPCSector( SKYRIDER, 15, MAP_ROW_B, 0 );
+			sector = SGPSector(15, MAP_ROW_B, 0);
+			gubFact[usFact] = CheckNPCSector(SKYRIDER, sector);
 			break;
 
 		case FACT_SKYRIDER_IN_C16:
-			gubFact[ usFact ] = CheckNPCSector( SKYRIDER, 16, MAP_ROW_C, 0 );
+			sector = SGPSector(16, MAP_ROW_C, 0);
+			gubFact[usFact] = CheckNPCSector(SKYRIDER, sector);
 			break;
 		case FACT_SKYRIDER_IN_E14:
-			gubFact[ usFact ] = CheckNPCSector( SKYRIDER, 14, MAP_ROW_E, 0 );
+			sector = SGPSector(14, MAP_ROW_E, 0);
+			gubFact[usFact] = CheckNPCSector(SKYRIDER, sector);
 			break;
 		case FACT_SKYRIDER_IN_D12:
-			gubFact[ usFact ] = CheckNPCSector( SKYRIDER, 12, MAP_ROW_D, 0 );
+			sector = SGPSector(12, MAP_ROW_D, 0);
+			gubFact[usFact] = CheckNPCSector(SKYRIDER, sector);
 			break;
 
 		case FACT_KINGPIN_IS_ENEMY:
@@ -1096,13 +1108,13 @@ BOOLEAN CheckFact(Fact const usFact, UINT8 const ubProfileID)
 	return( gubFact[usFact] );
 }
 
-void StartQuest( UINT8 ubQuest, INT16 sSectorX, INT16 sSectorY )
+void StartQuest(UINT8 ubQuest, const SGPSector& sector)
 {
-	InternalStartQuest( ubQuest, sSectorX, sSectorY, TRUE );
+	InternalStartQuest(ubQuest, sector, TRUE);
 }
 
 
-void InternalStartQuest( UINT8 ubQuest, INT16 sSectorX, INT16 sSectorY, BOOLEAN fUpdateHistory )
+void InternalStartQuest(UINT8 ubQuest, const SGPSector& sector, BOOLEAN fUpdateHistory)
 {
 	if ( gubQuest[ubQuest ] == QUESTNOTSTARTED )
 	{
@@ -1110,7 +1122,7 @@ void InternalStartQuest( UINT8 ubQuest, INT16 sSectorX, INT16 sSectorY, BOOLEAN 
 
 		if ( fUpdateHistory )
 		{
-			AddHistoryToPlayersLog(HISTORY_QUEST_STARTED, ubQuest, GetWorldTotalMin(), sSectorX, sSectorY);
+			AddHistoryToPlayersLog(HISTORY_QUEST_STARTED, ubQuest, GetWorldTotalMin(), sector);
 		}
 	}
 	else
@@ -1119,12 +1131,12 @@ void InternalStartQuest( UINT8 ubQuest, INT16 sSectorX, INT16 sSectorY, BOOLEAN 
 	}
 }
 
-void EndQuest( UINT8 ubQuest, INT16 sSectorX, INT16 sSectorY )
+void EndQuest(UINT8 ubQuest, const SGPSector& sector)
 {
-	InternalEndQuest( ubQuest, sSectorX, sSectorY, TRUE );
+	InternalEndQuest(ubQuest, sector, TRUE);
 }
 
-void InternalEndQuest( UINT8 ubQuest, INT16 sSectorX, INT16 sSectorY, BOOLEAN fUpdateHistory )
+void InternalEndQuest(UINT8 ubQuest, const SGPSector& sector, BOOLEAN fUpdateHistory)
 {
 	if ( gubQuest[ubQuest ] == QUESTINPROGRESS )
 	{
@@ -1132,7 +1144,7 @@ void InternalEndQuest( UINT8 ubQuest, INT16 sSectorX, INT16 sSectorY, BOOLEAN fU
 
 		if ( fUpdateHistory )
 		{
-			AddHistoryToPlayersLog(HISTORY_QUEST_FINISHED, ubQuest, GetWorldTotalMin(), sSectorX, sSectorY);
+			AddHistoryToPlayersLog(HISTORY_QUEST_FINISHED, ubQuest, GetWorldTotalMin(), sector);
 		}
 	}
 	else
@@ -1152,8 +1164,8 @@ void InternalEndQuest( UINT8 ubQuest, INT16 sSectorX, INT16 sSectorY, BOOLEAN fU
 
 void InitQuestEngine()
 {
-	memset(gubQuest, 0, sizeof(gubQuest));
-	memset(gubFact,  0, sizeof(gubFact));
+	std::fill(std::begin(gubQuest), std::end(gubQuest), 0);
+	std::fill(std::begin(gubFact), std::end(gubFact), 0);
 
 	// semi-hack to make the letter quest start right away
 	CheckForQuests( 1 );
@@ -1179,7 +1191,7 @@ void CheckForQuests( UINT32 uiDay )
 {
 	// This function gets called at 8:00 AM time of the day
 
-	SLOGD(DEBUG_TAG_QUESTS, "Checking For Quests, Day %d", uiDay );
+	SLOGD("Checking For Quests, Day {}", uiDay);
 
 	// -------------------------------------------------------------------------------
 	// QUEST 0 : DELIVER LETTER
@@ -1188,9 +1200,9 @@ void CheckForQuests( UINT32 uiDay )
 	// already started
 	if (gubQuest[QUEST_DELIVER_LETTER] == QUESTNOTSTARTED)
 	{
-		AddHistoryToPlayersLog(HISTORY_ACCEPTED_ASSIGNMENT_FROM_ENRICO, 0, GetWorldTotalMin(), -1, -1);
-		StartQuest( QUEST_DELIVER_LETTER, -1, -1 );
-		SLOGD(DEBUG_TAG_QUESTS, "Started DELIVER LETTER quest");
+		AddHistoryToPlayersLog(HISTORY_ACCEPTED_ASSIGNMENT_FROM_ENRICO, 0, GetWorldTotalMin(), SGPSector(-1, -1));
+		StartQuest(QUEST_DELIVER_LETTER, SGPSector(-1, -1));
+		SLOGD("Started DELIVER LETTER quest");
 	}
 
 	// This quest gets turned OFF through conversation with Miguel - when user hands
@@ -1201,18 +1213,18 @@ void CheckForQuests( UINT32 uiDay )
 void SaveQuestInfoToSavedGameFile(HWFILE const hFile)
 {
 	//Save all the states if the Quests
-	FileWrite(hFile, gubQuest, MAX_QUESTS);
+	hFile->write(gubQuest, MAX_QUESTS);
 
 	//Save all the states for the facts
-	FileWrite(hFile, gubFact, NUM_FACTS);
+	hFile->write(gubFact, NUM_FACTS);
 }
 
 
 void LoadQuestInfoFromSavedGameFile(HWFILE const hFile)
 {
 	//Save all the states if the Quests
-	FileRead(hFile, gubQuest, MAX_QUESTS);
+	hFile->read(gubQuest, MAX_QUESTS);
 
 	//Save all the states for the facts
-	FileRead(hFile, gubFact, NUM_FACTS);
+	hFile->read(gubFact, NUM_FACTS);
 }

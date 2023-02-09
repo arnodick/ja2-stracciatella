@@ -14,6 +14,8 @@
 #include "EditorBuildings.h"
 #include "Debug.h"
 
+#include <string_theory/string>
+
 
 SGPRect gSelectRegion;
 
@@ -28,8 +30,7 @@ UINT16 gusSavedSelectionType = SMALLSELECTION;
 UINT16 gusSavedBuildingSelectionType = AREASELECTION;
 static INT16 sBadMarker = -1;
 
-wchar_t SelTypeWidth[] = L"Width: xx";
-const wchar_t* const wszSelType[6]= { L"Small", L"Medium", L"Large", L"XLarge", SelTypeWidth, L"Area" };
+ST::string wszSelType[6]= { "Small", "Medium", "Large", "XLarge", "Width: xx", "Area" };
 
 static BOOLEAN gfAllowRightButtonSelections = FALSE;
 BOOLEAN gfCurrentSelectionWithRightButton = FALSE;
@@ -82,8 +83,8 @@ void RemoveCursors()
 	{
 		RemoveBuildingLayout();
 	}
-	Assert( gSelectRegion.iTop >= 0 && gSelectRegion.iTop <= gSelectRegion.iBottom );
-	Assert( gSelectRegion.iLeft >= 0 && gSelectRegion.iLeft <= gSelectRegion.iRight );
+	Assert( gSelectRegion.iTop <= gSelectRegion.iBottom );
+	Assert( gSelectRegion.iLeft <= gSelectRegion.iRight );
 	for( y = gSelectRegion.iTop; y <= gSelectRegion.iBottom; y++ )
 	{
 		for( x = gSelectRegion.iLeft; x <= gSelectRegion.iRight; x++ )
@@ -249,7 +250,7 @@ static void ForceAreaSelectionWidth(const INT16 sGridX, const INT16 sGridY)
 
 	//compare the region with the anchor and determine if we are going to force size via
 	//height or width depending on the cursor distance from the anchor.
-	if( ABS( sGridX - gSelectAnchor.iX ) < ABS( sGridY - gSelectAnchor.iY ) )
+	if (std::abs(sGridX - gSelectAnchor.iX) < std::abs(sGridY - gSelectAnchor.iY))
 	{ //restrict the x axis
 		if( sGridX < gSelectAnchor.iX )
 		{ //to the left
@@ -283,8 +284,8 @@ static BOOLEAN HandleAreaSelection(const INT16 sGridX, const INT16 sGridY)
 	//When the user releases the left button, then clear and process the area.
 	if( fAnchored )
 	{
-		if( (!gfLeftButtonState  && !gfCurrentSelectionWithRightButton) ||
-			(!gfRightButtonState &&  gfCurrentSelectionWithRightButton) )
+		if( (!IsMouseButtonDown(MOUSE_BUTTON_LEFT)  && !gfCurrentSelectionWithRightButton) ||
+			(!IsMouseButtonDown(MOUSE_BUTTON_RIGHT) &&  gfCurrentSelectionWithRightButton) )
 		{
 			fAnchored = FALSE;
 			ProcessAreaSelection(!gfCurrentSelectionWithRightButton);
@@ -295,9 +296,9 @@ static BOOLEAN HandleAreaSelection(const INT16 sGridX, const INT16 sGridY)
 	//When the user first clicks, anchor the area.
 	if( !fAnchored )
 	{
-		if( gfLeftButtonState || (gfRightButtonState && gfAllowRightButtonSelections) )
+		if( IsMouseButtonDown(MOUSE_BUTTON_LEFT) || (IsMouseButtonDown(MOUSE_BUTTON_RIGHT) && gfAllowRightButtonSelections) )
 		{
-			if( gfRightButtonState && !gfLeftButtonState )
+			if( IsMouseButtonDown(MOUSE_BUTTON_RIGHT) && !IsMouseButtonDown(MOUSE_BUTTON_LEFT) )
 				gfCurrentSelectionWithRightButton = TRUE;
 			else
 				gfCurrentSelectionWithRightButton = FALSE;
@@ -344,10 +345,10 @@ static BOOLEAN HandleAreaSelection(const INT16 sGridX, const INT16 sGridY)
 
 static void ValidateSelectionRegionBoundaries(void)
 {
-	gSelectRegion.iLeft   = MAX( MIN( 159, gSelectRegion.iLeft   ), 0 );
-	gSelectRegion.iRight  = MAX( MIN( 159, gSelectRegion.iRight  ), 0 );
-	gSelectRegion.iTop    = MAX( MIN( 159, gSelectRegion.iTop    ), 0 );
-	gSelectRegion.iBottom = MAX( MIN( 159, gSelectRegion.iBottom ), 0 );
+	gSelectRegion.iLeft   = std::clamp(int(gSelectRegion.iLeft), 0, 159);
+	gSelectRegion.iRight  = std::clamp(int(gSelectRegion.iRight), 0, 159);
+	gSelectRegion.iTop    = std::clamp(int(gSelectRegion.iTop), 0, 159);
+	gSelectRegion.iBottom = std::clamp(int(gSelectRegion.iBottom), 0, 159);
 }
 
 

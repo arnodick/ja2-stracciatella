@@ -1,4 +1,3 @@
-#include "Event_Manager.h"
 #include "HImage.h"
 #include "Init.h"
 #include "Local.h"
@@ -36,11 +35,14 @@
 #include "Vehicles.h"
 #include "Shading.h"
 #include "VSurface.h"
-#include "GameState.h"
+#include "GameMode.h"
 
 #include "EditScreen.h"
 #include "JAScreens.h"
-#include "slog/slog.h"
+#include "Logger.h"
+
+#include <string_theory/string>
+
 
 // The InitializeGame function is responsible for setting up all data and Gaming Engine
 // tasks which will run the game
@@ -50,9 +52,6 @@ ScreenID InitializeJA2(void)
 try
 {
 	gfWorldLoaded = FALSE;
-
-	// Load external text
-	LoadAllExternalText();
 
 	gsRenderCenterX = 805;
 	gsRenderCenterY = 805;
@@ -84,9 +83,6 @@ try
 	// INit intensity tables
 	BuildIntensityTable( );
 
-	// Init Event Manager
-	InitializeEventManager();
-
 	// Initailize World
 	InitializeWorld();
 
@@ -94,7 +90,7 @@ try
 
 	InitMercPopupBox( );
 
-	if(GameState::getInstance()->isEditorMode())
+	if(GameMode::getInstance()->isEditorMode())
 	{
 		//UNCOMMENT NEXT LINE TO ALLOW FORCE UPDATES...
 		//LoadGlobalSummary();
@@ -104,19 +100,17 @@ try
 		}
 	}
 
-	switch (GameState::getInstance()->getMode())
+	switch (GameMode::getInstance()->getMode())
 	{
 		case GAME_MODE_EDITOR:
-			SLOGI(DEBUG_TAG_INIT, "Beginning JA2 using -editor commandline argument...");
+			SLOGI("Beginning JA2 using -editor commandline argument...");
 			gfAutoLoadA9 = FALSE;
 			goto editor;
 
 		case GAME_MODE_EDITOR_AUTO:
-			SLOGI(DEBUG_TAG_INIT, "Beginning JA2 using -editorauto commandline argument...");
+			SLOGI("Beginning JA2 using -editorauto commandline argument...");
 			gfAutoLoadA9 = TRUE;
 editor:
-			//For editor purposes, need to know the default map file.
-			strcpy(g_filename, "none");
 			//also set the sector
 			SetWorldSectorInvalid();
 			gfIntendOnEnteringEditor = TRUE;
@@ -126,7 +120,11 @@ editor:
 		default: return INIT_SCREEN;
 	}
 }
-catch (...) { return ERROR_SCREEN; }
+catch (const std::runtime_error& ex)
+{
+	SET_ERROR(ST::format("InitializeJA2: {}", ex.what()));
+	return ERROR_SCREEN;
+}
 
 
 void ShutdownJA2(void)
@@ -176,8 +174,6 @@ void ShutdownJA2(void)
 	ShutdownFonts();
 
 	ShutdownJA2Sound( );
-
-	ShutdownEventManager( );
 
 	ClearOutVehicleList();
 }

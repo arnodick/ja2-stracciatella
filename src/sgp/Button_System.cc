@@ -1,23 +1,21 @@
 // Rewritten mostly by Kris Morness
-#include  <stdexcept>
-
 #include "Button_Sound_Control.h"
 #include "Button_System.h"
 #include "Debug.h"
 #include "Font.h"
 #include "HImage.h"
 #include "Input.h"
-#include "MemMan.h"
 #include "VObject.h"
 #include "VObject_Blitters.h"
 #include "VSurface.h"
 #include "Video.h"
 #include "WCheck.h"
 #include "WordWrap.h"
+#include "Font_Control.h"
 
-#ifdef _JA2_RENDER_DIRTY
-#	include "Font_Control.h"
-#endif
+#include <string_theory/string>
+
+#include <stdexcept>
 
 
 // Names of the default generic button image files.
@@ -75,7 +73,7 @@ static void AssertFailIfIdenticalButtonAttributesFound(const GUI_BUTTON* b)
 		 * created button already exists.  Placing a break point on the following
 		 * assert will allow the coder to easily isolate the case!
 		 */
-		SLOGE(DEBUG_TAG_ASSERTS, "Attempting to create a button that has already been created (existing buttonID %d).", c->IDNum);
+		SLOGA("Attempting to create a button that has already been created (existing buttonID {}).", c->IDNum);
 	}
 }
 
@@ -376,7 +374,7 @@ INT16 LoadGenericButtonIcon(const char* filename)
 
 void UnloadGenericButtonIcon(INT16 GenImg)
 {
-	AssertMsg(0 <= GenImg && GenImg < MAX_BUTTON_ICONS, String("Attempting to UnloadGenericButtonIcon with out of range index %d.", GenImg));
+	AssertMsg(0 <= GenImg && GenImg < MAX_BUTTON_ICONS, ST::format("Attempting to UnloadGenericButtonIcon with out of range index {}.", GenImg));
 
 #if defined BUTTONSYSTEM_DEBUGGING
 	AssertMsg(GenericButtonIcons[GenImg], "Attempting to UnloadGenericButtonIcon that has no icon (already deleted).");
@@ -467,10 +465,10 @@ void RemoveButton(GUIButtonRef& btn)
 	btn.Reset();
 
 	CHECKV(0 < btn_id && btn_id < MAX_BUTTONS); // XXX HACK000C
-	AssertMsg(0 < btn_id && btn_id < MAX_BUTTONS, String("ButtonID %d is out of range.", btn_id));
+	AssertMsg(0 < btn_id && btn_id < MAX_BUTTONS, ST::format("ButtonID {} is out of range.", btn_id));
 	GUI_BUTTON* const b = ButtonList[btn_id];
 	CHECKV(b); // XXX HACK000C
-	AssertMsg(b, String("Accessing non-existent button %d.", btn_id));
+	AssertMsg(b, ST::format("Accessing non-existent button {}.", btn_id));
 
 	/* If we happen to be in the middle of a callback, and attempt to delete a
 	 * button, like deleting a node during list processing, then we delay it till
@@ -499,8 +497,8 @@ static INT32 GetNextButtonNumber(void)
 }
 
 
-static void QuickButtonCallbackMButn(MOUSE_REGION* reg, INT32 reason);
-static void QuickButtonCallbackMMove(MOUSE_REGION* reg, INT32 reason);
+static void QuickButtonCallbackMButn(MOUSE_REGION* reg, UINT32 reason);
+static void QuickButtonCallbackMMove(MOUSE_REGION* reg, UINT32 reason);
 
 
 GUI_BUTTON::GUI_BUTTON(UINT32 const flags, INT16 const left, INT16 const top, INT16 const width, INT16 const height, INT8 const priority, GUI_CALLBACK const click, GUI_CALLBACK const move) :
@@ -512,7 +510,7 @@ GUI_BUTTON::GUI_BUTTON(UINT32 const flags, INT16 const left, INT16 const top, IN
 	uiFlags(BUTTON_DIRTY | BUTTON_ENABLED | flags),
 	uiOldFlags(0),
 	bDisabledStyle(GUI_BUTTON::DISABLED_STYLE_DEFAULT),
-	string(0),
+	codepoints(),
 	usFont(0),
 	sForeColor(0),
 	sShadowColor(-1),
@@ -532,9 +530,10 @@ GUI_BUTTON::GUI_BUTTON(UINT32 const flags, INT16 const left, INT16 const top, IN
 	bIconXOffset(-1),
 	bIconYOffset(-1),
 	fShiftImage(TRUE),
-	ubToggleButtonActivated(FALSE)
+	ubToggleButtonActivated(FALSE),
+	ubSoundSchemeID(BUTTON_SOUND_SCHEME_NONE)
 {
-	AssertMsg(left >= 0 && top >= 0 && width >= 0 && height >= 0, String("Attempting to create button with invalid coordinates %dx%d+%dx%d", left, top, width, height));
+	AssertMsg(left >= 0 && top >= 0 && width >= 0 && height >= 0, ST::format("Attempting to create button with invalid coordinates {}{}+{}{}", left, top, width, height));
 
 	Area.SetUserPtr(this);
 
@@ -565,22 +564,9 @@ GUI_BUTTON::~GUI_BUTTON()
 		 */
 		UnloadButtonImage(image);
 	}
-
-	if (string) MemFree(string);
 }
 
-
-static void CopyButtonText(GUI_BUTTON* b, const wchar_t* text)
-{
-	if (text == NULL || text[0] == L'\0') return;
-
-	wchar_t* const Buf = MALLOCN(wchar_t, wcslen(text) + 1);
-	wcscpy(Buf, text);
-	b->string = Buf;
-}
-
-
-static void DefaultMoveCallback(GUI_BUTTON* btn, INT32 reason);
+static void DefaultMoveCallback(GUI_BUTTON* btn, UINT32 reason);
 
 
 GUIButtonRef CreateIconButton(INT16 Icon, INT16 IconIndex, INT16 xloc, INT16 yloc, INT16 w, INT16 h, INT16 Priority, GUI_CALLBACK ClickCallback)
@@ -596,14 +582,14 @@ GUIButtonRef CreateIconButton(INT16 Icon, INT16 IconIndex, INT16 xloc, INT16 ylo
 }
 
 
-GUIButtonRef CreateTextButton(const wchar_t *string, SGPFont const font, INT16 sForeColor, INT16 sShadowColor, INT16 xloc, INT16 yloc, INT16 w, INT16 h, INT16 Priority, GUI_CALLBACK ClickCallback)
+GUIButtonRef CreateTextButton(const ST::string& str, SGPFont font, INT16 sForeColor, INT16 sShadowColor, INT16 xloc, INT16 yloc, INT16 w, INT16 h, INT16 Priority, GUI_CALLBACK ClickCallback)
 {
 	// if button size is too small, adjust it.
 	if (w < 4) w = 4;
 	if (h < 3) h = 3;
 
 	GUI_BUTTON* const b = new GUI_BUTTON(BUTTON_GENERIC, xloc, yloc, w, h, Priority, ClickCallback, DefaultMoveCallback);
-	CopyButtonText(b, string);
+	b->codepoints   = str.to_utf32();
 	b->usFont       = font;
 	b->sForeColor   = sForeColor;
 	b->sShadowColor = sShadowColor;
@@ -664,10 +650,10 @@ GUIButtonRef QuickCreateButtonImg(char const* const gfx, INT32 const off_normal,
 }
 
 
-GUIButtonRef CreateIconAndTextButton(BUTTON_PICS* const Image, const wchar_t* const string, SGPFont const font, const INT16 sForeColor, const INT16 sShadowColor, const INT16 sForeColorDown, const INT16 sShadowColorDown, const INT16 xloc, const INT16 yloc, const INT16 Priority, const GUI_CALLBACK ClickCallback)
+GUIButtonRef CreateIconAndTextButton(BUTTON_PICS* Image, const ST::string& str, SGPFont font, INT16 sForeColor, INT16 sShadowColor, INT16 sForeColorDown, INT16 sShadowColorDown, INT16 xloc, INT16 yloc, INT16 Priority, GUI_CALLBACK ClickCallback)
 {
 	GUIButtonRef const b = QuickCreateButton(Image, xloc, yloc, Priority, ClickCallback);
-	CopyButtonText(b, string);
+	b->codepoints       = str.to_utf32();
 	b->usFont           = font;
 	b->sForeColor       = sForeColor;
 	b->sShadowColor     = sShadowColor;
@@ -677,22 +663,18 @@ GUIButtonRef CreateIconAndTextButton(BUTTON_PICS* const Image, const wchar_t* co
 }
 
 
-GUIButtonRef CreateLabel(const wchar_t* text, SGPFont const font, INT16 forecolor, INT16 shadowcolor, INT16 x, INT16 y, INT16 w, INT16 h, INT16 priority)
+GUIButtonRef CreateLabel(const ST::string& str, SGPFont font, INT16 forecolor, INT16 shadowcolor, INT16 x, INT16 y, INT16 w, INT16 h, INT16 priority)
 {
-	GUIButtonRef const btn = CreateTextButton(text, font, forecolor, shadowcolor, x, y, w, h, priority, NULL);
+	GUIButtonRef const btn = CreateTextButton(str, font, forecolor, shadowcolor, x, y, w, h, priority, MSYS_NO_CALLBACK);
 	btn->SpecifyDisabledStyle(GUI_BUTTON::DISABLED_STYLE_NONE);
 	DisableButton(btn);
 	return btn;
 }
 
 
-void GUI_BUTTON::SpecifyText(wchar_t const* const text)
+void GUI_BUTTON::SpecifyText(const ST::string& str)
 {
-	//free the previous strings memory if applicable
-	if (string) MemFree(string);
-	string = NULL;
-
-	CopyButtonText(this, text);
+	this->codepoints = str.to_utf32();
 	uiFlags |= BUTTON_DIRTY;
 }
 
@@ -720,9 +702,9 @@ void GUI_BUTTON::SpecifyTextJustification(Justification const j)
 }
 
 
-void GUI_BUTTON::SpecifyGeneralTextAttributes(wchar_t const* const string, SGPFont const font, INT16 const fore_colour, INT16 const shadow_colour)
+void GUI_BUTTON::SpecifyGeneralTextAttributes(const ST::string& str, SGPFont font, INT16 fore_colour, INT16 shadow_colour)
 {
-	SpecifyText(string);
+	SpecifyText(str);
 	usFont        = font;
 	sForeColor    = fore_colour;
 	sShadowColor  = shadow_colour;
@@ -779,16 +761,16 @@ void GUI_BUTTON::AllowDisabledFastHelp()
 }
 
 
-void GUI_BUTTON::SetFastHelpText(const wchar_t* const text)
+void GUI_BUTTON::SetFastHelpText(const ST::string& str)
 {
-	Area.SetFastHelpText(text);
+	Area.SetFastHelpText(str);
 }
 
 
 /* Dispatches all button callbacks for mouse movement. This function gets
  * called by the Mouse System. *DO NOT CALL DIRECTLY*
  */
-static void QuickButtonCallbackMMove(MOUSE_REGION* reg, INT32 reason)
+static void QuickButtonCallbackMMove(MOUSE_REGION* reg, UINT32 reason)
 {
 	Assert(reg != NULL);
 	GUI_BUTTON* const b = reg->GetUserPtr<GUI_BUTTON>();
@@ -816,7 +798,7 @@ static void QuickButtonCallbackMMove(MOUSE_REGION* reg, INT32 reason)
 /* Dispatches all button callbacks for button presses. This function is called
  * by the Mouse System. *DO NOT CALL DIRECTLY*
  */
-static void QuickButtonCallbackMButn(MOUSE_REGION* reg, INT32 reason)
+static void QuickButtonCallbackMButn(MOUSE_REGION* reg, UINT32 reason)
 {
 	Assert(reg != NULL);
 	GUI_BUTTON* const b = reg->GetUserPtr<GUI_BUTTON>();
@@ -826,7 +808,7 @@ static void QuickButtonCallbackMButn(MOUSE_REGION* reg, INT32 reason)
 	{
 		// Should we play a sound if clicked on while disabled?
 		if (b->ubSoundSchemeID &&
-				reason & (MSYS_CALLBACK_REASON_LBUTTON_DWN | MSYS_CALLBACK_REASON_RBUTTON_DWN))
+				reason & (MSYS_CALLBACK_REASON_LBUTTON_DWN | MSYS_CALLBACK_REASON_RBUTTON_DWN | MSYS_CALLBACK_REASON_TFINGER_DWN))
 		{
 			PlayButtonSound(b, BUTTON_SOUND_DISABLED_CLICK);
 		}
@@ -838,7 +820,7 @@ static void QuickButtonCallbackMButn(MOUSE_REGION* reg, INT32 reason)
 
 	if (b->uiFlags & BUTTON_NEWTOGGLE)
 	{
-		if (reason & MSYS_CALLBACK_REASON_LBUTTON_DWN)
+		if (reason & (MSYS_CALLBACK_REASON_LBUTTON_DWN | MSYS_CALLBACK_REASON_TFINGER_DWN))
 		{
 			if (!b->ubToggleButtonActivated)
 			{
@@ -846,34 +828,43 @@ static void QuickButtonCallbackMButn(MOUSE_REGION* reg, INT32 reason)
 				b->ubToggleButtonActivated = TRUE;
 			}
 		}
-		else if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+		else if (reason & (MSYS_CALLBACK_REASON_LBUTTON_UP | MSYS_CALLBACK_REASON_TFINGER_UP))
 		{
 			b->ubToggleButtonActivated = FALSE;
 		}
 	}
 
+	// Check if we are using the default move callback
+	bool isDefaultCallback = false;
+	if (b->MoveCallback) {
+		auto moveCallbackPtr = b->MoveCallback.target<void(*)(GUI_BUTTON*, UINT32)>();
+		if (moveCallbackPtr != NULL) {
+			isDefaultCallback = *moveCallbackPtr == DefaultMoveCallback;
+
+		}
+	}
 	/* Kris:
 	 * Set the anchored button incase the user moves mouse off region while still
 	 * holding down the button, but only if the button is up.  In Win95, buttons
 	 * that are already down, and anchored never change state, unless you release
 	 * the mouse in the button area.
 	 */
-	if (b->MoveCallback == DefaultMoveCallback)
+	if (isDefaultCallback)
 	{
-		if (reason & MSYS_CALLBACK_REASON_LBUTTON_DWN)
+		if (reason & (MSYS_CALLBACK_REASON_LBUTTON_DWN | MSYS_CALLBACK_REASON_TFINGER_DWN))
 		{
 			gpAnchoredButton = b;
 			gfAnchoredState = StateBefore;
 			b->uiFlags |= BUTTON_CLICKED_ON;
 		}
-		else if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+		else if (reason & (MSYS_CALLBACK_REASON_LBUTTON_UP | MSYS_CALLBACK_REASON_TFINGER_UP))
 		{
 			b->uiFlags &= ~BUTTON_CLICKED_ON;
 		}
 	}
 	else if (b->uiFlags & BUTTON_CHECKBOX)
 	{
-		if (reason & MSYS_CALLBACK_REASON_LBUTTON_DWN)
+		if (reason & (MSYS_CALLBACK_REASON_LBUTTON_DWN | MSYS_CALLBACK_REASON_TFINGER_DWN))
 		{
 			/* The check box button gets anchored, though it doesn't actually use the
 			 * anchoring move callback.  The effect is different, we don't want to
@@ -890,7 +881,7 @@ static void QuickButtonCallbackMButn(MOUSE_REGION* reg, INT32 reason)
 			StateBefore = !b->Clicked();
 			StateAfter  = !StateBefore;
 		}
-		else if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+		else if (reason & (MSYS_CALLBACK_REASON_LBUTTON_UP | MSYS_CALLBACK_REASON_TFINGER_UP))
 		{
 			b->uiFlags ^= BUTTON_CLICKED_ON; //toggle the checkbox state upon release inside button area.
 			/* Trick the before state of the button to be different so the sound will
@@ -902,7 +893,7 @@ static void QuickButtonCallbackMButn(MOUSE_REGION* reg, INT32 reason)
 	}
 
 	// If there is a callback function with this button, call it
-	if (b->ClickCallback != NULL)
+	if (b->ClickCallback)
 	{
 		/* Kris:  January 6, 1998
 		 * Added these checks to avoid a case where it was possible to process a
@@ -910,15 +901,15 @@ static void QuickButtonCallbackMButn(MOUSE_REGION* reg, INT32 reason)
 		 * been.
 		 */
 		gfDelayButtonDeletion = TRUE;
-		if (!(reason & MSYS_CALLBACK_REASON_LBUTTON_UP) ||
-				b->MoveCallback != DefaultMoveCallback ||
+		if (!(reason & (MSYS_CALLBACK_REASON_LBUTTON_UP | MSYS_CALLBACK_REASON_TFINGER_UP)) ||
+				!isDefaultCallback ||
 				gpPrevAnchoredButton == b)
 		{
 			b->ClickCallback(b, reason);
 		}
 		gfDelayButtonDeletion = FALSE;
 	}
-	else if (reason & MSYS_CALLBACK_REASON_LBUTTON_DWN)
+	else if (reason & (MSYS_CALLBACK_REASON_LBUTTON_DWN | MSYS_CALLBACK_REASON_TFINGER_DWN))
 	{
 		// Otherwise, do default action with this button.
 		b->uiFlags ^= BUTTON_CLICKED_ON;
@@ -932,14 +923,14 @@ static void QuickButtonCallbackMButn(MOUSE_REGION* reg, INT32 reason)
 	// Play sounds for this enabled button (disabled sounds have already been done)
 	if (b->ubSoundSchemeID && b->Enabled())
 	{
-		if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+		if (reason & (MSYS_CALLBACK_REASON_LBUTTON_UP | MSYS_CALLBACK_REASON_TFINGER_UP))
 		{
 			if (StateBefore && !StateAfter)
 			{
 				PlayButtonSound(b, BUTTON_SOUND_CLICKED_OFF);
 			}
 		}
-		else if (reason & MSYS_CALLBACK_REASON_LBUTTON_DWN)
+		else if (reason & (MSYS_CALLBACK_REASON_LBUTTON_DWN | MSYS_CALLBACK_REASON_TFINGER_DWN))
 		{
 			if (!StateBefore && StateAfter)
 			{
@@ -1043,9 +1034,9 @@ void ForceButtonUnDirty(GUIButtonRef const b)
 
 void GUI_BUTTON::Draw()
 {
-	if (string) SaveFontSettings();
+	if (!codepoints.empty()) SaveFontSettings();
 	if (Area.uiFlags & MSYS_REGION_ENABLED) DrawButtonFromPtr(this);
-	if (string) RestoreFontSettings();
+	if (!codepoints.empty()) RestoreFontSettings();
 }
 
 
@@ -1073,7 +1064,7 @@ static void DrawButtonFromPtr(GUI_BUTTON* b)
 			return; // hotspots don't have text, but if you want to, change this to a break!
 	}
 	if (b->icon)   DrawIconOnButton(b);
-	if (b->string) DrawTextOnButton(b);
+	if (!b->codepoints.empty()) DrawTextOnButton(b);
 	/* If the button is disabled, and a style has been calculated, then draw the
 	 * style last.
 	 */
@@ -1133,7 +1124,7 @@ static void DrawQuickButton(const GUI_BUTTON* b)
 		switch (b->bDisabledStyle)
 		{
 			case GUI_BUTTON::DISABLED_STYLE_DEFAULT:
-				gbDisabledButtonStyle = b->string ?
+				gbDisabledButtonStyle = !b->codepoints.empty() ?
 					GUI_BUTTON::DISABLED_STYLE_SHADED :
 					GUI_BUTTON::DISABLED_STYLE_HATCHED;
 				break;
@@ -1167,18 +1158,6 @@ static void DrawShadeOnButton(const GUI_BUTTON* b)
 }
 
 
-void GUI_BUTTON::DrawCheckBoxOnOff(BOOLEAN const on)
-{
-	BOOLEAN const fLeftButtonState = gfLeftButtonState;
-
-	gfLeftButtonState = on;
-	Area.uiFlags |= MSYS_MOUSE_IN_AREA;
-	Draw();
-
-	gfLeftButtonState = fLeftButtonState;
-}
-
-
 static void DrawCheckBoxButton(const GUI_BUTTON *b)
 {
 	const BUTTON_PICS* const pics = b->image;
@@ -1191,7 +1170,7 @@ static void DrawCheckBoxButton(const GUI_BUTTON *b)
 			// Is the mouse over this area, and we have a hilite image?
 			if (b->Area.uiFlags & MSYS_MOUSE_IN_AREA &&
 					gfRenderHilights &&
-					gfLeftButtonState &&
+					IsMouseButtonDown(MOUSE_BUTTON_LEFT) &&
 					pics->OnHilite != -1)
 			{
 				UseImage = pics->OnHilite;
@@ -1206,7 +1185,7 @@ static void DrawCheckBoxButton(const GUI_BUTTON *b)
 			// Is the mouse over the button, and do we have hilite image?
 			if (b->Area.uiFlags & MSYS_MOUSE_IN_AREA &&
 					gfRenderHilights &&
-					gfLeftButtonState &&
+					IsMouseButtonDown(MOUSE_BUTTON_LEFT) &&
 					pics->OffHilite != -1)
 			{
 				UseImage = pics->OffHilite;
@@ -1269,8 +1248,7 @@ static void DrawIconOnButton(const GUI_BUTTON* b)
 	INT32 IconY = NewClip.iTop;
 
 	// Get current clip area
-	SGPRect OldClip;
-	GetClippingRect(&OldClip);
+	SGPRect const OldClip = GetClippingRect();
 
 	// Clip button's viewable area coords to screen
 	if (NewClip.iLeft < OldClip.iLeft) NewClip.iLeft = OldClip.iLeft;
@@ -1335,12 +1313,12 @@ static void DrawIconOnButton(const GUI_BUTTON* b)
 	}
 
 	// Set the clipping rectangle to the viewable area of the button
-	SetClippingRect(&NewClip);
+	SetClippingRect(NewClip);
 
 	BltVideoObject(ButtonDestBuffer, hvObject, b->usIconIndex, xp, yp);
 
 	// Restore previous clip region
-	SetClippingRect(&OldClip);
+	SetClippingRect(OldClip);
 }
 
 
@@ -1348,7 +1326,7 @@ static void DrawIconOnButton(const GUI_BUTTON* b)
 static void DrawTextOnButton(const GUI_BUTTON* b)
 {
 	// If this button actually has a string to print
-	if (b->string == NULL) return;
+	if (b->codepoints.empty()) return;
 
 	// Get the width and height of this button
 	INT32 const width  = b->W();
@@ -1366,8 +1344,7 @@ static void DrawTextOnButton(const GUI_BUTTON* b)
 	const INT32 TextY = NewClip.iTop;
 
 	// Get the current clipping area
-	SGPRect OldClip;
-	GetClippingRect(&OldClip);
+	SGPRect const OldClip = GetClippingRect();
 
 	// Clip the button's viewable area to the screen
 	if (NewClip.iLeft < OldClip.iLeft) NewClip.iLeft = OldClip.iLeft;
@@ -1413,9 +1390,9 @@ static void DrawTextOnButton(const GUI_BUTTON* b)
 		switch (b->bJustification)
 		{
 			case GUI_BUTTON::TEXT_LEFT:   xp = TextX + 3; break;
-			case GUI_BUTTON::TEXT_RIGHT:  xp = NewClip.iRight - StringPixLength(b->string, b->usFont) - 3; break;
+			case GUI_BUTTON::TEXT_RIGHT:  xp = NewClip.iRight - StringPixLength(b->codepoints, b->usFont) - 3; break;
 			default:
-			case GUI_BUTTON::TEXT_CENTER: xp = TextX + (width - 6 - StringPixLength(b->string, b->usFont)) / 2; break;
+			case GUI_BUTTON::TEXT_CENTER: xp = TextX + (width - 6 - StringPixLength(b->codepoints, b->usFont)) / 2; break;
 		}
 	}
 	else
@@ -1476,7 +1453,7 @@ static void DrawTextOnButton(const GUI_BUTTON* b)
 			case GUI_BUTTON::TEXT_LEFT:    bJustified = LEFT_JUSTIFIED;    break;
 			case GUI_BUTTON::TEXT_RIGHT:   bJustified = RIGHT_JUSTIFIED;   break;
 			case GUI_BUTTON::TEXT_CENTER:  bJustified = CENTER_JUSTIFIED;  break;
-			default:                       SLOGE(DEBUG_TAG_ASSERTS, "DrawTextOnButton: invalid text alignment"); break;
+			default:                       SLOGA("DrawTextOnButton: invalid text alignment"); break;
 		}
 		if (b->bTextXOffset == -1)
 		{
@@ -1512,13 +1489,13 @@ static void DrawTextOnButton(const GUI_BUTTON* b)
 		}
 		yp += b->bTextYSubOffSet;
 		xp += b->bTextXSubOffSet;
-		DisplayWrappedString(xp, yp, b->sWrappedWidth, 1, b->usFont, sForeColor, b->string, FONT_MCOLOR_BLACK, bJustified);
+		DisplayWrappedString(xp, yp, b->sWrappedWidth, 1, b->usFont, sForeColor, b->codepoints, FONT_MCOLOR_BLACK, bJustified);
 	}
 	else
 	{
 		yp += b->bTextYSubOffSet;
 		xp += b->bTextXSubOffSet;
-		MPrint(xp, yp, b->string);
+		MPrint(xp, yp, b->codepoints);
 	}
 	// Restore the old text printing settings
 }
@@ -1537,7 +1514,7 @@ static void DrawGenericButton(const GUI_BUTTON* b)
 		switch (b->bDisabledStyle)
 		{
 			case GUI_BUTTON::DISABLED_STYLE_DEFAULT:
-				gbDisabledButtonStyle = b->string ?
+				gbDisabledButtonStyle = !b->codepoints.empty() ?
 					GUI_BUTTON::DISABLED_STYLE_SHADED :
 					GUI_BUTTON::DISABLED_STYLE_HATCHED;
 				break;
@@ -1594,8 +1571,7 @@ static void DrawGenericButton(const GUI_BUTTON* b)
 	UINT16* const pDestBuf         = l.Buffer<UINT16>();
 	UINT32  const uiDestPitchBYTES = l.Pitch();
 
-	SGPRect ClipRect;
-	GetClippingRect(&ClipRect);
+	SGPRect const ClipRect = GetClippingRect();
 
 	// Draw the button's borders and corners (horizontally)
 	for (INT32 q = 0; q < NumChunksWide; q++)
@@ -1644,7 +1620,7 @@ GUIButtonRef CreateCheckBoxButton(INT16 x, INT16 y, const char* filename, INT16 
 /* Generic Button Movement Callback to reset the mouse button if the mouse is no
  * longer in the button region.
  */
-static void DefaultMoveCallback(GUI_BUTTON* btn, INT32 reason)
+static void DefaultMoveCallback(GUI_BUTTON* btn, UINT32 reason)
 {
 	// If the button isn't the anchored button, then we don't want to modify the button state.
 	if (btn != gpAnchoredButton) return;
@@ -1671,7 +1647,6 @@ static void DefaultMoveCallback(GUI_BUTTON* btn, INT32 reason)
 		InvalidateRegion(btn->X(), btn->Y(), btn->BottomRightX(), btn->BottomRightY());
 	}
 }
-
 
 void ReleaseAnchorMode(void)
 {
@@ -1730,4 +1705,14 @@ void ShowButton(GUIButtonRef const b)
 UINT16 GetGenericButtonFillColor(void)
 {
 	return GenericButtonFillColors;
+}
+
+GUI_CALLBACK ButtonCallbackPrimarySecondary(
+	GUI_CALLBACK primaryAction,
+	GUI_CALLBACK secondaryAction,
+	GUI_CALLBACK allEvents,
+	bool triggerPrimaryOnMouseDown
+)
+{
+	return CallbackPrimarySecondary<GUI_BUTTON, BUTTON_ENABLED>(primaryAction, secondaryAction, allEvents, triggerPrimaryOnMouseDown);
 }

@@ -44,14 +44,18 @@
 #include "Environment.h"
 #include "Items.h"
 #include "GameRes.h"
+#include "Faces.h"
+#include "Observable.h"
 
 #include "ContentManager.h"
 #include "GameInstance.h"
 #include "content/ContentMercs.h"
 #include "WeaponModels.h"
+#include "MercProfile.h"
 
 extern BOOLEAN gfProfileDataLoaded;
 
+Observable<SOLDIERTYPE*> OnRPCRecruited;
 
 BOOLEAN	gfPotentialTeamChangeDuringDeath = FALSE;
 
@@ -131,7 +135,7 @@ void LoadMercProfiles()
 			MERCPROFILESTRUCT& p = gMercProfiles[i];
 
 			// // dumping std inventory
-			// printf("%03d/%ls\n", i, p.zNickname);
+			// printf("%03d/%s\n", i, p.zNickname.c_str());
 			// FOR_EACH(UINT16, k, p.inv)
 			// {
 			//   const ItemModel *item = GCM->getItem(*k);
@@ -211,7 +215,7 @@ void LoadMercProfiles()
 	gfProfileDataLoaded = TRUE;
 
 	// no better place..heh?.. will load faces for profiles that are 'extern'.....won't have soldiertype instances
-	InitalizeStaticExternalNPCFaces();
+	PreloadExternalNPCFaces();
 
 	LoadCarPortraitValues();
 }
@@ -251,7 +255,7 @@ static void DecideActiveTerrorists()
 			TerroristInfo const& t = *i;
 			MERCPROFILESTRUCT&   p = GetProfile(t.profile);
 			// Random 40% chance of adding this terrorist if not yet placed.
-			if (p.sSectorX != 0)   continue;
+			if (p.sSector.x != 0)  continue;
 			if (Random(100) >= 40) continue;
 
 			// Since there are 5 spots per terrorist and a maximum of 5 terrorists, we
@@ -267,9 +271,7 @@ pick_sector:
 			}
 
 			// Place terrorist.
-			p.sSectorX = SECTORX(sector);
-			p.sSectorY = SECTORY(sector);
-			p.bSectorZ = 0;
+			p.sSector = SGPSector(sector);
 			terrorist_placement[n_terrorists_added++] = sector;
 		}
 	}
@@ -288,7 +290,7 @@ void MakeRemainingTerroristsTougher()
 	{
 		ProfileID         const  pid = i->profile;
 		MERCPROFILESTRUCT const& p   = GetProfile(pid);
-		if (p.bMercStatus == MERC_IS_DEAD || p.sSectorX == 0 || p.sSectorY == 0) continue;
+		if (p.bMercStatus == MERC_IS_DEAD || !p.sSector.IsValid()) continue;
 		// Slay on player's team, doesn't count towards remaining terrorists
 		if (pid == SLAY && FindSoldierByProfileIDOnPlayerTeam(SLAY)) continue;
 		++n_remaining_terrorists;
@@ -350,7 +352,7 @@ void MakeRemainingTerroristsTougher()
 	{
 		ProfileID         const  pid = i->profile;
 		MERCPROFILESTRUCT const& p   = GetProfile(pid);
-		if (p.bMercStatus == MERC_IS_DEAD || p.sSectorX == 0 || p.sSectorY == 0) continue;
+		if (p.bMercStatus == MERC_IS_DEAD || !p.sSector.IsValid()) continue;
 		// Slay on player's team, doesn't count towards remaining terrorists
 		if (pid == SLAY && FindSoldierByProfileIDOnPlayerTeam(SLAY)) continue;
 
@@ -367,14 +369,14 @@ void DecideOnAssassin()
 {
 	ProfileID   assassins[lengthof(g_assassin_info)];
 	UINT8       n    = 0;
-	UINT8 const town = GetTownIdForSector(SECTOR(gWorldSectorX, gWorldSectorY));
+	UINT8 const town = GetTownIdForSector(gWorldSector);
 	FOR_EACH(AssassinInfo const, i, g_assassin_info)
 	{
 		AssassinInfo      const  a = *i;
 		MERCPROFILESTRUCT const& p = GetProfile(a.profile);
 		// Make sure alive and not placed already.
 		if (p.bMercStatus == MERC_IS_DEAD)      continue;
-		if (p.sSectorX != 0 || p.sSectorY != 0) continue;
+		if (p.sSector.IsValid()) continue;
 		// Check this merc to see if the town is a possibility.
 		FOR_EACH(UINT8 const, k, a.towns)
 		{
@@ -387,8 +389,7 @@ void DecideOnAssassin()
 	if (n == 0) return;
 	ProfileID const    pid = assassins[Random(n)];
 	MERCPROFILESTRUCT& p   = GetProfile(pid);
-	p.sSectorX             = gWorldSectorX;
-	p.sSectorY             = gWorldSectorY;
+	p.sSector              = gWorldSector;
 	AddStrategicEvent(EVENT_REMOVE_ASSASSIN, GetWorldTotalMin() + 60 * (3 + Random(3)), pid);
 }
 
@@ -466,13 +467,14 @@ void MakeRemainingAssassinsTougher()
 
 static void StartSomeMercsOnAssignment(void)
 {
-	UINT32 uiCnt;
 	UINT32 uiChance;
 
 	// some randomly picked A.I.M. mercs will start off "on assignment" at the beginning of each new game
-	for( uiCnt = 0; uiCnt < AIM_AND_MERC_MERCS; uiCnt++)
+	for (auto profile : GCM->listMercProfiles())
 	{
-		MERCPROFILESTRUCT& p = GetProfile(uiCnt);
+		if (!profile->isAIMMerc() && !profile->isMERCMerc()) continue;
+
+		MERCPROFILESTRUCT& p = profile->getStruct();
 
 		// calc chance to start on assignment
 		uiChance = 5 * p.bExpLevel;
@@ -586,13 +588,11 @@ SOLDIERTYPE* ChangeSoldierTeam(SOLDIERTYPE* const old_s, UINT8 const team)
 
 	// Create a new one.
 	SOLDIERCREATE_STRUCT c;
-	memset(&c, 0, sizeof(c));
+	c = SOLDIERCREATE_STRUCT{};
 	c.bTeam            = team;
 	c.ubProfile        = old_s->ubProfile;
 	c.bBodyType        = old_s->ubBodyType;
-	c.sSectorX         = old_s->sSectorX;
-	c.sSectorY         = old_s->sSectorY;
-	c.bSectorZ         = old_s->bSectorZ;
+	c.sSector          = old_s->sSector;
 	c.sInsertionGridNo = old_s->sGridNo; // XXX always NOWHERE due to InternalTacticalRemoveSoldier() above
 	c.bDirection       = old_s->bDirection;
 	if (old_s->uiStatusFlags & SOLDIER_VEHICLE)
@@ -689,7 +689,7 @@ BOOLEAN RecruitRPC( UINT8 ubCharNum )
 	}
 	else if ( ubCharNum == DYNAMO && gubQuest[ QUEST_FREE_DYNAMO ] == QUESTINPROGRESS )
 	{
-		EndQuest( QUEST_FREE_DYNAMO, pSoldier->sSectorX, pSoldier->sSectorY );
+		EndQuest(QUEST_FREE_DYNAMO, pSoldier->sSector);
 	}
 	// handle town loyalty adjustment
 	HandleTownLoyaltyForNPCRecruitment( pNewSoldier );
@@ -739,11 +739,13 @@ BOOLEAN RecruitRPC( UINT8 ubCharNum )
 	//add a history log that tells the user that a npc has joined the team
 	//
 	// ( pass in pNewSoldier->sSectorX cause if its invalid, -1, n/a will appear as the sector in the history log )
-	AddHistoryToPlayersLog( HISTORY_RPC_JOINED_TEAM, pNewSoldier->ubProfile, GetWorldTotalMin(), pNewSoldier->sSectorX, pNewSoldier->sSectorY );
+	AddHistoryToPlayersLog(HISTORY_RPC_JOINED_TEAM, pNewSoldier->ubProfile, GetWorldTotalMin(), pNewSoldier->sSector);
 
 
 	//remove the merc from the Personnel screens departed list ( if they have never been hired before, its ok to call it )
 	RemoveNewlyHiredMercFromPersonnelDepartedList( pSoldier->ubProfile );
+
+	OnRPCRecruited(pNewSoldier);
 
 	return( TRUE );
 }
@@ -811,19 +813,15 @@ BOOLEAN UnRecruitEPC(ProfileID const pid)
 
 	// check to see if this person should disappear from the map after this
 	if ((pid == JOHN || pid == MARY) &&
-			s->sSectorX == 13            &&
-			s->sSectorY == MAP_ROW_B     &&
-			s->bSectorZ == 0)
+			s->sSector.x == 13            &&
+			s->sSector.y == MAP_ROW_B     &&
+			s->sSector.z == 0)
 	{
-		p.sSectorX = 0;
-		p.sSectorY = 0;
-		p.bSectorZ = 0;
+		p.sSector = SGPSector();
 	}
 	else
 	{
-		p.sSectorX = s->sSectorX;
-		p.sSectorY = s->sSectorY;
-		p.bSectorZ = s->bSectorZ;
+		p.sSector = s->sSector;
 	}
 
 	// how do we decide whether or not to set this?
@@ -838,11 +836,13 @@ BOOLEAN UnRecruitEPC(ProfileID const pid)
 
 INT8 WhichBuddy( UINT8 ubCharNum, UINT8 ubBuddy )
 {
-	INT8								bLoop;
+	if (ubCharNum == NO_PROFILE)
+	{
+		return -1;
+	}
 
 	MERCPROFILESTRUCT const& p = GetProfile(ubCharNum);
-
-	for (bLoop = 0; bLoop < 3; bLoop++)
+	for (INT8 bLoop = 0; bLoop < 3; bLoop++)
 	{
 		if (p.bBuddy[bLoop] == ubBuddy)
 		{
@@ -914,7 +914,7 @@ void UpdateSoldierPointerDataIntoProfile()
 		SOLDIERTYPE const& s = **i;
 		if (s.ubProfile == NO_PROFILE) continue;
 		// If we are above player mercs
-		if (s.ubProfile < FIRST_RPC)   continue;
+		if (MercProfile(s.ubProfile).isPlayerMerc()) continue;
 
 		MERCPROFILESTRUCT& p = GetProfile(s.ubProfile);
 		p.bLife         = s.bLife;
@@ -948,8 +948,7 @@ SOLDIERTYPE* SwapLarrysProfiles(SOLDIERTYPE* const s)
 
 	dst.ubMiscFlags2                = src.ubMiscFlags2;
 	dst.ubMiscFlags                 = src.ubMiscFlags;
-	dst.sSectorX                    = src.sSectorX;
-	dst.sSectorY                    = src.sSectorY;
+	dst.sSector                     = src.sSector;
 	dst.uiDayBecomesAvailable       = src.uiDayBecomesAvailable;
 	dst.usKills                     = src.usKills;
 	dst.usAssists                   = src.usAssists;
@@ -1065,4 +1064,12 @@ BOOLEAN DoesNPCOwnBuilding( SOLDIERTYPE *pSoldier, INT16 sGridNo )
 	}
 
 	return( FALSE );
+}
+
+BOOLEAN IsProfileIdAnAimOrMERCMerc(UINT8 ubProfileID)
+{
+	// AIM: ubProfileID < BIFF
+	// MERC: ubProfileID >= BIFF && ubProfileID <= BUBBA
+	MercProfile p(ubProfileID);
+	return p.isAIMMerc() || p.isMERCMerc();
 }

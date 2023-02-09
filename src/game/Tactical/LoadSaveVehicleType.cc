@@ -10,15 +10,15 @@
 void ExtractVehicleTypeFromFile(HWFILE const file, VEHICLETYPE* const v, UINT32 const savegame_version)
 {
 	BYTE data[128];
-	FileRead(file, data, sizeof(data));
+	file->read(data, sizeof(data));
 
-	const BYTE* d = data;
+	DataReader d{data};
 	EXTR_PTR(d, v->pMercPath)
 	EXTR_U8(d, v->ubMovementGroup)
 	EXTR_U8(d, v->ubVehicleType)
-	EXTR_I16(d, v->sSectorX)
-	EXTR_I16(d, v->sSectorY)
-	EXTR_I16(d, v->sSectorZ)
+	EXTR_I16(d, v->sSector.x)
+	EXTR_I16(d, v->sSector.y)
+	EXTR_I16(d, v->sSector.z)
 	EXTR_BOOL(d, v->fBetweenSectors)
 	EXTR_SKIP(d, 1)
 	EXTR_I16(d, v->sGridNo);
@@ -34,11 +34,11 @@ void ExtractVehicleTypeFromFile(HWFILE const file, VEHICLETYPE* const v, UINT32 
 	EXTR_SKIP(d, 61)
 	EXTR_BOOL(d, v->fDestroyed)
 	EXTR_SKIP(d, 2)
-	EXTR_I32(d, v->iMovementSoundID)
+	EXTR_U32(d, v->uiMovementSoundID)
 	EXTR_SKIP(d, 1)
 	EXTR_BOOL(d, v->fValid)
 	EXTR_SKIP(d, 2)
-	Assert(d == endof(data));
+	Assert(d.getConsumed() == lengthof(data));
 }
 
 
@@ -46,13 +46,13 @@ void InjectVehicleTypeIntoFile(HWFILE const file, VEHICLETYPE const* const v)
 {
 	BYTE data[128];
 
-	BYTE* d = data;
+	DataWriter d{data};
 	INJ_PTR(d, v->pMercPath)
 	INJ_U8(d, v->ubMovementGroup)
 	INJ_U8(d, v->ubVehicleType)
-	INJ_I16(d, v->sSectorX)
-	INJ_I16(d, v->sSectorY)
-	INJ_I16(d, v->sSectorZ)
+	INJ_I16(d, v->sSector.x)
+	INJ_I16(d, v->sSector.y)
+	INJ_I16(d, v->sSector.z)
 	INJ_BOOL(d, v->fBetweenSectors)
 	INJ_SKIP(d, 1)
 	INJ_I16(d, v->sGridNo);
@@ -66,11 +66,11 @@ void InjectVehicleTypeIntoFile(HWFILE const file, VEHICLETYPE const* const v)
 	INJ_SKIP(d, 61)
 	INJ_BOOL(d, v->fDestroyed)
 	INJ_SKIP(d, 2)
-	INJ_I32(d, v->iMovementSoundID)
+	INJ_U32(d, v->uiMovementSoundID)
 	INJ_SKIP(d, 1)
 	INJ_BOOL(d, v->fValid)
 	INJ_SKIP(d, 2)
-	Assert(d == endof(data));
+	Assert(d.getConsumed() == lengthof(data));
 
-	FileWrite(file, data, sizeof(data));
+	file->write(data, sizeof(data));
 }

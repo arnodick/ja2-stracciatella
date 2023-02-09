@@ -1,71 +1,68 @@
+#include "Explosion_Control.h"
+
+#include "AI.h"
+#include "Action_Items.h"
+#include "Animation_Control.h"
+#include "Campaign_Types.h"
+#include "ContentManager.h"
+#include "Debug.h"
 #include "Directories.h"
+#include "End_Game.h"
+#include "FOV.h"
+#include "FileMan.h"
 #include "Font_Control.h"
+#include "GameInstance.h"
+#include "GameSettings.h"
+#include "Game_Clock.h"
+#include "Handle_Doors.h"
+#include "Handle_Items.h"
+#include "Handle_UI.h"
+#include "Interactive_Tiles.h"
+#include "Interface.h"
+#include "Interface_Dialogue.h"
+#include "Isometric_Utils.h"
+#include "Items.h"
+#include "Keys.h"
+#include "LightEffects.h"
+#include "Lighting.h"
 #include "LoadSaveData.h"
 #include "LoadSaveExplosionType.h"
-#include "Overhead.h"
-#include "Structure.h"
-#include "Timer_Control.h"
-#include "Debug.h"
-#include "Soldier_Control.h"
-#include "Handle_Items.h"
-#include "WorldDef.h"
-#include "WorldMan.h"
-#include "Rotting_Corpses.h"
-#include "Isometric_Utils.h"
-#include "Animation_Control.h"
-#include "Game_Clock.h"
-#include "Soldier_Create.h"
-#include "RenderWorld.h"
-#include "Soldier_Add.h"
-#include "Explosion_Control.h"
-#include "Tile_Animation.h"
-#include "Sound_Control.h"
-#include "Weapons.h"
-#include "World_Items.h"
-#include "Structure_Wrap.h"
-#include "TileDef.h"
-#include "TileDat.h"
-#include "Interactive_Tiles.h"
-#include "SaveLoadMap.h"
-#include "Handle_Doors.h"
+#include "Logger.h"
+#include "Map_Information.h"
 #include "Message.h"
-#include "Random.h"
-#include "SmokeEffects.h"
-#include "Handle_UI.h"
+#include "Morale.h"
+#include "OppList.h"
+#include "Overhead.h"
 #include "PathAI.h"
 #include "Pits.h"
-#include "Campaign_Types.h"
-#include "StrategicMap.h"
-#include "Action_Items.h"
-#include "Soldier_Profile.h"
 #include "Quests.h"
-#include "Interface_Dialogue.h"
-#include "LightEffects.h"
-#include "AI.h"
-#include "Soldier_Tile.h"
-#include "Lighting.h"
+#include "Random.h"
+#include "RenderWorld.h"
 #include "Render_Fun.h"
-#include "OppList.h"
+#include "Rotting_Corpses.h"
+#include "SamSiteModel.h"
+#include "SaveLoadMap.h"
 #include "Smell.h"
-#include "GameSettings.h"
-#include "Interface.h"
-#include "End_Game.h"
-#include "WorldDat.h"
-#include "Keys.h"
-#include "FOV.h"
-#include "Map_Information.h"
-#include "MemMan.h"
-#include "FileMan.h"
-#include "Items.h"
+#include "SmokeEffects.h"
+#include "Soldier_Add.h"
+#include "Soldier_Control.h"
+#include "Soldier_Create.h"
 #include "Soldier_Macros.h"
-#include "Morale.h"
-
-#include "ContentManager.h"
-#include "GameInstance.h"
-#include "slog/slog.h"
-
-extern INT8 gbSAMGraphicList[NUMBER_OF_SAMS];
-
+#include "Soldier_Profile.h"
+#include "Soldier_Tile.h"
+#include "Sound_Control.h"
+#include "StrategicMap.h"
+#include "Structure.h"
+#include "Structure_Wrap.h"
+#include "TileDat.h"
+#include "TileDef.h"
+#include "Tile_Animation.h"
+#include "Timer_Control.h"
+#include "Weapons.h"
+#include "WorldDat.h"
+#include "WorldDef.h"
+#include "WorldMan.h"
+#include "World_Items.h"
 
 struct ExplosionInfo
 {
@@ -100,12 +97,11 @@ BOOLEAN                      gfExplosionQueueActive      = FALSE;
 static BOOLEAN      gfExplosionQueueMayHaveChangedSight = FALSE;
 static SOLDIERTYPE* gPersonToSetOffExplosions           = 0;
 
-static INT16 gsTempActionGridNo = NOWHERE;
-
-
 #define NUM_EXPLOSION_SLOTS 100
 static EXPLOSIONTYPE gExplosionData[NUM_EXPLOSION_SLOTS];
 
+Observable<INT16, INT16, INT8, INT16, STRUCTURE*, UINT32, BOOLEAN_S*> BeforeStructureDamaged = {};
+Observable<INT16, INT16, INT8, INT16, STRUCTURE*, UINT8, BOOLEAN> OnStructureDamaged = {};
 
 static EXPLOSIONTYPE* GetFreeExplosion(void)
 {
@@ -141,7 +137,7 @@ void InternalIgniteExplosion(SOLDIERTYPE* const owner, const INT16 sX, const INT
 
 
 	gTacticalStatus.ubAttackBusyCount++;
-	SLOGD(DEBUG_TAG_EXPLOSION, "Incrementing Attack: Explosion gone off, Count now %d", gTacticalStatus.ubAttackBusyCount);
+	SLOGD("Incrementing Attack: Explosion gone off, Count now {}", gTacticalStatus.ubAttackBusyCount);
 
 	EXPLOSIONTYPE* const e = GetFreeExplosion();
 	if (e == NULL) return;
@@ -204,7 +200,7 @@ static void GenerateExplosionFromExplosionPointer(EXPLOSIONTYPE* pExplosion)
 	const ExplosionInfo* inf = &explosion_info[pExplosion->ubTypeID];
 
 	// Setup explosion!
-	memset( &AniParams, 0, sizeof( ANITILE_PARAMS ) );
+	AniParams = ANITILE_PARAMS{};
 
 	AniParams.sGridNo							= sGridNo;
 	AniParams.ubLevelID						= ANI_TOPMOST_LEVEL;
@@ -343,7 +339,7 @@ static STRUCTURE* RemoveOnWall(GridNo const grid_no, StructureFlags const flags,
 		STRUCTURE* const base = FindBaseStructure(attached);
 		if (!base)
 		{ // Error!
-			SLOGW(DEBUG_TAG_EXPLOSION, "Problems removing structure attached to wall at %d", grid_no);
+			SLOGW("Problems removing structure attached to wall at {}", grid_no);
 			break;
 		}
 
@@ -362,12 +358,10 @@ static STRUCTURE* RemoveOnWall(GridNo const grid_no, StructureFlags const flags,
 
 static bool ExplosiveDamageStructureAtGridNo(STRUCTURE* const pCurrent, STRUCTURE** const ppNextCurrent, INT16 const grid_no, INT16 const wound_amt, UINT32 const uiDist, BOOLEAN* const pfRecompileMovementCosts, BOOLEAN const only_walls, SOLDIERTYPE* const owner, INT8 const level)
 {
-	/* ATE: Check for O3 statue for special damage
-	 * Note, we do this check every time explosion goes off in game, but it's an
-	 * efficient check */
-	if (DoesO3SectorStatueExistHere(grid_no) && uiDist <= 1)
+	BOOLEAN_S skipDamage = false;
+	BeforeStructureDamaged(gWorldSector.x, gWorldSector.y, gWorldSector.z, grid_no, pCurrent, uiDist, &skipDamage);
+	if (skipDamage)
 	{
-		ChangeO3SectorStatue(TRUE);
 		return true;
 	}
 
@@ -391,7 +385,10 @@ static bool ExplosiveDamageStructureAtGridNo(STRUCTURE* const pCurrent, STRUCTUR
 		INT16 const sX = CenterX(grid_no);
 		INT16 const sY = CenterY(grid_no);
 		INT8 bDamageReturnVal = DamageStructure(pCurrent, wound_amt, STRUCTURE_DAMAGE_EXPLOSION, grid_no, sX, sY, NULL);
-		if (bDamageReturnVal == 0) return true;
+		if (bDamageReturnVal == STRUCTURE_NOT_DAMAGED) return true;
+
+		BOOLEAN fDestroyed = (bDamageReturnVal == STRUCTURE_DESTROYED);
+		OnStructureDamaged(gWorldSector.x, gWorldSector.y, gWorldSector.z, grid_no, pCurrent, wound_amt, fDestroyed);
 
 		STRUCTURE* const base         = FindBaseStructure(pCurrent);
 		GridNo     const base_grid_no = base->sGridNo;
@@ -412,19 +409,19 @@ static bool ExplosiveDamageStructureAtGridNo(STRUCTURE* const pCurrent, STRUCTUR
 		 * should have a in-between explosion partner, make damage code 2 - which
 		 * means only damaged - the normal explosion spreading will cause it do use
 		 * the proper pieces */
-		if (bDamageReturnVal == 1 && orig_destruction_partner < 0)
+		if (bDamageReturnVal == STRUCTURE_DESTROYED && orig_destruction_partner < 0)
 		{
-			bDamageReturnVal = 2;
+			bDamageReturnVal = STRUCTURE_DAMAGED;
 		}
 
 		INT8    destruction_partner = -1;
 		BOOLEAN fContinue           = FALSE;
-		if (bDamageReturnVal == 1)
+		if (bDamageReturnVal == STRUCTURE_DESTROYED)
 		{
 			fContinue = TRUE;
 		}
 		// Check for a damaged looking graphic
-		else if (bDamageReturnVal == 2)
+		else if (bDamageReturnVal == STRUCTURE_DAMAGED)
 		{
 			if (orig_destruction_partner < 0)
 			{
@@ -557,23 +554,11 @@ static bool ExplosiveDamageStructureAtGridNo(STRUCTURE* const pCurrent, STRUCTUR
 					ReplaceWall(NewGridNo(base_grid_no, DirectionInc(SOUTH)), orientation, orientation == OUTSIDE_TOP_RIGHT ? 50 : 54);
 
 					// looking for attached structures to remove in base tile
-					RemoveOnWall(base_grid_no, STRUCTURE_ON_RIGHT_WALL, 0); // XXX no next_current on base tile?
+					*ppNextCurrent = RemoveOnWall(base_grid_no, STRUCTURE_ON_RIGHT_WALL, *ppNextCurrent);
 
 					// Move in EAST, looking for attached structures to remove
 					RemoveOnWall(NewGridNo(base_grid_no, DirectionInc(EAST)), STRUCTURE_ON_RIGHT_WALL, 0);
 					break;
-			}
-
-			// CJC, Sept 16: if we destroy any wall of the brothel, make Kingpin's men hostile!
-			if (gWorldSectorX == 5 && gWorldSectorY == MAP_ROW_C && gbWorldSectorZ == 0)
-			{
-				UINT8 room = GetRoom(grid_no);
-				if (room == NO_ROOM) room = GetRoom(grid_no + DirectionInc(SOUTH));
-				if (room == NO_ROOM) room = GetRoom(grid_no + DirectionInc(EAST));
-				if (room != NO_ROOM && IN_BROTHEL(room))
-				{
-					CivilianGroupChangesSides(KINGPIN_CIV_GROUP);
-				}
 			}
 		}
 
@@ -581,7 +566,7 @@ static bool ExplosiveDamageStructureAtGridNo(STRUCTURE* const pCurrent, STRUCTUR
 		// Lots of HARD CODING HERE :(
 		UINT32 const tile_type = GetTileType(node->usIndex);
 		// Check if we are a fountain!
-		if (strcasecmp(gTilesets[giCurrentTilesetID].TileSurfaceFilenames[tile_type], "fount1.sti") == 0)
+		if (gTilesets[giCurrentTilesetID].zTileSurfaceFilenames[tile_type].compare("fount1.sti", ST::case_insensitive) == 0)
 		{ // Remove water
 			ApplyMapChangesToMapTempFile app;
 			UINT16 sNewIndex;
@@ -650,7 +635,7 @@ static void ExplosiveDamageGridNo(const INT16 sGridNo, const INT16 sWoundAmt, co
 	BOOLEAN   fMultiStructSpecialFlag = FALSE;
 	BOOLEAN   fExplodeDamageReturn = FALSE;
 
-	DB_STRUCTURE_TILE** ppTile          = NULL;    // XXX HACK000E
+	std::vector<DB_STRUCTURE_TILE*> ppTile;
 	GridNo              sBaseGridNo     = NOWHERE; // XXX HACK000E
 	UINT8               ubNumberOfTiles = 0;       // XXX HACK000E
 
@@ -671,8 +656,7 @@ static void ExplosiveDamageGridNo(const INT16 sGridNo, const INT16 sWoundAmt, co
 			sBaseGridNo = pBaseStructure->sGridNo;
 			ubNumberOfTiles = pBaseStructure->pDBStructureRef->pDBStructure->ubNumberOfTiles;
 			fMultiStructure = ( ( pBaseStructure->fFlags & STRUCTURE_MULTI ) != 0 );
-			ppTile = MALLOCN(DB_STRUCTURE_TILE*, ubNumberOfTiles);
-			memcpy(ppTile, pBaseStructure->pDBStructureRef->ppTile, sizeof(*ppTile) * ubNumberOfTiles);
+			ppTile.assign(pBaseStructure->pDBStructureRef->ppTile, pBaseStructure->pDBStructureRef->ppTile + ubNumberOfTiles);
 
 			if ( bMultiStructSpecialFlag == -1 )
 			{
@@ -711,10 +695,6 @@ static void ExplosiveDamageGridNo(const INT16 sGridNo, const INT16 sWoundAmt, co
 			// ATE: Don't after first attack...
 			if ( uiDist > 1 )
 			{
-				if ( pBaseStructure )
-				{
-					MemFree( ppTile );
-				}
 				return;
 			}
 
@@ -757,7 +737,7 @@ static void ExplosiveDamageGridNo(const INT16 sGridNo, const INT16 sWoundAmt, co
 
 		if ( pBaseStructure )
 		{
-			MemFree( ppTile );
+			ppTile.clear();
 		}
 
 		pCurrent = pNextCurrent;
@@ -784,9 +764,9 @@ static BOOLEAN DamageSoldierFromBlast(SOLDIERTYPE* const pSoldier, SOLDIERTYPE* 
 
 	// Increment attack counter...
 	gTacticalStatus.ubAttackBusyCount++;
-	SLOGD(DEBUG_TAG_EXPLOSION, "Incrementing Attack: Explosion dishing out damage, Count now %d", gTacticalStatus.ubAttackBusyCount);
+	SLOGD("Incrementing Attack: Explosion dishing out damage, Count now {}", gTacticalStatus.ubAttackBusyCount);
 
-	sNewWoundAmt = sWoundAmt - __min( sWoundAmt, 35 ) * ArmourVersusExplosivesPercent( pSoldier ) / 100;
+	sNewWoundAmt = sWoundAmt - std::min(int(sWoundAmt), 35) * ArmourVersusExplosivesPercent(pSoldier) / 100;
 	if ( sNewWoundAmt < 0 )
 	{
 		sNewWoundAmt = 0;
@@ -1057,7 +1037,7 @@ static BOOLEAN ExpAffect(const INT16 sBombGridNo, const INT16 sGridNo, const UIN
 			sBreathAmt = 0;
 
 		// damage structures
-		if ( uiDist <= __max( 1, (UINT32) (pExplosive->ubDamage / 30) ) )
+		if ( uiDist <= std::max(1U, (UINT32) (pExplosive->ubDamage / 30)))
 		{
 			if ( GCM->getItem(usItem)->isGrenade() )
 			{
@@ -1111,7 +1091,7 @@ static BOOLEAN ExpAffect(const INT16 sBombGridNo, const INT16 sGridNo, const UIN
 				if (DamageItemOnGround(&wi.o, sGridNo, bLevel, sWoundAmt * 2, owner))
 				{
 					// item was destroyed
-					RemoveItemFromPool(&wi);
+					RemoveItemFromPool(wi);
 				}
 				pItemPool = pItemPoolNext;
 			}
@@ -1133,7 +1113,7 @@ static BOOLEAN ExpAffect(const INT16 sBombGridNo, const INT16 sGridNo, const UIN
 	{
 		// Drop blood ....
 		// Get blood quantity....
-		InternalDropBlood(sGridNo, 0, HUMAN, __max(MAXBLOODQUANTITY - uiDist * 2 /* XXX always >= 0, because uiDist is unsigned */, 0), 1);
+		InternalDropBlood(sGridNo, 0, HUMAN, std::max(MAXBLOODQUANTITY - uiDist * 2 /* XXX always >= 0, because uiDist is unsigned */, 0U), 1);
 	}
 
 	if ( sSubsequent != ERASE_SPREAD_EFFECT && sSubsequent != BLOOD_SPREAD_EFFECT )
@@ -1612,7 +1592,7 @@ void SpreadEffect(const INT16 sGridNo, const UINT8 ubRadius, const UINT16 usItem
 			{
 				uiTempSpot = uiNewSpot;
 
-				SLOGD(DEBUG_TAG_EXPLOSION, "Explosion affects %d", uiNewSpot);
+				SLOGD("Explosion affects {}", uiNewSpot);
 				// ok, do what we do here...
 				if (ExpAffect(sGridNo, uiNewSpot, cnt / 2, usItem, owner, fSubsequent, &fAnyMercHit, bLevel, smoke))
 				{
@@ -1652,7 +1632,7 @@ void SpreadEffect(const INT16 sGridNo, const UINT8 ubRadius, const UINT16 usItem
 							if ( ubKeepGoing )
 							{
 								// ok, do what we do here
-								SLOGD(DEBUG_TAG_EXPLOSION, "Explosion affects %d", uiNewSpot);
+								SLOGD("Explosion affects {}", uiNewSpot);
 								if (ExpAffect(sGridNo, uiNewSpot, (INT16)((cnt + branchCnt) / 2), usItem, owner, fSubsequent, &fAnyMercHit, bLevel, smoke))
 								{
 									fRecompileMovement = TRUE;
@@ -1713,7 +1693,7 @@ void SpreadEffect(const INT16 sGridNo, const UINT8 ubRadius, const UINT16 usItem
 
 		// if anything has been done to change movement costs and this is a potential POW situation, check
 		// paths for POWs
-		if ( gWorldSectorX == 13 && gWorldSectorY == MAP_ROW_I )
+		if (gWorldSector.x == 13 && gWorldSector.y == MAP_ROW_I)
 		{
 			DoPOWPathChecks();
 		}
@@ -1758,7 +1738,7 @@ static void ToggleActionItemsByFrequency(INT8 bFrequency)
 	// Go through all the bombs in the world, and look for remote ones
 	CFOR_EACH_WORLD_BOMB(wb)
 	{
-		OBJECTTYPE& o = GetWorldItem(wb->iItemIndex).o;
+		OBJECTTYPE& o = GetWorldItem(wb.iItemIndex).o;
 		if (o.bDetonatorType == BOMB_REMOTE)
 		{
 			// Found a remote bomb, so check to see if it has the same frequency
@@ -1784,7 +1764,7 @@ static void TogglePressureActionItemsInGridNo(INT16 sGridNo)
 	// Go through all the bombs in the world, and look for remote ones
 	CFOR_EACH_WORLD_BOMB(wb)
 	{
-		WORLDITEM& wi = GetWorldItem(wb->iItemIndex);
+		WORLDITEM& wi = GetWorldItem(wb.iItemIndex);
 		if (wi.sGridNo != sGridNo) continue;
 
 		OBJECTTYPE& o = wi.o;
@@ -1850,7 +1830,7 @@ static void PerformItemAction(INT16 sGridNo, OBJECTTYPE* pObj)
 			else
 			{
 				// error message here
-				SLOGW(DEBUG_TAG_EXPLOSION, "Action item to open door in gridno %d but there is none!", sGridNo );
+				SLOGW("Action item to open door in gridno {} but there is none!", sGridNo);
 			}
 			break;
 		case ACTION_ITEM_CLOSE_DOOR:
@@ -1878,7 +1858,7 @@ static void PerformItemAction(INT16 sGridNo, OBJECTTYPE* pObj)
 			else
 			{
 				// error message here
-				SLOGW(DEBUG_TAG_EXPLOSION, "Action item to close door in gridno %d but there is none!", sGridNo );
+				SLOGW("Action item to close door in gridno {} but there is none!", sGridNo);
 			}
 			break;
 		case ACTION_ITEM_TOGGLE_DOOR:
@@ -1898,7 +1878,7 @@ static void PerformItemAction(INT16 sGridNo, OBJECTTYPE* pObj)
 			else
 			{
 				// error message here
-				SLOGW(DEBUG_TAG_HANDLEITEMS, "Action item to toggle door in gridno %d but there is none!", sGridNo );
+				SLOGW("Action item to toggle door in gridno {} but there is none!", sGridNo);
 			}
 			break;
 		case ACTION_ITEM_UNLOCK_DOOR:
@@ -2149,7 +2129,7 @@ static void PerformItemAction(INT16 sGridNo, OBJECTTYPE* pObj)
 									ChangeSoldierState(tgt, STANDING, 0, TRUE);
 									TeleportSoldier(*tgt, sTeleportSpot, false);
 
-									HandleMoraleEvent(tgt, MORALE_SEX, gWorldSectorX, gWorldSectorY, gbWorldSectorZ);
+									HandleMoraleEvent(tgt, MORALE_SEX, gWorldSector);
 									FatigueCharacter(*tgt);
 									FatigueCharacter(*tgt);
 									FatigueCharacter(*tgt);
@@ -2190,7 +2170,7 @@ static void PerformItemAction(INT16 sGridNo, OBJECTTYPE* pObj)
 			break;
 		default:
 			// error message here
-			SLOGW(DEBUG_TAG_EXPLOSION, "Action item with invalid action in gridno %d!", sGridNo );
+			SLOGW("Action item with invalid action in gridno {}!", sGridNo);
 			break;
 	}
 }
@@ -2243,7 +2223,7 @@ void HandleExplosionQueue()
 		else if (o.usBombItem == TRIP_FLARE)
 		{
 			NewLightEffect(gridno, LIGHT_FLARE_MARK_1);
-			RemoveItemFromPool(&wi);
+			RemoveItemFromPool(wi);
 		}
 		else
 		{
@@ -2251,7 +2231,7 @@ void HandleExplosionQueue()
 
 			/* Remove the item first to prevent the explosion from detonating it a
 			 * second time. */
-			RemoveItemFromPool(&wi);
+			RemoveItemFromPool(wi);
 
 			// Make sure no one thinks there is a bomb here any more
 			UINT16& flags = gpWorldLevelData[gridno].uiFlags;
@@ -2322,7 +2302,8 @@ void DecayBombTimers( void )
 	uiTimeStamp = GetJA2Clock();
 
 	// Go through all the bombs in the world, and look for timed ones
-	for (uiWorldBombIndex = 0; uiWorldBombIndex < guiNumWorldBombs; uiWorldBombIndex++)
+	Assert(gWorldBombs.size() <= UINT32_MAX);
+	for (uiWorldBombIndex = 0; uiWorldBombIndex < static_cast<UINT32>(gWorldBombs.size()); uiWorldBombIndex++)
 	{
 		if (gWorldBombs[uiWorldBombIndex].fExists)
 		{
@@ -2364,7 +2345,8 @@ void SetOffBombsByFrequency(SOLDIERTYPE* const s, const INT8 bFrequency)
 	uiTimeStamp = GetJA2Clock();
 
 	// Go through all the bombs in the world, and look for remote ones
-	for (uiWorldBombIndex = 0; uiWorldBombIndex < guiNumWorldBombs; uiWorldBombIndex++)
+	Assert(gWorldBombs.size() <= UINT32_MAX);
+	for (uiWorldBombIndex = 0; uiWorldBombIndex < static_cast<UINT32>(gWorldBombs.size()); uiWorldBombIndex++)
 	{
 		if (gWorldBombs[uiWorldBombIndex].fExists)
 		{
@@ -2432,7 +2414,8 @@ BOOLEAN SetOffBombsInGridNo(SOLDIERTYPE* const s, const INT16 sGridNo, const BOO
 	uiTimeStamp = GetJA2Clock();
 
 	// Go through all the bombs in the world, and look for mines at this location
-	for (uiWorldBombIndex = 0; uiWorldBombIndex < guiNumWorldBombs; uiWorldBombIndex++)
+	Assert(gWorldBombs.size() <= UINT32_MAX);
+	for (uiWorldBombIndex = 0; uiWorldBombIndex < static_cast<UINT32>(gWorldBombs.size()); uiWorldBombIndex++)
 	{
 		if (!gWorldBombs[uiWorldBombIndex].fExists) continue;
 
@@ -2496,7 +2479,7 @@ void ActivateSwitchInGridNo(SOLDIERTYPE* const s, const INT16 sGridNo)
 	// Go through all the bombs in the world, and look for mines at this location
 	CFOR_EACH_WORLD_BOMB(wb)
 	{
-		WORLDITEM const& wi = GetWorldItem(wb->iItemIndex);
+		WORLDITEM const& wi = GetWorldItem(wb.iItemIndex);
 		if (wi.sGridNo != sGridNo) continue;
 
 		OBJECTTYPE const& o = wi.o;
@@ -2526,21 +2509,21 @@ void SaveExplosionTableToSaveGameFile(HWFILE const hFile)
 
 
 	//Write the number of explosion queues
-	FileWrite(hFile, &gubElementsOnExplosionQueue, sizeof(gubElementsOnExplosionQueue));
-	FileSeek(hFile, 3, FILE_SEEK_FROM_CURRENT);
+	hFile->write(&gubElementsOnExplosionQueue, sizeof(gubElementsOnExplosionQueue));
+	hFile->seek(3, FILE_SEEK_FROM_CURRENT);
 
 	//loop through and add all the explosions
 	FOR_EACH(ExplosionQueueElement const, i, gExplosionQueue)
 	{
 		ExplosionQueueElement const& e = *i;
 		BYTE  data[12];
-		BYTE* d = data;
+		DataWriter d{data};
 		INJ_U32( d, e.uiWorldBombIndex)
 		INJ_U32( d, e.uiTimeStamp)
 		INJ_U8(  d, e.fExists)
 		INJ_SKIP(d, 3)
-		Assert(d == endof(data));
-		FileWrite(hFile, data, sizeof(data));
+		Assert(d.getConsumed() == lengthof(data));
+		hFile->write(data, sizeof(data));
 	}
 
 	//
@@ -2558,7 +2541,7 @@ void SaveExplosionTableToSaveGameFile(HWFILE const hFile)
 	}
 
 	//Save the number of explosions
-	FileWrite(hFile, &uiExplosionCount, sizeof(UINT32));
+	hFile->write(&uiExplosionCount, sizeof(UINT32));
 
 	//loop through and count all the active explosions
 	for( uiCnt=0; uiCnt< NUM_EXPLOSION_SLOTS; uiCnt++)
@@ -2579,21 +2562,21 @@ void LoadExplosionTableFromSavedGameFile(HWFILE const hFile)
 	//
 
 	//Read the number of explosions queue's
-	FileRead(hFile, &gubElementsOnExplosionQueue, sizeof(gubElementsOnExplosionQueue));
-	FileSeek(hFile, 3, FILE_SEEK_FROM_CURRENT);
+	hFile->read(&gubElementsOnExplosionQueue, sizeof(gubElementsOnExplosionQueue));
+	hFile->seek(3, FILE_SEEK_FROM_CURRENT);
 
 	//loop through read all the active explosions fro the file
 	FOR_EACH(ExplosionQueueElement, i, gExplosionQueue)
 	{
 		BYTE  data[12];
-		FileRead(hFile, data, sizeof(data));
-		BYTE*                  d = data;
+		hFile->read(data, sizeof(data));
+		DataReader d{data};
 		ExplosionQueueElement& e = *i;
 		EXTR_U32( d, e.uiWorldBombIndex)
 		EXTR_U32( d, e.uiTimeStamp)
 		EXTR_U8(  d, e.fExists)
 		EXTR_SKIP(d, 3)
-		Assert(d == endof(data));
+		Assert(d.getConsumed() == lengthof(data));
 	}
 
 	//
@@ -2602,7 +2585,7 @@ void LoadExplosionTableFromSavedGameFile(HWFILE const hFile)
 
 	//Load the number of explosions
 	UINT32 num_explosions;
-	FileRead(hFile, &num_explosions, sizeof(num_explosions));
+	hFile->read(&num_explosions, sizeof(num_explosions));
 
 	//loop through and load all the active explosions
 	const EXPLOSIONTYPE* const end = gExplosionData + num_explosions;
@@ -2612,84 +2595,6 @@ void LoadExplosionTableFromSavedGameFile(HWFILE const hFile)
 		GenerateExplosionFromExplosionPointer(e);
 	}
 }
-
-
-bool DoesSAMExistHere(INT16 const x, INT16 const y, INT16 const z, GridNo const gridno)
-{
-	// ATE: If we are below, return right away
-	if (z != 0) return false;
-
-	INT16 const sector = SECTOR(x, y);
-	for (INT32 i = 0; i != NUMBER_OF_SAMS; ++i)
-	{
-		if (pSamList[i] != sector) continue;
-		if (pSamGridNoAList[i] == gridno) return true;
-		if (pSamGridNoBList[i] == gridno) return true;
-	}
-	return false;
-}
-
-
-void UpdateAndDamageSAMIfFound( INT16 sSectorX, INT16 sSectorY, INT16 sSectorZ, INT16 sGridNo, UINT8 ubDamage )
-{
-	INT16 sSectorNo;
-
-	// OK, First check if SAM exists, and if not, return
-	if ( !DoesSAMExistHere( sSectorX, sSectorY, sSectorZ, sGridNo ) )
-	{
-		return;
-	}
-
-	// Damage.....
-	sSectorNo = CALCULATE_STRATEGIC_INDEX( sSectorX, sSectorY );
-
-	if ( StrategicMap[ sSectorNo ].bSAMCondition >= ubDamage )
-	{
-		StrategicMap[ sSectorNo ].bSAMCondition -= ubDamage;
-	}
-	else
-	{
-		StrategicMap[ sSectorNo ].bSAMCondition = 0;
-	}
-
-	// SAM site may have been put out of commission...
-	UpdateAirspaceControl( );
-
-	// ATE: GRAPHICS UPDATE WILL GET DONE VIA NORMAL EXPLOSION CODE.....
-}
-
-
-void UpdateSAMDoneRepair(INT16 const x, INT16 const y, INT16 const z)
-{
-	// ATE: If we are below, return right away
-	if (z != 0) return;
-
-	INT16 const sector = SECTOR(x, y);
-	for (INT32 i = 0; i != NUMBER_OF_SAMS; ++i)
-	{
-		if (pSamList[i] != sector) continue;
-
-		UINT16 const good_graphic    = GetTileIndexFromTypeSubIndex(EIGHTISTRUCT, gbSAMGraphicList[i]);
-		UINT16 const damaged_graphic = good_graphic - 2; // Damaged one (current) is 2 less
-		GridNo const gridno          = pSamGridNoAList[i];
-		if (x == gWorldSectorX && y == gWorldSectorY && z == gbWorldSectorZ)
-		{ // Sector loaded, update graphic
-			ApplyMapChangesToMapTempFile app;
-			RemoveStruct(   gridno, damaged_graphic);
-			AddStructToHead(gridno, good_graphic);
-		}
-		else
-		{ // We add temp changes to map not loaded
-			RemoveStructFromUnLoadedMapTempFile(gridno, damaged_graphic, x, y, z);
-			AddStructToUnLoadedMapTempFile(     gridno, good_graphic,    x, y, z);
-		}
-		break;
-	}
-
-	// SAM site may have been put back into working order
-	UpdateAirspaceControl();
-}
-
 
 // loop through civ team and find
 // anybody who is an NPC and
@@ -2725,10 +2630,10 @@ static INT32 FindActiveTimedBomb(void)
 	// Go through all the bombs in the world, and look for timed ones
 	FOR_EACH_WORLD_BOMB(wb)
 	{
-		OBJECTTYPE const& o = GetWorldItem(wb->iItemIndex).o;
+		OBJECTTYPE const& o = GetWorldItem(wb.iItemIndex).o;
 		if (o.bDetonatorType != BOMB_TIMED || o.fFlags & OBJECT_DISABLED_BOMB) continue;
 
-		return wb->iItemIndex;
+		return wb.iItemIndex;
 	}
 	return -1;
 }

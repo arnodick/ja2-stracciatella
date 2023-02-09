@@ -4,6 +4,8 @@
 #include "Item_Types.h"
 #include "Store_Inventory.h"
 
+#include <vector>
+
 #define MAX_BOOKMARKS			20
 
 
@@ -86,7 +88,7 @@ struct LaptopSaveInfoStruct
 	// MERC site info
 	UINT8  gubPlayersMercAccountStatus;
 	UINT32 guiPlayersMercAccountNumber;
-	UINT8  gubLastMercIndex;
+	UINT8  gubLastMercIndex; //  the index of the last hirable merc profile in M.E.R.C.
 
 
 	// Aim Site
@@ -96,8 +98,7 @@ struct LaptopSaveInfoStruct
 	STORE_INVENTORY BobbyRayInventory[ MAXITEMS ];
 	STORE_INVENTORY BobbyRayUsedInventory[ MAXITEMS ];
 
-	BobbyRayOrderStruct *BobbyRayOrdersOnDeliveryArray;
-	UINT8 usNumberOfBobbyRayOrderItems; // The number of elements in the array
+	std::vector<BobbyRayOrderStruct> BobbyRayOrdersOnDeliveryArray;
 	UINT8 usNumberOfBobbyRayOrderUsed; // The number of items in the array that are used
 
 
@@ -105,8 +106,7 @@ struct LaptopSaveInfoStruct
 	//NONE
 
 	// Insurance Site
-	LIFE_INSURANCE_PAYOUT *pLifeInsurancePayouts;
-	UINT8   ubNumberLifeInsurancePayouts; // The number of elements in the array
+	std::vector<LIFE_INSURANCE_PAYOUT> pLifeInsurancePayouts;
 	UINT8   ubNumberLifeInsurancePayoutUsed; // The number of items in the array that are used
 
 	BOOLEAN fBobbyRSiteCanBeAccessed;
@@ -140,7 +140,7 @@ struct LaptopSaveInfoStruct
 
 	UINT32  uiTotalMoneyPaidToSpeck;
 
-	UINT8   ubLastMercAvailableId;
+	UINT8   ubLastMercAvailableId; // deprecated
 };
 
 

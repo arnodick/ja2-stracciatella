@@ -28,11 +28,13 @@
 #include "Environment.h"
 #include "Lighting.h"
 #include "Debug.h"
-#include "PathAIDebug.h"
 
 #include "ContentManager.h"
 #include "GameInstance.h"
 #include "WeaponModels.h"
+
+#include <algorithm>
+#include <map>
 
 #ifdef _DEBUG
 	INT16 gsCoverValue[WORLD_MAX];
@@ -67,9 +69,8 @@ static INT32 CalcPercentBetter(INT32 iOldValue, INT32 iNewValue, INT32 iOldScale
 		return(NOWHERE);
 	}
 	iPercentBetter = (iValueChange * 100) / iScaleSum;
-	SLOGD(DEBUG_TAG_AI, "CalcPercentBetter: %%Better %ld, old %ld, new %ld, change %ld\noldScale %ld, newScale %ld, scaleSum %ld",
-				iPercentBetter, iOldValue, iNewValue, iValueChange, iOldScale,
-				iNewScale, iScaleSum);
+	SLOGD("CalcPercentBetter: %Better {}, old {}, new {}, change {}\noldScale {}, newScale {}, scaleSum {}",
+		iPercentBetter, iOldValue, iNewValue, iValueChange, iOldScale, iNewScale, iScaleSum);
 	return(iPercentBetter);
 }
 
@@ -419,7 +420,7 @@ static INT32 CalcCoverValue(SOLDIERTYPE* pMe, INT16 sMyGridNo, INT32 iMyThreat, 
 			{
 				//iRangeFactor = (iRangeChange * (morale - 1)) / 4;
 				iRangeFactor = (iRangeChange * iRangeFactorMultiplier) / 2;
-				SLOGD(DEBUG_TAG_AI, "CalcCoverValue: iRangeChange %d, iRangeFactor %d\n",
+				SLOGD("CalcCoverValue: iRangeChange {}, iRangeFactor {}\n",
 					iRangeChange, iRangeFactor);
 
 				// aggression booster for stupider enemies
@@ -447,7 +448,7 @@ static INT32 CalcCoverValue(SOLDIERTYPE* pMe, INT16 sMyGridNo, INT32 iMyThreat, 
 				MAX_THREAT_RANGE;
 
 	// divide by a 100 to make the numbers more managable and avoid 32-bit limit
-	iThisScale = MAX( iMyPosValue, iHisPosValue) / 100;
+	iThisScale = std::max(iMyPosValue, iHisPosValue) / 100;
 	iThisScale = (iThisScale * iReductionFactor) / 100;
 	*iTotalScale += iThisScale;
 	// this helps to decide the percent improvement later
@@ -458,17 +459,17 @@ static INT32 CalcCoverValue(SOLDIERTYPE* pMe, INT16 sMyGridNo, INT32 iMyThreat, 
 	iCoverValue = (iMyPosValue - iHisPosValue) / 100;
 	iCoverValue = (iCoverValue * iReductionFactor) / 100;
 
-	SLOGD(DEBUG_TAG_AI, "CalcCoverValue: iCoverValue %d, sMyGridNo %d, sHisGrid %d, iRange %d, morale %d",
+	SLOGD("CalcCoverValue: iCoverValue {}, sMyGridNo {}, sHisGrid {}, iRange {}, morale {}",
 		iCoverValue, sMyGridNo, sHisGridNo, iRange, morale);
-	SLOGD(DEBUG_TAG_AI, "CalcCoverValue: iCertainty %d, his bOppCnt %d, my bOppCnt %d",
+	SLOGD("CalcCoverValue: iCertainty {}, his bOppCnt {}, my bOppCnt {}",
 		Threat[uiThreatIndex].iCertainty, pHim->bOppCnt, pMe->bOppCnt);
-	SLOGD(DEBUG_TAG_AI, "CalcCoverValue: bHisCTGT = %d, hisThreat = %d, hisFullAPs = %d",
+	SLOGD("CalcCoverValue: bHisCTGT = {}, hisThreat = {}, hisFullAPs = {}",
 		bHisCTGT, Threat[uiThreatIndex].iValue, Threat[uiThreatIndex].iAPs);
-	SLOGD(DEBUG_TAG_AI, "CalcCoverValue: bMyCTGT = %d,  iMyThreat = %d,  iMyAPsLeft = %d",
+	SLOGD("CalcCoverValue: bMyCTGT = {},  iMyThreat = {},  iMyAPsLeft = {}",
 		bMyCTGT, iMyThreat, iMyAPsLeft);
-	SLOGD(DEBUG_TAG_AI, "CalcCoverValue: hisPosValue = %d, myPosValue = %d",
+	SLOGD("CalcCoverValue: hisPosValue = {}, myPosValue = {}",
 		iHisPosValue, iMyPosValue);
-	SLOGD(DEBUG_TAG_AI, "CalcCoverValue: iThisScale = %d, iTotalScale = %d, iReductionFactor %d",
+	SLOGD("CalcCoverValue: iThisScale = {}, iTotalScale = {}, iReductionFactor {}",
 		iThisScale, *iTotalScale, iReductionFactor);
 
 	return( iCoverValue );
@@ -486,7 +487,7 @@ static UINT8 NumberOfTeamMatesAdjacent(SOLDIERTYPE* pSoldier, INT16 sGridNo)
 		sTempGridNo = NewGridNo( sGridNo, DirectionInc( ubLoop ) );
 		if ( sTempGridNo != sGridNo )
 		{
-			const SOLDIERTYPE* const tgt = WhoIsThere2(sGridNo, pSoldier->bLevel);
+			const SOLDIERTYPE* const tgt = WhoIsThere2(sTempGridNo, pSoldier->bLevel);
 			if (tgt != NULL && tgt != pSoldier && tgt->bTeam == pSoldier->bTeam)
 			{
 				ubCount++;
@@ -527,7 +528,7 @@ INT16 FindBestNearbyCover(SOLDIERTYPE *pSoldier, INT32 morale, INT32 *piPercentB
 
 	bool const fHasGasMask = IsWearingHeadGear(*pSoldier, GASMASK);
 
-	if ( gbWorldSectorZ > 0 )
+	if (gWorldSector.z > 0)
 	{
 		fNight = FALSE;
 	}
@@ -552,7 +553,7 @@ INT16 FindBestNearbyCover(SOLDIERTYPE *pSoldier, INT32 morale, INT32 *piPercentB
 #if defined( _DEBUG ) && !defined( PATHAI_VISIBLE_DEBUG )
 	if (gfDisplayCoverValues)
 	{
-		memset( gsCoverValue, 0x7F, sizeof( INT16 ) * WORLD_MAX );
+		std::fill_n(gsCoverValue, WORLD_MAX, 0x7F7F);
 	}
 #endif
 
@@ -599,7 +600,7 @@ INT16 FindBestNearbyCover(SOLDIERTYPE *pSoldier, INT32 morale, INT32 *piPercentB
 		// must be able to reach the cover, so it can't possibly be more than
 		// action points left (rounded down) tiles away, since minimum
 		// cost to move per tile is 1 points.
-		iMaxMoveTilesLeft = __max( 0, pSoldier->bActionPoints - MinAPsToStartMovement( pSoldier, usMovementMode ) );
+		iMaxMoveTilesLeft = std::max(0, pSoldier->bActionPoints - MinAPsToStartMovement( pSoldier, usMovementMode ));
 
 		// if we can't go as far as the usual full search range
 		if (iMaxMoveTilesLeft < iSearchRange)
@@ -726,12 +727,12 @@ INT16 FindBestNearbyCover(SOLDIERTYPE *pSoldier, INT32 morale, INT32 *piPercentB
 	iCurrentCoverValue -= (iCurrentCoverValue / 10) * NumberOfTeamMatesAdjacent( pSoldier, pSoldier->sGridNo );
 
 	// determine maximum horizontal limits
-	sMaxLeft  = MIN(iSearchRange,(pSoldier->sGridNo % MAXCOL));
-	sMaxRight = MIN(iSearchRange,MAXCOL - ((pSoldier->sGridNo % MAXCOL) + 1));
+	sMaxLeft  = std::min(iSearchRange,(pSoldier->sGridNo % MAXCOL));
+	sMaxRight = std::min(iSearchRange,MAXCOL - ((pSoldier->sGridNo % MAXCOL) + 1));
 
 	// determine maximum vertical limits
-	sMaxUp   = MIN(iSearchRange,(pSoldier->sGridNo / MAXROW));
-	sMaxDown = MIN(iSearchRange,MAXROW - ((pSoldier->sGridNo / MAXROW) + 1));
+	sMaxUp   = std::min(iSearchRange,(pSoldier->sGridNo / MAXROW));
+	sMaxDown = std::min(iSearchRange,MAXROW - ((pSoldier->sGridNo / MAXROW) + 1));
 
 	iRoamRange = RoamingRange(pSoldier,&sOrigin);
 
@@ -747,12 +748,12 @@ INT16 FindBestNearbyCover(SOLDIERTYPE *pSoldier, INT32 morale, INT32 *piPercentB
 		// don't care how far from origin we go
 		iDistFromOrigin = -1;
 	}
-	SLOGD(DEBUG_TAG_AI, "FBNC: iRoamRange %d, sMaxLeft %d, sMaxRight %d, sMaxUp %d, sMaxDown %d",
+	SLOGD("FBNC: iRoamRange {}, sMaxLeft {}, sMaxRight {}, sMaxUp {}, sMaxDown {}",
 		iRoamRange, sMaxLeft, sMaxRight, sMaxUp, sMaxDown);
 
 	// the initial cover value to beat is our current cover value
 	iBestCoverValue = iCurrentCoverValue;
-	SLOGD(DEBUG_TAG_AI, "FBNC: CURRENT iCoverValue = %d\n",iCurrentCoverValue);
+	SLOGD("FBNC: CURRENT iCoverValue = {}\n",iCurrentCoverValue);
 
 	if (pSoldier->bAlertStatus >= STATUS_RED)          // if already in battle
 	{
@@ -911,7 +912,7 @@ INT16 FindBestNearbyCover(SOLDIERTYPE *pSoldier, INT32 morale, INT32 *piPercentB
 			// if there ARE multiple opponents
 			if (uiThreatCnt > 1)
 			{
-				SLOGD(DEBUG_TAG_AI, "FBNC: Total iCoverValue at gridno %d is %d",
+				SLOGD("FBNC: Total iCoverValue at gridno {} is {}",
 					sGridNo, iCoverValue);
 			}
 
@@ -926,7 +927,7 @@ INT16 FindBestNearbyCover(SOLDIERTYPE *pSoldier, INT32 morale, INT32 *piPercentB
 
 			if (iCoverValue > iBestCoverValue)
 			{
-				SLOGD(DEBUG_TAG_AI, "FBNC: NEW BEST iCoverValue at gridno %d is %d",
+				SLOGD("FBNC: NEW BEST iCoverValue at gridno {} is {}",
 					sGridNo, iCoverValue);
 				// remember it instead
 				sBestCover = sGridNo;
@@ -951,11 +952,11 @@ INT16 FindBestNearbyCover(SOLDIERTYPE *pSoldier, INT32 morale, INT32 *piPercentB
 		InvalidateScreen( );
 		RefreshScreen();
 		/*
-		iLoop = GetJA2Clock();
+		uiLoop = GetJA2Clock();
 		do
 		{
 
-		} while( ( GetJA2Clock( ) - iLoop ) < 2000 );
+		} while (GetJA2Clock() - uiLoop < 2000);
 		*/
 	}
 	#endif
@@ -974,7 +975,7 @@ INT16 FindBestNearbyCover(SOLDIERTYPE *pSoldier, INT32 morale, INT32 *piPercentB
 		// if best cover value found was at least 5% better than our current cover
 		if (*piPercentBetter >= MIN_PERCENT_BETTER)
 		{
-			SLOGD(DEBUG_TAG_AI, "Found Cover: current %ld, best %ld, %d%%Better %ld",
+			SLOGD("Found Cover: current {}, best {}, %Better {}",
 				iCurrentCoverValue, iBestCoverValue, *piPercentBetter);
 			return((INT16)sBestCover);       // return the gridno of that cover
 		}
@@ -1096,7 +1097,7 @@ INT16 FindSpotMaxDistFromOpponents(SOLDIERTYPE *pSoldier)
 	else
 	{
 		// even if not under pressure, limit to 1 turn's travelling distance
-		gubNPCAPBudget = __min( pSoldier->bActionPoints / 2, CalcActionPoints( pSoldier ) );
+		gubNPCAPBudget = std::min(pSoldier->bActionPoints / 2, int(CalcActionPoints(pSoldier)));
 
 		iSearchRange = gubNPCAPBudget / 2;
 	}
@@ -1113,23 +1114,16 @@ INT16 FindSpotMaxDistFromOpponents(SOLDIERTYPE *pSoldier)
 		}
 	}
 
-
 	// assume we have to stand up!
-	// use the min macro here to make sure we don't wrap the UINT8 to 255...
-
-	#if 0 /* doppelt? */
-	gubNPCAPBudget = gubNPCAPBudget = __min( gubNPCAPBudget, gubNPCAPBudget - GetAPsToChangeStance( pSoldier, ANIM_STAND ) );
-	#else
-	gubNPCAPBudget = __min( gubNPCAPBudget, gubNPCAPBudget - GetAPsToChangeStance( pSoldier, ANIM_STAND ) );
-	#endif
+	gubNPCAPBudget = std::clamp(std::min(int(gubNPCAPBudget), gubNPCAPBudget - GetAPsToChangeStance(pSoldier, ANIM_STAND)), 0, 255);
 
 	// determine maximum horizontal limits
-	sMaxLeft  = MIN( iSearchRange, (pSoldier->sGridNo % MAXCOL));
-	sMaxRight = MIN( iSearchRange, MAXCOL - ((pSoldier->sGridNo % MAXCOL) + 1));
+	sMaxLeft  = std::min(iSearchRange, (pSoldier->sGridNo % MAXCOL));
+	sMaxRight = std::min(iSearchRange, MAXCOL - ((pSoldier->sGridNo % MAXCOL) + 1));
 
 	// determine maximum vertical limits
-	sMaxUp   = MIN( iSearchRange, (pSoldier->sGridNo / MAXROW));
-	sMaxDown = MIN( iSearchRange, MAXROW - ((pSoldier->sGridNo / MAXROW) + 1));
+	sMaxUp   = std::min(iSearchRange, (pSoldier->sGridNo / MAXROW));
+	sMaxDown = std::min(iSearchRange, MAXROW - ((pSoldier->sGridNo / MAXROW) + 1));
 
 	// Call FindBestPath to set flags in all locations that we can
 	// walk into within range.  We have to set some things up first...
@@ -1271,12 +1265,12 @@ INT16 FindNearestUngassedLand(SOLDIERTYPE *pSoldier)
 	for (iSearchRange = 5; iSearchRange <= 25; iSearchRange += 5)
 	{
 		// determine maximum horizontal limits
-		sMaxLeft  = MIN(iSearchRange,(pSoldier->sGridNo % MAXCOL));
-		sMaxRight = MIN(iSearchRange,MAXCOL - ((pSoldier->sGridNo % MAXCOL) + 1));
+		sMaxLeft  = std::min(iSearchRange,(pSoldier->sGridNo % MAXCOL));
+		sMaxRight = std::min(iSearchRange,MAXCOL - ((pSoldier->sGridNo % MAXCOL) + 1));
 
 		// determine maximum vertical limits
-		sMaxUp   = MIN(iSearchRange,(pSoldier->sGridNo / MAXROW));
-		sMaxDown = MIN(iSearchRange,MAXROW - ((pSoldier->sGridNo / MAXROW) + 1));
+		sMaxUp   = std::min(iSearchRange,(pSoldier->sGridNo / MAXROW));
+		sMaxDown = std::min(iSearchRange,MAXROW - ((pSoldier->sGridNo / MAXROW) + 1));
 
 		// Call FindBestPath to set flags in all locations that we can
 		// walk into within range.  We have to set some things up first...
@@ -1374,12 +1368,12 @@ INT16 FindNearbyDarkerSpot( SOLDIERTYPE *pSoldier )
 	for (iSearchRange = 5; iSearchRange <= 15; iSearchRange += 5)
 	{
 		// determine maximum horizontal limits
-		sMaxLeft  = MIN(iSearchRange,(pSoldier->sGridNo % MAXCOL));
-		sMaxRight = MIN(iSearchRange,MAXCOL - ((pSoldier->sGridNo % MAXCOL) + 1));
+		sMaxLeft  = std::min(iSearchRange,(pSoldier->sGridNo % MAXCOL));
+		sMaxRight = std::min(iSearchRange,MAXCOL - ((pSoldier->sGridNo % MAXCOL) + 1));
 
 		// determine maximum vertical limits
-		sMaxUp   = MIN(iSearchRange,(pSoldier->sGridNo / MAXROW));
-		sMaxDown = MIN(iSearchRange,MAXROW - ((pSoldier->sGridNo / MAXROW) + 1));
+		sMaxUp   = std::min(iSearchRange,(pSoldier->sGridNo / MAXROW));
+		sMaxDown = std::min(iSearchRange,MAXROW - ((pSoldier->sGridNo / MAXROW) + 1));
 
 		// Call FindBestPath to set flags in all locations that we can
 		// walk into within range.  We have to set some things up first...
@@ -1526,12 +1520,12 @@ INT8 SearchForItems(SOLDIERTYPE& s, ItemSearchReason const reason, UINT16 const 
 	search_range /= 2;
 
 	// determine maximum horizontal limits
-	INT16 const max_left  = MIN(search_range, s.sGridNo % MAXCOL);
-	INT16 const max_right = MIN(search_range, MAXCOL - (s.sGridNo % MAXCOL + 1));
+	INT16 const max_left  = std::min(search_range, s.sGridNo % MAXCOL);
+	INT16 const max_right = std::min(search_range, MAXCOL - (s.sGridNo % MAXCOL + 1));
 
 	// determine maximum vertical limits
-	INT16 const max_up   = MIN(search_range, s.sGridNo / MAXROW);
-	INT16 const max_down = MIN(search_range, MAXROW - (s.sGridNo / MAXROW + 1));
+	INT16 const max_up   = std::min(search_range, s.sGridNo / MAXROW);
+	INT16 const max_down = std::min(search_range, MAXROW - (s.sGridNo / MAXROW + 1));
 
 	// Call FindBestPath to set flags in all locations that we can
 	// walk into within range.  We have to set some things up first...
@@ -1618,8 +1612,11 @@ INT8 SearchForItems(SOLDIERTYPE& s, ItemSearchReason const reason, UINT16 const 
 							else
 							{
 								INT8 const new_rating = EffectiveArmour(&o);
-								if (EffectiveArmour(&s.inv[HELMETPOS]) <= new_rating) continue; // XXX makes no sense: always compare with helmet and only consider when worse
-								temp_value = 100 * new_rating / EffectiveArmour(&cur_armour);
+								INT8 current_rating = EffectiveArmour(&cur_armour);
+								if (current_rating >= new_rating) continue; // the new armour isn't better, skip
+								if (current_rating == 0) current_rating = 1; // avoid division by zero
+
+								temp_value = 100 * new_rating / current_rating;
 							}
 						}
 						/* FALLTHROUGH */
@@ -1664,7 +1661,7 @@ INT8 SearchForItems(SOLDIERTYPE& s, ItemSearchReason const reason, UINT16 const 
 	if (best_spot == NOWHERE) return AI_ACTION_NONE;
 
 	OBJECTTYPE const& o = GetWorldItem(best_item_idx).o;
-	SLOGD(DEBUG_TAG_AI, "%d decides to pick up %ls", s.ubID, ItemNames[o.usItem]);
+	SLOGD("{} decides to pick up {}", s.ubID, GCM->getItem(o.usItem)->getName());
 	if (GCM->getItem(o.usItem)->getItemClass() == IC_GUN &&
 		!FindBetterSpotForItem(s, HANDPOS))
 	{
@@ -1674,13 +1671,13 @@ INT8 SearchForItems(SOLDIERTYPE& s, ItemSearchReason const reason, UINT16 const 
 		}
 		if (s.inv[HANDPOS].fFlags & OBJECT_UNDROPPABLE)
 		{ // Destroy this item
-			SLOGD(DEBUG_TAG_AI, "%d decides he must drop %ls first so destroys it", s.ubID, ItemNames[s.inv[HANDPOS].usItem]);
+			SLOGD("{} decides he must drop {} first so destroys it", s.ubID, GCM->getItem(s.inv[HANDPOS].usItem)->getName());
 			DeleteObj(&s.inv[HANDPOS]);
 			DeductPoints(&s, AP_PICKUP_ITEM, 0);
 		}
 		else
 		{ // We want to drop this item
-			SLOGD(DEBUG_TAG_AI, "%d decides he must drop %ls first", s.ubID, ItemNames[s.inv[HANDPOS].usItem]);
+			SLOGD("{} decides he must drop {} first", s.ubID, GCM->getItem(s.inv[HANDPOS].usItem)->getName());
 			s.bNextAction            = AI_ACTION_PICKUP_ITEM;
 			s.usNextActionData       = best_spot;
 			s.iNextActionSpecialData = best_item_idx;
@@ -1704,12 +1701,12 @@ INT16 FindClosestDoor( SOLDIERTYPE * pSoldier )
 	iSearchRange = 5;
 
 	// determine maximum horizontal limits
-	sMaxLeft  = MIN( iSearchRange, (pSoldier->sGridNo % MAXCOL));
-	sMaxRight = MIN( iSearchRange, MAXCOL - ((pSoldier->sGridNo % MAXCOL) + 1));
+	sMaxLeft  = std::min(iSearchRange, (pSoldier->sGridNo % MAXCOL));
+	sMaxRight = std::min(iSearchRange, MAXCOL - ((pSoldier->sGridNo % MAXCOL) + 1));
 
 	// determine maximum vertical limits
-	sMaxUp   = MIN( iSearchRange, (pSoldier->sGridNo / MAXROW));
-	sMaxDown = MIN( iSearchRange, MAXROW - ((pSoldier->sGridNo / MAXROW) + 1));
+	sMaxUp   = std::min(iSearchRange, (pSoldier->sGridNo / MAXROW));
+	sMaxDown = std::min(iSearchRange, MAXROW - ((pSoldier->sGridNo / MAXROW) + 1));
 	// SET UP DOUBLE-LOOP TO STEP THROUGH POTENTIAL GRID #s
 	for (sYOffset = -sMaxUp; sYOffset <= sMaxDown; sYOffset++)
 	{
@@ -1734,28 +1731,22 @@ INT16 FindClosestDoor( SOLDIERTYPE * pSoldier )
 
 INT16 FindNearestEdgepointOnSpecifiedEdge( INT16 sGridNo, INT8 bEdgeCode )
 {
-	INT32 iLoop;
-	INT16 *psEdgepointArray;
-	INT32 iEdgepointArraySize;
+	std::vector<INT16>* pEdgepoints;
 	INT16 sClosestSpot = NOWHERE, sClosestDist = 0x7FFF, sTempDist;
 
 	switch( bEdgeCode )
 	{
 		case NORTH_EDGEPOINT_SEARCH:
-			psEdgepointArray = gps1stNorthEdgepointArray;
-			iEdgepointArraySize = gus1stNorthEdgepointArraySize;
+			pEdgepoints = &gps1stNorthEdgepointArray;
 			break;
 		case EAST_EDGEPOINT_SEARCH:
-			psEdgepointArray = gps1stEastEdgepointArray;
-			iEdgepointArraySize = gus1stEastEdgepointArraySize;
+			pEdgepoints = &gps1stEastEdgepointArray;
 			break;
 		case SOUTH_EDGEPOINT_SEARCH:
-			psEdgepointArray = gps1stSouthEdgepointArray;
-			iEdgepointArraySize = gus1stSouthEdgepointArraySize;
+			pEdgepoints = &gps1stSouthEdgepointArray;
 			break;
 		case WEST_EDGEPOINT_SEARCH:
-			psEdgepointArray = gps1stWestEdgepointArray;
-			iEdgepointArraySize = gus1stWestEdgepointArraySize;
+			pEdgepoints = &gps1stWestEdgepointArray;
 			break;
 		default:
 			// WTF???
@@ -1765,88 +1756,44 @@ INT16 FindNearestEdgepointOnSpecifiedEdge( INT16 sGridNo, INT8 bEdgeCode )
 	// Do a 2D search to find the closest map edgepoint and
 	// try to create a path there
 
-	for ( iLoop = 0; iLoop < iEdgepointArraySize; iLoop++ )
+	for (INT16 edgepoint : *pEdgepoints)
 	{
-		sTempDist = PythSpacesAway( sGridNo, psEdgepointArray[ iLoop ] );
+		sTempDist = PythSpacesAway(sGridNo, edgepoint);
 		if ( sTempDist < sClosestDist )
 		{
 			sClosestDist = sTempDist;
-			sClosestSpot = psEdgepointArray[ iLoop ];
+			sClosestSpot = edgepoint;
 		}
 	}
 
 	return( sClosestSpot );
 }
 
-INT16 FindNearestEdgePoint( INT16 sGridNo )
+GridNo FindNearestEdgePoint(GridNo const sGridNo)
 {
-	INT16 sScreenX, sScreenY, sMaxScreenX, sMaxScreenY;
-	INT16 sDist[5], sMinDist;
-	INT32 iLoop;
-	INT8  bMinIndex;
-	INT16 *psEdgepointArray;
-	INT32 iEdgepointArraySize;
-	INT16 sClosestSpot = NOWHERE, sClosestDist = 0x7FFF, sTempDist;
-
+	int16_t sScreenX, sScreenY;
 	GetAbsoluteScreenXYFromMapPos(sGridNo, &sScreenX, &sScreenY);
 
-	sMaxScreenX = gsRightX - gsLeftX;
-	sMaxScreenY = gsBottomY - gsTopY;
+	int16_t const sMaxScreenX = gsRightX - gsLeftX;
+	int16_t const sMaxScreenY = gsBottomY - gsTopY;
 
-	sDist[0] = 0x7FFF;
-	sDist[1] = sScreenX;			// west
-	sDist[2] = sMaxScreenX - sScreenX;	// east
-	sDist[3] = sScreenY;			// north
-	sDist[4] = sMaxScreenY - sScreenY;	// south
-
-	sMinDist = sDist[0];
-	bMinIndex = 0;
-	for( iLoop = 1; iLoop < 5; iLoop++)
+	// Generate a map of the directions sorted by the distance from the given grid
+	std::multimap<int16_t, int8_t> const directionMap
 	{
-		if ( sDist[ iLoop ] < sMinDist )
-		{
-			sMinDist = sDist[ iLoop ];
-			bMinIndex = (INT8) iLoop;
-		}
+		{ sScreenX, WEST_EDGEPOINT_SEARCH },
+		{ sMaxScreenX - sScreenX, EAST_EDGEPOINT_SEARCH },
+		{ sScreenY, NORTH_EDGEPOINT_SEARCH },
+		{ sMaxScreenY - sScreenY, SOUTH_EDGEPOINT_SEARCH }
+	};
+
+	for (auto const& edgeDirection : directionMap)
+	{
+		GridNo const result = FindNearestEdgepointOnSpecifiedEdge(sGridNo, edgeDirection.second);
+		if (result != NOWHERE) return result;
 	}
 
-	switch( bMinIndex )
-	{
-		case 1:
-			psEdgepointArray = gps1stWestEdgepointArray;
-			iEdgepointArraySize = gus1stWestEdgepointArraySize;
-			break;
-		case 2:
-			psEdgepointArray = gps1stEastEdgepointArray;
-			iEdgepointArraySize = gus1stEastEdgepointArraySize;
-			break;
-		case 3:
-			psEdgepointArray = gps1stNorthEdgepointArray;
-			iEdgepointArraySize = gus1stNorthEdgepointArraySize;
-			break;
-		case 4:
-			psEdgepointArray = gps1stSouthEdgepointArray;
-			iEdgepointArraySize = gus1stSouthEdgepointArraySize;
-			break;
-		default:
-			// WTF???
-			return( NOWHERE );
-	}
-
-	// Do a 2D search to find the closest map edgepoint and
-	// try to create a path there
-
-	for ( iLoop = 0; iLoop < iEdgepointArraySize; iLoop++ )
-	{
-		sTempDist = PythSpacesAway( sGridNo, psEdgepointArray[ iLoop ] );
-		if ( sTempDist < sClosestDist )
-		{
-			sClosestDist = sTempDist;
-			sClosestSpot = psEdgepointArray[ iLoop ];
-		}
-	}
-
-	return( sClosestSpot );
+	SLOGE("No suitable edgepoint found, returning NOWHERE");
+	return NOWHERE;
 }
 
 #define EDGE_OF_MAP_SEARCH 5
@@ -1871,12 +1818,12 @@ INT16 FindNearbyPointOnEdgeOfMap( SOLDIERTYPE * pSoldier, INT8 * pbDirection )
 	iSearchRange = EDGE_OF_MAP_SEARCH;
 
 	// determine maximum horizontal limits
-	sMaxLeft  = MIN( iSearchRange, (pSoldier->sGridNo % MAXCOL));
-	sMaxRight = MIN( iSearchRange, MAXCOL - ((pSoldier->sGridNo % MAXCOL) + 1));
+	sMaxLeft  = std::min(iSearchRange, (pSoldier->sGridNo % MAXCOL));
+	sMaxRight = std::min(iSearchRange, MAXCOL - ((pSoldier->sGridNo % MAXCOL) + 1));
 
 	// determine maximum vertical limits
-	sMaxUp   = MIN( iSearchRange, (pSoldier->sGridNo / MAXROW));
-	sMaxDown = MIN( iSearchRange, MAXROW - ((pSoldier->sGridNo / MAXROW) + 1));
+	sMaxUp   = std::min(iSearchRange, (pSoldier->sGridNo / MAXROW));
+	sMaxDown = std::min(iSearchRange, MAXROW - ((pSoldier->sGridNo / MAXROW) + 1));
 
 	// reset the "reachable" flags in the region we're looking at
 	for (sYOffset = -sMaxUp; sYOffset <= sMaxDown; sYOffset++)
@@ -1948,8 +1895,8 @@ INT16 FindClosestBoxingRingSpot( SOLDIERTYPE * pSoldier, BOOLEAN fInRing )
 	iSearchRange = 7;
 
 	// determine maximum horizontal limits
-	sMaxLeft  = MIN( iSearchRange, (pSoldier->sGridNo % MAXCOL));
-	sMaxRight = MIN( iSearchRange, MAXCOL - ((pSoldier->sGridNo % MAXCOL) + 1));
+	sMaxLeft  = std::min(iSearchRange, (pSoldier->sGridNo % MAXCOL));
+	sMaxRight = std::min(iSearchRange, MAXCOL - ((pSoldier->sGridNo % MAXCOL) + 1));
 
 	if (pSoldier->bTeam == OUR_TEAM && !fInRing)
 	{
@@ -1958,8 +1905,8 @@ INT16 FindClosestBoxingRingSpot( SOLDIERTYPE * pSoldier, BOOLEAN fInRing )
 	}
 
 	// determine maximum vertical limits
-	sMaxUp   = MIN( iSearchRange, (pSoldier->sGridNo / MAXROW));
-	sMaxDown = MIN( iSearchRange, MAXROW - ((pSoldier->sGridNo / MAXROW) + 1));
+	sMaxUp   = std::min(iSearchRange, (pSoldier->sGridNo / MAXROW));
+	sMaxDown = std::min(iSearchRange, MAXROW - ((pSoldier->sGridNo / MAXROW) + 1));
 
 	for (sYOffset = -sMaxUp; sYOffset <= sMaxDown; sYOffset++)
 	{
@@ -1973,7 +1920,7 @@ INT16 FindClosestBoxingRingSpot( SOLDIERTYPE * pSoldier, BOOLEAN fInRing )
 			if ((fInRing  && room == BOXING_RING) ||
 				((!fInRing && room != BOXING_RING) && LegalNPCDestination(pSoldier, sGridNo, IGNORE_PATH, NOWATER, 0)))
 			{
-				iDistance = ABS( sXOffset ) + ABS( sYOffset );
+				iDistance = std::abs(sXOffset) + std::abs(sYOffset);
 				if (iDistance < iClosestDistance && WhoIsThere2(sGridNo, 0) == NULL)
 				{
 					sClosestSpot = sGridNo;
@@ -1998,12 +1945,12 @@ INT16 FindNearestOpenableNonDoor( INT16 sStartGridNo )
 	iSearchRange = 7;
 
 	// determine maximum horizontal limits
-	sMaxLeft  = MIN( iSearchRange, (sStartGridNo % MAXCOL));
-	sMaxRight = MIN( iSearchRange, MAXCOL - ((sStartGridNo % MAXCOL) + 1));
+	sMaxLeft  = std::min(iSearchRange, (sStartGridNo % MAXCOL));
+	sMaxRight = std::min(iSearchRange, MAXCOL - ((sStartGridNo % MAXCOL) + 1));
 
 	// determine maximum vertical limits
-	sMaxUp   = MIN( iSearchRange, (sStartGridNo / MAXROW));
-	sMaxDown = MIN( iSearchRange, MAXROW - ((sStartGridNo / MAXROW) + 1));
+	sMaxUp   = std::min(iSearchRange, (sStartGridNo / MAXROW));
+	sMaxDown = std::min(iSearchRange, MAXROW - ((sStartGridNo / MAXROW) + 1));
 
 	for (sYOffset = -sMaxUp; sYOffset <= sMaxDown; sYOffset++)
 	{

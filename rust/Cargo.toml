@@ -1,31 +1,16 @@
-[package]
-name = "stracciatella"
-version = "0.1.0"
-authors = ["Stefan Lau <github@stefanlau.com>"]
+[workspace]
+members = [
+    "stracciatella",
+    "stracciatella_bin",
+    "stracciatella_c_api",
+]
 
 [profile.dev]
 rpath = true
+panic = "abort"
+
 [profile.release]
 rpath = true
 debug = true
-
-[lib]
-crate-type = ["staticlib"]
-name = "stracciatella"
-path = "src/stracciatella.rs"
-
-[dependencies]
-getopts = "0.2.15"
-libc = "0.2"
-serde = "1"
-serde_derive = "1"
-serde_json = "1"
-dirs = "1"
-
-[dev-dependencies]
-regex = "0.1"
-tempdir = "0.3"
-
-[build-dependencies]
-cbindgen = "0.6"
+panic = "abort"
 

@@ -1,29 +1,26 @@
-#include <string>
-#include <FL/Fl.H>
-#include <slog/slog.h>
-
-#include <Launcher.h>
+#include "Launcher.h"
 #include "RustInterface.h"
+#include <FL/Fl.H>
+#include <string_theory/string>
 
-int main(int argc, char* argv[]) {
-	SLOG_Init(SLOG_STDERR, "stracciatella-launcher.log");
-	SLOG_SetLevel(SLOG_WARNING, SLOG_WARNING);
+int main(int argc, char* argv[])
+try
+{
+	Logger_initialize("ja2-launcher.log");
 
-	char* rustExePath = find_ja2_executable(argv[0]);
-	std::string exePath = std::string(rustExePath);
-	free_rust_string(rustExePath);
+#ifdef _WIN32
+	// Ensure quick-edit mode is off, or else it will block execution
+	HANDLE hInput = GetStdHandle(STD_INPUT_HANDLE);
+	SetConsoleMode(hInput, ENABLE_EXTENDED_FLAGS);
+#endif
 
-	EngineOptions* params = create_engine_options(argv, argc);
-
-	if (params == NULL) {
-		return EXIT_FAILURE;
-	}
-	if (should_show_help(params)) {
-		return EXIT_SUCCESS;
-	}
-
-	Launcher launcher(exePath, params);
-
+	Launcher launcher(argc, argv);
+	launcher.loadJa2Json();
 	launcher.show();
 	return Fl::run();
+}
+catch (...)
+{
+	// If you ever see return code 27, try to set a breakpoint here
+	return 27;
 }

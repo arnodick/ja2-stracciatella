@@ -2,6 +2,8 @@
 #include "Soldier_Control.h"
 #include "Soldier_Profile.h"
 #include "Drugs_And_Alcohol.h"
+#include "GameInstance.h"
+#include "ContentManager.h"
 #include "Items.h"
 #include "Morale.h"
 #include "Points.h"
@@ -190,7 +192,7 @@ BOOLEAN ApplyDrugs( SOLDIERTYPE *pSoldier, OBJECTTYPE *pObject )
 			if (bRegenPointsGained > 0)
 			{
 				// can't go above the points you get for a full boost
-				pSoldier->bRegenerationCounter = __min( pSoldier->bRegenerationCounter + bRegenPointsGained, REGEN_POINTS_PER_BOOSTER );
+				pSoldier->bRegenerationCounter = std::min(pSoldier->bRegenerationCounter + bRegenPointsGained, REGEN_POINTS_PER_BOOSTER);
 			}
 			pSoldier->bRegenBoostersUsedToday++;
 		}
@@ -198,11 +200,11 @@ BOOLEAN ApplyDrugs( SOLDIERTYPE *pSoldier, OBJECTTYPE *pObject )
 
 	if ( ubDrugType == DRUG_TYPE_ALCOHOL )
 	{
-		ScreenMsg( FONT_MCOLOR_LTYELLOW, MSG_INTERFACE, pMessageStrings[ MSG_DRANK_SOME ], pSoldier->name, ShortItemNames[ usItem ] );
+		ScreenMsg( FONT_MCOLOR_LTYELLOW, MSG_INTERFACE, st_format_printf(pMessageStrings[ MSG_DRANK_SOME ], pSoldier->name, GCM->getItem(usItem)->getShortName()) );
 	}
 	else
 	{
-		ScreenMsg( FONT_MCOLOR_LTYELLOW, MSG_INTERFACE, pMessageStrings[ MSG_MERC_TOOK_DRUG ], pSoldier->name );
+		ScreenMsg( FONT_MCOLOR_LTYELLOW, MSG_INTERFACE, st_format_printf(pMessageStrings[ MSG_MERC_TOOK_DRUG ], pSoldier->name) );
 	}
 
 	// Dirty panel
@@ -260,11 +262,11 @@ void HandleEndTurnDrugAdjustments( SOLDIERTYPE *pSoldier )
 					// OK, give a much BIGGER morale downer
 					if ( cnt == DRUG_TYPE_ALCOHOL )
 					{
-						HandleMoraleEvent( pSoldier, MORALE_ALCOHOL_CRASH, pSoldier->sSectorX, pSoldier->sSectorY, pSoldier->bSectorZ );
+						HandleMoraleEvent(pSoldier, MORALE_ALCOHOL_CRASH, pSoldier->sSector);
 					}
 					else
 					{
-						HandleMoraleEvent( pSoldier, MORALE_DRUGS_CRASH, pSoldier->sSectorX, pSoldier->sSectorY, pSoldier->bSectorZ  );
+						HandleMoraleEvent(pSoldier, MORALE_DRUGS_CRASH, pSoldier->sSector);
 					}
 				}
 			}
@@ -295,7 +297,7 @@ void HandleEndTurnDrugAdjustments( SOLDIERTYPE *pSoldier )
 		//bBandaged = BANDAGED( pSoldier );
 
 		// increase life
-		pSoldier->bLife = __min( pSoldier->bLife + LIFE_GAIN_PER_REGEN_POINT, pSoldier->bLifeMax );
+		pSoldier->bLife = std::min(pSoldier->bLife + LIFE_GAIN_PER_REGEN_POINT, int(pSoldier->bLifeMax));
 
 		if ( pSoldier->bLife == pSoldier->bLifeMax )
 		{

@@ -15,6 +15,8 @@
 #include "VSurface.h"
 #include "Font_Control.h"
 
+#include <string_theory/string>
+
 
 //current and last pages
 INT32 iCurrentPortrait = 0;
@@ -90,10 +92,9 @@ void HandleIMPPortraits( void )
 
 static void RenderPortrait(INT16 const x, INT16 const y)
 { // Render the portrait of the current picture
-	SGPFILENAME filename;
 	INT32 const portrait = (fCharacterIsMale ? 200 : 208) + iCurrentPortrait;
-	snprintf(filename, lengthof(filename), FACESDIR "/bigfaces/%d.sti", portrait);
-	BltVideoObjectOnce(FRAME_BUFFER, filename, 0, LAPTOP_SCREEN_UL_X + x, LAPTOP_SCREEN_WEB_UL_Y + y);
+	ST::string filename = ST::format(FACESDIR "/bigfaces/{}.sti", portrait);
+	BltVideoObjectOnce(FRAME_BUFFER, filename.c_str(), 0, LAPTOP_SCREEN_UL_X + x, LAPTOP_SCREEN_WEB_UL_Y + y);
 }
 
 
@@ -123,7 +124,7 @@ static void DecrementPicture(void)
 }
 
 
-static void MakeButton(UINT idx, const char* img_file, INT32 off_normal, INT32 on_normal, const wchar_t* text, INT16 x, INT16 y, GUI_CALLBACK click)
+static void MakeButton(UINT idx, const char* img_file, INT32 off_normal, INT32 on_normal, const ST::string& text, INT16 x, INT16 y, GUI_CALLBACK click)
 {
 	BUTTON_PICS* const img = LoadButtonImage(img_file, off_normal, on_normal);
 	giIMPPortraitButtonImage[idx] = img;
@@ -135,9 +136,9 @@ static void MakeButton(UINT idx, const char* img_file, INT32 off_normal, INT32 o
 }
 
 
-static void BtnIMPPortraitDoneCallback(GUI_BUTTON* btn, INT32 reason);
-static void BtnIMPPortraitNextCallback(GUI_BUTTON* btn, INT32 reason);
-static void BtnIMPPortraitPreviousCallback(GUI_BUTTON* btn, INT32 reason);
+static void BtnIMPPortraitDoneCallback(GUI_BUTTON* btn, UINT32 reason);
+static void BtnIMPPortraitNextCallback(GUI_BUTTON* btn, UINT32 reason);
+static void BtnIMPPortraitPreviousCallback(GUI_BUTTON* btn, UINT32 reason);
 
 
 static void CreateIMPPortraitButtons(void)
@@ -170,9 +171,9 @@ static void DestroyIMPPortraitButtons(void)
 }
 
 
-static void BtnIMPPortraitNextCallback(GUI_BUTTON *btn, INT32 reason)
+static void BtnIMPPortraitNextCallback(GUI_BUTTON *btn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		IncrementPictureIndex();
 		fReDrawPortraitScreenFlag = TRUE;
@@ -180,9 +181,9 @@ static void BtnIMPPortraitNextCallback(GUI_BUTTON *btn, INT32 reason)
 }
 
 
-static void BtnIMPPortraitPreviousCallback(GUI_BUTTON *btn, INT32 reason)
+static void BtnIMPPortraitPreviousCallback(GUI_BUTTON *btn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		DecrementPicture();
 		fReDrawPortraitScreenFlag = TRUE;
@@ -190,9 +191,9 @@ static void BtnIMPPortraitPreviousCallback(GUI_BUTTON *btn, INT32 reason)
 }
 
 
-static void BtnIMPPortraitDoneCallback(GUI_BUTTON *btn, INT32 reason)
+static void BtnIMPPortraitDoneCallback(GUI_BUTTON *btn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		iCurrentImpPage = IMP_MAIN_PAGE;
 

@@ -20,11 +20,14 @@
 #include "LaptopSave.h"
 #include "Button_System.h"
 #include "VSurface.h"
-#include "MemMan.h"
 #include "FileMan.h"
 
 #include "ContentManager.h"
 #include "GameInstance.h"
+
+#include <string_theory/format>
+#include <string_theory/string>
+
 
 #define HISTORY_QUEST_TEXT_SIZE 80
 
@@ -34,9 +37,7 @@ struct HistoryUnit
 	UINT8 ubCode; // the code index in the finance code table
 	UINT8 ubSecondCode; // secondary code
 	UINT32 uiDate; // time in the world in global time
-	INT16 sSectorX; // sector X this took place in
-	INT16 sSectorY; // sector Y this took place in
-	INT8 bSectorZ;
+	SGPSector sSector; // sector this took place in
 	HistoryUnit* Next; // next unit in the list
 };
 
@@ -102,14 +103,14 @@ void ClearHistoryList( void );
 
 static void AppendHistoryToEndOfFile(void);
 static BOOLEAN LoadInHistoryRecords(const UINT32 uiPage);
-static void ProcessAndEnterAHistoryRecord(UINT8 ubCode, UINT32 uiDate, UINT8 ubSecondCode, INT16 sSectorX, INT16 sSectorY, INT8 bSectorZ);
+static void ProcessAndEnterAHistoryRecord(UINT8 ubCode, UINT32 uiDate, UINT8 ubSecondCode, const SGPSector& sSector);
 
 
-void AddHistoryToPlayersLog(const UINT8 ubCode, const UINT8 ubSecondCode, const UINT32 uiDate, const INT16 sSectorX, const INT16 sSectorY)
+void AddHistoryToPlayersLog(const UINT8 ubCode, const UINT8 ubSecondCode, const UINT32 uiDate, const SGPSector& sSector)
 {
 	ClearHistoryList();
 
-	ProcessAndEnterAHistoryRecord(ubCode, uiDate, ubSecondCode, sSectorX, sSectorY, 0);
+	ProcessAndEnterAHistoryRecord(ubCode, uiDate, ubSecondCode, sSector);
 	ScreenMsg(FONT_MCOLOR_LTYELLOW, MSG_INTERFACE, pMessageStrings[MSG_HISTORY_UPDATED]);
 
 	AppendHistoryToEndOfFile();
@@ -121,7 +122,7 @@ void AddHistoryToPlayersLog(const UINT8 ubCode, const UINT8 ubSecondCode, const 
 
 void GameInitHistory()
 {
-	FileDelete(HISTORY_DATA_FILE);
+	GCM->tempFiles()->deleteFile(HISTORY_DATA_FILE);
 }
 
 
@@ -248,7 +249,7 @@ static void LoadNextHistoryPage(void);
 static void LoadPreviousHistoryPage(void);
 
 
-static void ScrollRegionCallback(MOUSE_REGION* const, INT32 const reason)
+static void ScrollRegionCallback(MOUSE_REGION* const, UINT32 const reason)
 {
 	if (reason & MSYS_CALLBACK_REASON_WHEEL_UP)
 	{
@@ -261,8 +262,8 @@ static void ScrollRegionCallback(MOUSE_REGION* const, INT32 const reason)
 }
 
 
-static void BtnHistoryDisplayNextPageCallBack(GUI_BUTTON* btn, INT32 reason);
-static void BtnHistoryDisplayPrevPageCallBack(GUI_BUTTON* btn, INT32 reason);
+static void BtnHistoryDisplayNextPageCallBack(GUI_BUTTON* btn, UINT32 reason);
+static void BtnHistoryDisplayPrevPageCallBack(GUI_BUTTON* btn, UINT32 reason);
 
 
 static void CreateHistoryButtons(void)
@@ -294,44 +295,42 @@ static void DestroyHistoryButtons(void)
 }
 
 
-static void BtnHistoryDisplayPrevPageCallBack(GUI_BUTTON* btn, INT32 reason)
+static void BtnHistoryDisplayPrevPageCallBack(GUI_BUTTON* btn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_DWN)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_DWN)
 	{
 		fReDrawScreenFlag = TRUE;
 	}
 
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		LoadPreviousHistoryPage();
 	}
 }
 
 
-static void BtnHistoryDisplayNextPageCallBack(GUI_BUTTON* btn, INT32 reason)
+static void BtnHistoryDisplayNextPageCallBack(GUI_BUTTON* btn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_DWN)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_DWN)
 	{
 		fReDrawScreenFlag = TRUE;
 	}
 
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		LoadNextHistoryPage();
 	}
 }
 
 
-static void ProcessAndEnterAHistoryRecord(const UINT8 ubCode, const UINT32 uiDate, const UINT8 ubSecondCode, const INT16 sSectorX, const INT16 sSectorY, const INT8 bSectorZ)
+static void ProcessAndEnterAHistoryRecord(const UINT8 ubCode, const UINT32 uiDate, const UINT8 ubSecondCode, const SGPSector& sSector)
 {
-	HistoryUnit* const h = MALLOC(HistoryUnit);
+	HistoryUnit* const h = new HistoryUnit{};
 	h->Next         = NULL;
 	h->ubCode       = ubCode;
 	h->ubSecondCode = ubSecondCode;
 	h->uiDate       = uiDate;
-	h->sSectorX     = sSectorX;
-	h->sSectorY     = sSectorY;
-	h->bSectorZ     = bSectorZ;
+	h->sSector      = sSector;
 
 	// Append node to list
 	HistoryUnit** anchor = &pHistoryListHead;
@@ -344,27 +343,25 @@ static void OpenAndReadHistoryFile(void)
 {
 	ClearHistoryList();
 
-	AutoSGPFile f(GCM->openGameResForReading(HISTORY_DATA_FILE));
+	AutoSGPFile f(GCM->tempFiles()->openForReading(HISTORY_DATA_FILE));
 
-	UINT entry_count = FileGetSize(f) / SIZE_OF_HISTORY_FILE_RECORD;
+	UINT entry_count = f->size() / SIZE_OF_HISTORY_FILE_RECORD;
 	while (entry_count-- > 0)
 	{
 		UINT8  ubCode;
 		UINT8  ubSecondCode;
 		UINT32 uiDate;
-		INT16  sSectorX;
-		INT16  sSectorY;
-		INT8   bSectorZ;
+		SGPSector sSector;
 
-		FileRead(f, &ubCode,       sizeof(UINT8));
-		FileRead(f, &ubSecondCode, sizeof(UINT8));
-		FileRead(f, &uiDate,       sizeof(UINT32));
-		FileRead(f, &sSectorX,     sizeof(INT16));
-		FileRead(f, &sSectorY,     sizeof(INT16));
-		FileRead(f, &bSectorZ,     sizeof(INT8));
-		FileSeek(f, 1, FILE_SEEK_FROM_CURRENT);
+		f->read(&ubCode,       sizeof(UINT8));
+		f->read(&ubSecondCode, sizeof(UINT8));
+		f->read(&uiDate,       sizeof(UINT32));
+		f->read(&sSector.x,    sizeof(INT16));
+		f->read(&sSector.y,    sizeof(INT16));
+		f->read(&sSector.z,    sizeof(INT8));
+		f->seek(1, FILE_SEEK_FROM_CURRENT);
 
-		ProcessAndEnterAHistoryRecord(ubCode, uiDate, ubSecondCode, sSectorX, sSectorY, bSectorZ);
+		ProcessAndEnterAHistoryRecord(ubCode, uiDate, ubSecondCode, sSector);
 	}
 }
 
@@ -374,7 +371,7 @@ void ClearHistoryList(void)
 	for (HistoryUnit* h = pHistoryListHead; h != NULL;)
 	{
 		HistoryUnit* const next = h->Next;
-		MemFree(h);
+		delete h;
 		h = next;
 	}
 	pHistoryListHead = NULL;
@@ -423,13 +420,13 @@ static void DisplayHistoryListBackground(void)
 }
 
 
-static void ProcessHistoryTransactionString(wchar_t* pString, size_t Length, const HistoryUnit* pHistory);
+static ST::string ProcessHistoryTransactionString(const HistoryUnit* h);
 
 
 // draw the text of the records
 static void DrawHistoryRecordsText(void)
 {
-	wchar_t sString[512];
+	ST::string sString;
 	INT16   sX;
 	INT16   sY;
 
@@ -449,13 +446,13 @@ static void DrawHistoryRecordsText(void)
 		const INT32 y = RECORD_Y + entry_count * BOX_HEIGHT + 3;
 
 		// get and write the date
-		swprintf(sString, lengthof(sString), L"%d", h->uiDate / (24 * 60));
+		sString = ST::format("{}", h->uiDate / (24 * 60));
 		INT16 usX;
 		INT16 usY;
 		FindFontCenterCoordinates(RECORD_DATE_X + 5, 0, RECORD_DATE_WIDTH, 0, sString, HISTORY_TEXT_FONT, &usX, &usY);
 		MPrint(usX, y, sString);
 
-		if (h->sSectorX == -1 || h->sSectorY == -1)
+		if (!h->sSector.IsValid())
 		{
 			// no location
 			FindFontCenterCoordinates(RECORD_DATE_X + RECORD_DATE_WIDTH, 0, RECORD_LOCATION_WIDTH + 10, 0, pHistoryLocations, HISTORY_TEXT_FONT, &sX, &sY);
@@ -463,14 +460,14 @@ static void DrawHistoryRecordsText(void)
 		}
 		else
 		{
-			GetSectorIDString(h->sSectorX, h->sSectorY, h->bSectorZ, sString, lengthof(sString), TRUE);
+			sString = GetSectorIDString(h->sSector, TRUE);
 			FindFontCenterCoordinates(RECORD_DATE_X + RECORD_DATE_WIDTH, 0, RECORD_LOCATION_WIDTH + 10, 0,  sString, HISTORY_TEXT_FONT, &sX, &sY);
-			ReduceStringLength(sString, lengthof(sString), RECORD_LOCATION_WIDTH + 10, HISTORY_TEXT_FONT);
+			sString = ReduceStringLength(sString, RECORD_LOCATION_WIDTH + 10, HISTORY_TEXT_FONT);
 			MPrint(sX, y, sString);
 		}
 
 		// the actual history text
-		ProcessHistoryTransactionString(sString, lengthof(sString), h);
+		sString = ProcessHistoryTransactionString(h);
 		MPrint(RECORD_DATE_X + RECORD_LOCATION_WIDTH + RECORD_DATE_WIDTH + 15, y, sString);
 
 		if (++entry_count == NUM_RECORDS_PER_PAGE) break;
@@ -547,28 +544,26 @@ static void DisplayPageNumberAndDateRange(void)
 	}
 
 	SetFontAttributes(HISTORY_TEXT_FONT, FONT_BLACK, NO_SHADOW);
-	mprintf(PAGE_NUMBER_X,  PAGE_NUMBER_Y,  L"%ls  %d / %d", pHistoryHeaders[1], current_page, count_pages);
-	mprintf(HISTORY_DATE_X, HISTORY_DATE_Y, L"%ls %d - %d",  pHistoryHeaders[2], first_date,   last_date);
+	MPrint(PAGE_NUMBER_X,  PAGE_NUMBER_Y, ST::format("{}  {} / {}", pHistoryHeaders[1], current_page, count_pages));
+	MPrint(HISTORY_DATE_X, HISTORY_DATE_Y, ST::format("{} {} - {}",  pHistoryHeaders[2], first_date, last_date));
 	SetFontShadow(DEFAULT_SHADOW);
 }
 
 
-static void GetQuestEndedString(UINT8 ubQuestValue, wchar_t* sQuestString);
-static void GetQuestStartedString(UINT8 ubQuestValue, wchar_t* sQuestString);
+static ST::string GetQuestEndedString(UINT8 ubQuestValue);
+static ST::string GetQuestStartedString(UINT8 ubQuestValue);
 
 
-static void ProcessHistoryTransactionString(wchar_t* const pString, const size_t Length, const HistoryUnit* const h)
+static ST::string ProcessHistoryTransactionString(const HistoryUnit* h)
 {
 	const UINT8 code = h->ubCode;
 	switch (code)
 	{
 		case HISTORY_QUEST_STARTED:
-			GetQuestStartedString(h->ubSecondCode, pString);
-			break;
+			return GetQuestStartedString(h->ubSecondCode);
 
 		case HISTORY_QUEST_FINISHED:
-			GetQuestEndedString(h->ubSecondCode, pString);
-			break;
+			return GetQuestEndedString(h->ubSecondCode);
 
 		case HISTORY_LIBERATED_TOWN:
 		case HISTORY_MINE_RAN_OUT:
@@ -576,23 +571,20 @@ static void ProcessHistoryTransactionString(wchar_t* const pString, const size_t
 		case HISTORY_MINE_RUNNING_OUT:
 		case HISTORY_MINE_SHUTDOWN:
 		case HISTORY_TALKED_TO_MINER:
-			swprintf(pString, Length, pHistoryStrings[code], pTownNames[h->ubSecondCode]);
-			break;
+			return st_format_printf(pHistoryStrings[code], GCM->getTownName(h->ubSecondCode));
 
 		case HISTORY_MERC_KILLED:
 			if (h->ubSecondCode == NO_PROFILE)
 			{
 				break;
 			}
-			swprintf(pString, Length, pHistoryStrings[code], GetProfile(h->ubSecondCode).zName);
-			break;
+			return st_format_printf(pHistoryStrings[code], GetProfile(h->ubSecondCode).zName);
 
 		case HISTORY_HIRED_MERC_FROM_AIM:
 		case HISTORY_HIRED_MERC_FROM_MERC:
 		case HISTORY_MERC_CONTRACT_EXPIRED:
 		case HISTORY_RPC_JOINED_TEAM:
-			swprintf(pString, Length, pHistoryStrings[code], GetProfile(h->ubSecondCode).zName);
-			break;
+			return st_format_printf(pHistoryStrings[code], GetProfile(h->ubSecondCode).zName);
 
 		case HISTORY_CANCELLED_INSURANCE:
 		case HISTORY_DISQUALIFIED_BOXING:
@@ -608,8 +600,7 @@ static void ProcessHistoryTransactionString(wchar_t* const pString, const size_t
 		case HISTORY_NPC_KILLED:
 		case HISTORY_PURCHASED_INSURANCE:
 		case HISTORY_WON_BOXING:
-			swprintf(pString, Length, pHistoryStrings[code], GetProfile(h->ubSecondCode).zNickname);
-			break;
+			return st_format_printf(pHistoryStrings[code], GetProfile(h->ubSecondCode).zNickname);
 
 		// all simple history log msgs, no params
 		case HISTORY_ACCEPTED_ASSIGNMENT_FROM_ENRICO:
@@ -663,9 +654,9 @@ static void ProcessHistoryTransactionString(wchar_t* const pString, const size_t
 		case HISTORY_WALTER:
 		case HISTORY_WIPEDOUTENEMYAMBUSH:
 		case HISTORY_WONBATTLE:
-			swprintf(pString, Length, pHistoryStrings[code]);
-			break;
+			return pHistoryStrings[code];
 	}
+	return ST::null;
 }
 
 
@@ -686,13 +677,13 @@ try
 	// check if bad page
 	if (uiPage == 0) return FALSE;
 
-	AutoSGPFile f(GCM->openGameResForReading(HISTORY_DATA_FILE));
+	AutoSGPFile f(GCM->tempFiles()->openForReading(HISTORY_DATA_FILE));
 
-	UINT       entry_count = FileGetSize(f) / SIZE_OF_HISTORY_FILE_RECORD;
+	UINT       entry_count = f->size() / SIZE_OF_HISTORY_FILE_RECORD;
 	UINT const skip        = (uiPage - 1) * NUM_RECORDS_PER_PAGE;
 	if (entry_count <= skip) return FALSE;
 
-	FileSeek(f, skip * SIZE_OF_HISTORY_FILE_RECORD, FILE_SEEK_FROM_START);
+	f->seek(skip * SIZE_OF_HISTORY_FILE_RECORD, FILE_SEEK_FROM_START);
 	entry_count -= skip;
 
 	if (entry_count > NUM_RECORDS_PER_PAGE) entry_count = NUM_RECORDS_PER_PAGE;
@@ -702,19 +693,17 @@ try
 		UINT8  ubCode;
 		UINT8  ubSecondCode;
 		UINT32 uiDate;
-		INT16  sSectorX;
-		INT16  sSectorY;
-		INT8   bSectorZ;
+		SGPSector sSector;
 
-		FileRead(f, &ubCode,       sizeof(UINT8));
-		FileRead(f, &ubSecondCode, sizeof(UINT8));
-		FileRead(f, &uiDate,       sizeof(UINT32));
-		FileRead(f, &sSectorX,     sizeof(INT16));
-		FileRead(f, &sSectorY,     sizeof(INT16));
-		FileRead(f, &bSectorZ,     sizeof(INT8));
-		FileSeek(f, 1, FILE_SEEK_FROM_CURRENT);
+		f->read(&ubCode,       sizeof(UINT8));
+		f->read(&ubSecondCode, sizeof(UINT8));
+		f->read(&uiDate,       sizeof(UINT32));
+		f->read(&sSector.x,    sizeof(INT16));
+		f->read(&sSector.y,    sizeof(INT16));
+		f->read(&sSector.z,    sizeof(INT8));
+		f->seek(1, FILE_SEEK_FROM_CURRENT);
 
-		ProcessAndEnterAHistoryRecord(ubCode, uiDate,  ubSecondCode, sSectorX, sSectorY, bSectorZ);
+		ProcessAndEnterAHistoryRecord(ubCode, uiDate, ubSecondCode, sSector);
 	}
 
 	return TRUE;
@@ -751,22 +740,22 @@ static void LoadPreviousHistoryPage(void)
 
 static void AppendHistoryToEndOfFile(void)
 {
-	AutoSGPFile f(FileMan::openForAppend(HISTORY_DATA_FILE));
+	AutoSGPFile f(GCM->tempFiles()->openForAppend(HISTORY_DATA_FILE));
 
 	const HistoryUnit* const h = pHistoryListHead;
 
 	BYTE  data[12];
-	BYTE* d = data;
+	DataWriter d{data};
 	INJ_U8(d, h->ubCode)
 	INJ_U8(d, h->ubSecondCode)
 	INJ_U32(d, h->uiDate)
-	INJ_I16(d, h->sSectorX)
-	INJ_I16(d, h->sSectorY)
-	INJ_I8(d, h->bSectorZ)
+	INJ_I16(d, h->sSector.x)
+	INJ_I16(d, h->sSector.y)
+	INJ_I8(d, h->sSector.z)
 	INJ_SKIP(d, 1)
-	Assert(d == endof(data));
+	Assert(d.getConsumed() == lengthof(data));
 
-	FileWrite(f, data, sizeof(data));
+	f->write(data, sizeof(data));
 }
 
 
@@ -791,24 +780,24 @@ UINT32 GetTimeQuestWasStarted(const UINT8 ubCode)
 }
 
 
-static void GetQuestStartedString(const UINT8 ubQuestValue, wchar_t* const sQuestString)
+static ST::string GetQuestStartedString(const UINT8 ubQuestValue)
 {
 	// open the file and copy the string
-	GCM->loadEncryptedString(BINARYDATADIR "/quests.edt", sQuestString, HISTORY_QUEST_TEXT_SIZE * ubQuestValue * 2, HISTORY_QUEST_TEXT_SIZE);
+	return GCM->loadEncryptedString(BINARYDATADIR "/quests.edt", HISTORY_QUEST_TEXT_SIZE * ubQuestValue * 2, HISTORY_QUEST_TEXT_SIZE);
 }
 
 
-static void GetQuestEndedString(const UINT8 ubQuestValue, wchar_t* const sQuestString)
+static ST::string GetQuestEndedString(const UINT8 ubQuestValue)
 {
 	// open the file and copy the string
-	GCM->loadEncryptedString(BINARYDATADIR "/quests.edt", sQuestString, HISTORY_QUEST_TEXT_SIZE * (ubQuestValue * 2 + 1), HISTORY_QUEST_TEXT_SIZE);
+	return GCM->loadEncryptedString(BINARYDATADIR "/quests.edt", HISTORY_QUEST_TEXT_SIZE * (ubQuestValue * 2 + 1), HISTORY_QUEST_TEXT_SIZE);
 }
 
 static INT32 GetNumberOfHistoryPages(void)
 {
-	AutoSGPFile f(GCM->openGameResForReading(HISTORY_DATA_FILE));
+	AutoSGPFile f(GCM->tempFiles()->openForReading(HISTORY_DATA_FILE));
 
-	const UINT32 uiFileSize = FileGetSize(f);
+	const UINT32 uiFileSize = f->size();
 
 	if (uiFileSize == 0) return 1;
 

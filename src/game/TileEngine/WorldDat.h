@@ -5,20 +5,26 @@
 #include "TileDat.h"
 #include "World_Tileset_Enums.h"
 
+#include <string_theory/string>
+
+
 typedef void (*TILESET_CALLBACK)(void);
 
+#define TILESET_NAME_LENGTH 32
+#define TILE_SURFACE_FILENAME_LENGTH 32
 
 struct TILESET
 {
-	wchar_t          zName[32];
-	CHAR8            TileSurfaceFilenames[NUMBEROFTILETYPES][32];
+	ST::string       zName;
+	ST::string       zTileSurfaceFilenames[NUMBEROFTILETYPES];
 	UINT8            ubAmbientID;
 	TILESET_CALLBACK MovementCostFnc;
 };
 
 
 
-extern TILESET gTilesets[NUM_TILESETS];
+extern UINT8 gubNumTilesets;
+extern TILESET gTilesets[MAX_NUM_TILESETS];
 
 
 void InitEngineTilesets(void);

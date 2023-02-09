@@ -1,7 +1,6 @@
 #include <stdexcept>
 
 #include "Buffer.h"
-#include "MemMan.h"
 #include "FileMan.h"
 #include "ImgFmt.h"
 #include "HImage.h"
@@ -10,18 +9,18 @@
 
 #include "ContentManager.h"
 #include "GameInstance.h"
-#include "slog/slog.h"
+#include "Logger.h"
 
 static SGPImage* STCILoadIndexed(UINT16 contents, HWFILE, STCIHeader const*);
 static SGPImage* STCILoadRGB(    UINT16 contents, HWFILE, STCIHeader const*);
 
 
-SGPImage* LoadSTCIFileToImage(char const* const filename, UINT16 const fContents)
+SGPImage* LoadSTCIFileToImage(const ST::string& filename, UINT16 const fContents)
 {
 	AutoSGPFile f(GCM->openGameResForReading(filename));
 
 	STCIHeader header;
-	FileRead(f, &header, sizeof(header));
+	f->read(&header, sizeof(header));
 	if (memcmp(header.cID, STCI_ID_STRING, STCI_ID_LEN) != 0)
 	{
 		throw std::runtime_error("STCI file has invalid header");
@@ -53,7 +52,7 @@ static SGPImage* STCILoadRGB(UINT16 const contents, HWFILE const f, STCIHeader c
 	{
 		// Allocate memory for the image data and read it in
 		UINT8* const img_data = img->pImageData.Allocate(header->uiStoredSize);
-		FileRead(f, img_data, header->uiStoredSize);
+		f->read(img_data, header->uiStoredSize);
 
 		img->fFlags |= IMAGE_BITMAPDATA;
 
@@ -65,7 +64,7 @@ static SGPImage* STCILoadRGB(UINT16 const contents, HWFILE const f, STCIHeader c
 					gusBlueMask  != (UINT16)header->RGB.uiBlueMask)
 			{
 				// colour distribution of the file is different from hardware!  We have to change it!
-				SLOGD(DEBUG_TAG_STCI, "Converting to current RGB distribution!");
+				SLOGD("Converting to current RGB distribution!");
 				// Convert the image to the current hardware's specifications
 				UINT32  const size = header->usWidth * header->usHeight;
 				UINT16* const data = (UINT16*)(UINT8*)img->pImageData;
@@ -89,7 +88,7 @@ static SGPImage* STCILoadRGB(UINT16 const contents, HWFILE const f, STCIHeader c
 			}
 		}
 	}
-	return img.Release();
+	return img.release();
 }
 
 
@@ -106,7 +105,7 @@ static SGPImage* STCILoadIndexed(UINT16 const contents, HWFILE const f, STCIHead
 		SGP::Buffer<STCIPaletteElement> pSTCIPalette(256);
 
 		// Read in the palette
-		FileRead(f, pSTCIPalette, sizeof(*pSTCIPalette) * 256);
+		f->read(pSTCIPalette, sizeof(*pSTCIPalette) * 256);
 
 		SGPPaletteEntry* const palette = img->pPalette.Allocate(256);
 		for (size_t i = 0; i < 256; i++)
@@ -121,7 +120,7 @@ static SGPImage* STCILoadIndexed(UINT16 const contents, HWFILE const f, STCIHead
 	}
 	else if (contents & (IMAGE_BITMAPDATA | IMAGE_APPDATA))
 	{ // seek past the palette
-		FileSeek(f, sizeof(STCIPaletteElement) * header->Indexed.uiNumberOfColours, FILE_SEEK_FROM_CURRENT);
+		f->seek(sizeof(STCIPaletteElement) * header->Indexed.uiNumberOfColours, FILE_SEEK_FROM_CURRENT);
 	}
 
 	if (contents & IMAGE_BITMAPDATA)
@@ -135,27 +134,27 @@ static SGPImage* STCILoadIndexed(UINT16 const contents, HWFILE const f, STCIHead
 			img->usNumberOfObjects = n_subimages;
 
 			ETRLEObject* const etrle_objects = img->pETRLEObject.Allocate(n_subimages);
-			FileRead(f, etrle_objects, sizeof(*etrle_objects) * n_subimages);
+			f->read(etrle_objects, sizeof(*etrle_objects) * n_subimages);
 
 			img->uiSizePixData  = header->uiStoredSize;
 			img->fFlags        |= IMAGE_TRLECOMPRESSED;
 		}
 
 		UINT8* const image_data = img->pImageData.Allocate(header->uiStoredSize);
-		FileRead(f, image_data, header->uiStoredSize);
+		f->read(image_data, header->uiStoredSize);
 
 		img->fFlags |= IMAGE_BITMAPDATA;
 	}
 	else if (contents & IMAGE_APPDATA) // then there's a point in seeking ahead
 	{
-		FileSeek(f, header->uiStoredSize, FILE_SEEK_FROM_CURRENT);
+		f->seek(header->uiStoredSize, FILE_SEEK_FROM_CURRENT);
 	}
 
 	if (contents & IMAGE_APPDATA && header->uiAppDataSize > 0)
 	{
 		// load application-specific data
 		UINT8* const app_data = img->pAppData.Allocate(header->uiAppDataSize);
-		FileRead(f, app_data, header->uiAppDataSize);
+		f->read(app_data, header->uiAppDataSize);
 
 		img->uiAppDataSize  = header->uiAppDataSize;
 		img->fFlags        |= IMAGE_APPDATA;
@@ -165,7 +164,7 @@ static SGPImage* STCILoadIndexed(UINT16 const contents, HWFILE const f, STCIHead
 		img->uiAppDataSize = 0;
 	}
 
-	return img.Release();
+	return img.release();
 }
 
 
@@ -174,9 +173,9 @@ static SGPImage* STCILoadIndexed(UINT16 const contents, HWFILE const f, STCIHead
 
 TEST(STCI, asserts)
 {
-	EXPECT_EQ(sizeof(STCIHeader), 64);
-	EXPECT_EQ(sizeof(STCISubImage), 16);
-	EXPECT_EQ(sizeof(STCIPaletteElement), 3);
+	EXPECT_EQ(sizeof(STCIHeader), 64u);
+	EXPECT_EQ(sizeof(STCISubImage), 16u);
+	EXPECT_EQ(sizeof(STCIPaletteElement), 3u);
 }
 
 #endif

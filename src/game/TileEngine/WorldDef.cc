@@ -1,67 +1,70 @@
-#include <stdexcept>
-
+#include "WorldDef.h"
+#include "Animated_ProgressBar.h"
 #include "Animation_Data.h"
-#include "Buffer.h"
-#include "Directories.h"
+#include "Buildings.h"
+#include "ContentManager.h"
+#include "Debug.h"
+#include "EditorBuildings.h"
+#include "EditorMapInfo.h"
+#include "Environment.h"
+#include "Exit_Grids.h"
+#include "FileMan.h"
+#include "Game_Clock.h"
+#include "GameInstance.h"
+#include "GameRes.h"
+#include "GameMode.h"
+#include "Handle_UI.h"
 #include "HImage.h"
+#include "Input.h"
+#include "Isometric_Utils.h"
+#include "JA2Types.h"
+#include "JAScreens.h"
+#include "Keys.h"
+#include "LightEffects.h"
+#include "Lighting.h"
 #include "LoadSaveBasicSoldierCreateStruct.h"
 #include "LoadSaveData.h"
 #include "LoadSaveLightSprite.h"
 #include "LoadSaveSoldierCreate.h"
-#include "TileDef.h"
-#include "Timer_Control.h"
-#include "WorldDef.h"
-#include "WorldDat.h"
-#include "Debug.h"
-#include "Smooth.h"
-#include "WorldMan.h"
-#include "MouseSystem.h"
-#include "Sys_Globals.h"
-#include "ScreenIDs.h"
-#include "Render_Fun.h"
-#include "Lighting.h"
-#include "Structure.h"
-#include "VObject.h"
-#include "Soldier_Control.h"
-#include "Isometric_Utils.h"
-#include "Overhead.h"
-#include "Points.h"
-#include "Handle_UI.h"
+#include "LoadScreen.h"
+#include "Logger.h"
+#include "Map_Edgepoints.h"
+#include "Map_Information.h"
+#include "Meanwhile.h"
 #include "OppList.h"
-#include "World_Items.h"
+#include "Overhead.h"
+#include "Overhead_Map.h"
+#include "Overhead_Types.h"
+#include "PathAI.h"
+#include "Random.h"
+#include "Render_Fun.h"
 #include "RenderWorld.h"
+#include "Rotting_Corpses.h"
+#include "Scheduling.h"
+#include "ScreenIDs.h"
+#include "SGPFile.h"
+#include "SGPStrings.h"
+#include "SmokeEffects.h"
+#include "Soldier_Control.h"
 #include "Soldier_Create.h"
 #include "Soldier_Init_List.h"
-#include "Exit_Grids.h"
-#include "Tile_Surface.h"
-#include "Rotting_Corpses.h"
-#include "Keys.h"
-#include "Map_Information.h"
-#include "Summary_Info.h"
-#include "Animated_ProgressBar.h"
-#include "PathAI.h"
-#include "EditorBuildings.h"
-#include "FileMan.h"
-#include "Map_Edgepoints.h"
-#include "Environment.h"
-#include "Structure_Wrap.h"
-#include "Scheduling.h"
-#include "EditorMapInfo.h"
-#include "Game_Clock.h"
-#include "Buildings.h"
 #include "StrategicMap.h"
-#include "Overhead_Map.h"
-#include "Meanwhile.h"
-#include "SmokeEffects.h"
-#include "LightEffects.h"
-#include "MemMan.h"
-#include "JAScreens.h"
-#include "GameState.h"
-#include "GameRes.h"
+#include "Structure.h"
+#include "Structure_Internals.h"
+#include "Summary_Info.h"
+#include "Sys_Globals.h"
+#include "Tile_Animation.h"
+#include "Tile_Surface.h"
+#include "TileDat.h"
+#include "TileDef.h"
+#include "VObject.h"
+#include "World_Items.h"
+#include "WorldDat.h"
+#include "WorldMan.h"
+#include <stdexcept>
+#include <string>
+#include <string_theory/format>
 
-#include "ContentManager.h"
-#include "GameInstance.h"
-#include "slog/slog.h"
 
 #define SET_MOVEMENTCOST( a, b, c, d )		( ( gubWorldMovementCosts[ a ][ b ][ c ] < d ) ? ( gubWorldMovementCosts[ a ][ b ][ c ] = d ) : 0 );
 #define FORCE_SET_MOVEMENTCOST( a, b, c, d )	( gubWorldMovementCosts[ a ][ b ][ c ] = d )
@@ -78,7 +81,6 @@
 #define MAP_AMBIENTLIGHTLEVEL_SAVED		0x00000080
 #define MAP_NPCSCHEDULES_SAVED			0x00000100
 
-#include "LoadScreen.h"
 
 TileSetID giCurrentTilesetID = TILESET_INVALID;
 
@@ -90,7 +92,7 @@ static INT8 gbNewTileSurfaceLoaded[NUMBEROFTILETYPES];
 
 void SetAllNewTileSurfacesLoaded( BOOLEAN fNew )
 {
-	memset( gbNewTileSurfaceLoaded, fNew, sizeof( gbNewTileSurfaceLoaded ) );
+	std::fill(std::begin(gbNewTileSurfaceLoaded), std::end(gbNewTileSurfaceLoaded), fNew);
 }
 
 
@@ -157,21 +159,21 @@ void InitializeWorld()
 	//ProcessTilesetNamesForBPP();
 
 	// ATE: MEMSET LOG HEIGHT VALUES
-	memset( gTileTypeLogicalHeight, 1, sizeof( gTileTypeLogicalHeight ) );
+	std::fill(std::begin(gTileTypeLogicalHeight), std::end(gTileTypeLogicalHeight), 1);
 
 	// Memset tile database
-	memset( gTileDatabase, 0, sizeof( gTileDatabase ) );
+	std::fill(std::begin(gTileDatabase), std::end(gTileDatabase), TILE_ELEMENT{});
 
 	// Init surface list
-	memset( gTileSurfaceArray, 0, sizeof( gTileSurfaceArray ) );
+	std::fill(std::begin(gTileSurfaceArray), std::end(gTileSurfaceArray), nullptr);
 
 	// Init default surface list
-	memset( gbDefaultSurfaceUsed, 0, sizeof( gbDefaultSurfaceUsed ) );
+	std::fill(std::begin(gbDefaultSurfaceUsed), std::end(gbDefaultSurfaceUsed), 0);
 
 
 	// Initialize world data
 
-	gpWorldLevelData = MALLOCNZ(MAP_ELEMENT, WORLD_MAX);
+	gpWorldLevelData = new MAP_ELEMENT[WORLD_MAX]{};
 
 	// Init room database
 	InitRoomDatabase( );
@@ -190,7 +192,8 @@ void DeinitializeWorld( )
 
 	if ( gpWorldLevelData != NULL )
 	{
-		MemFree( gpWorldLevelData );
+		delete[] gpWorldLevelData;
+		gpWorldLevelData = nullptr;
 	}
 
 	DestroyTileSurfaces( );
@@ -201,33 +204,54 @@ void DeinitializeWorld( )
 }
 
 
-static void AddTileSurface(char const* filename, UINT32 type, TileSetID);
+static void AddTileSurface(ST::string const& filename, UINT32 const tileType);
 
+TileSetID GetDefaultTileset() {
+	return (gubNumTilesets == JA25_NUM_TILESETS) // If we have the number of tilesets for JA25 useJA25 default, else vanilla default
+		? DEFAULT_JA25_TILESET
+		: GENERIC_1;
+}
 
-static void LoadTileSurfaces(char const tile_surface_filenames[][32], TileSetID const tileset_id)
+TILE_SURFACE_RESOURCE GetAdjustedTilesetResource(TileSetID tilesetID, UINT32 uiTileType, ST::string const& filePrefix)
+{
+	if (tilesetID >= gubNumTilesets) throw std::logic_error("invalid tilesetID");
+
+	ST::string *filename = &gTilesets[tilesetID].zTileSurfaceFilenames[uiTileType];
+	if (filename->empty())
+	{
+		// Try loading from default tileset
+		tilesetID = (gubNumTilesets == JA25_NUM_TILESETS && uiTileType == SPECIALTILES)
+			? DEFAULT_JA25_TILESET     // If the map is SPECIALTILES (and JA25 tilesets available), use DEFAULT_JA25_TILESET
+			: GetDefaultTileset()      // Else use default
+		;
+		filename = &gTilesets[tilesetID].zTileSurfaceFilenames[uiTileType];
+	}
+
+	TILE_SURFACE_RESOURCE res;
+	res.tilesetID = tilesetID;
+	res.resourceFileName = GCM->getTilesetResourceName(tilesetID, filePrefix + *filename);
+	return res;
+}
+
+static void LoadTileSurfaces(TileSetID const tileset_id)
 try
 {
-	SetRelativeStartAndEndPercentage(0, 1, 35, L"Tile Surfaces");
+	SetRelativeStartAndEndPercentage(0, 1, 35, "Tile Surfaces");
 	for (UINT32 i = 0; i != NUMBEROFTILETYPES; ++i)
 	{
 		UINT32 const percentage = i * 100 / (NUMBEROFTILETYPES - 1);
 		RenderProgressBar(0, percentage);
 
-		char const* filename       = tile_surface_filenames[i];
-		TileSetID   tileset_to_add = tileset_id;
-		if (filename[0] == '\0')
-		{ // Use first tileset value!
+		auto res = GetAdjustedTilesetResource(tileset_id, i);
+		BOOLEAN fUseDefault = res.isDefaultTileset();
 
-			// ATE: If here, don't load default surface if already loaded
-			if (gbDefaultSurfaceUsed[i]) continue;
+		// don't load default surface if already loaded
+		if (fUseDefault && gbDefaultSurfaceUsed[i]) continue;
 
-			filename       = gTilesets[GENERIC_1].TileSurfaceFilenames[i];
-			tileset_to_add = GENERIC_1;
-		}
+		AddTileSurface(res.resourceFileName, i);
 
-		// Adjust for tileset position
-		std::string adjusted_filename(GCM->getTilesetResourceName(tileset_to_add, filename));
-		AddTileSurface(adjusted_filename.c_str(), i, tileset_to_add);
+		// OK, if we are the default tileset, set value indicating that!
+		gbDefaultSurfaceUsed[i] = fUseDefault;
 	}
 }
 catch (...)
@@ -237,7 +261,7 @@ catch (...)
 }
 
 
-static void AddTileSurface(char const* const filename, UINT32 const type, TileSetID const tileset_id)
+static void AddTileSurface(ST::string const& filename, UINT32 const type)
 {
 	TILE_IMAGERY*& slot = gTileSurfaceArray[type];
 
@@ -245,7 +269,7 @@ static void AddTileSurface(char const* const filename, UINT32 const type, TileSe
 	if (slot)
 	{
 		DeleteTileSurface(slot);
-		slot = 0;
+		slot = NULL;
 	}
 
 	TILE_IMAGERY* const t = LoadTileSurface(filename);
@@ -254,32 +278,18 @@ static void AddTileSurface(char const* const filename, UINT32 const type, TileSe
 
 	slot = t;
 
-	// OK, if we are the default tileset, set value indicating that!
-	gbDefaultSurfaceUsed[type] = tileset_id == GENERIC_1;
-
 	gbNewTileSurfaceLoaded[type] = TRUE;
 }
 
-
-extern BOOLEAN gfLoadShadeTablesFromTextFile;
-
-
 void BuildTileShadeTables()
 {
-	if (gfLoadShadeTablesFromTextFile)
-	{ /* Because we're tweaking the RGB values in the text file, always force
-		 * rebuild the shadetables so that the user can tweak them in the same exe
-		 * session. */
-		memset(gbNewTileSurfaceLoaded, 1, sizeof(gbNewTileSurfaceLoaded));
-	}
-
 	for (UINT32 i = 0; i != NUMBEROFTILETYPES; ++i)
 	{
 		TILE_IMAGERY const* const t = gTileSurfaceArray[i];
 		if (!t) continue;
 
 		// Don't create shade tables if default were already used once!
-		if(GameState::getInstance()->isEditorMode())
+		if(GameMode::getInstance()->isEditorMode())
 		{
 			if (!gbNewTileSurfaceLoaded[i] && !gfEditorForceShadeTableRebuild) continue;
 		}
@@ -301,7 +311,7 @@ void DestroyTileShadeTables(void)
 		if (ti == NULL) continue;
 
 		// Don't delete shade tables if default are still being used...
-		if(GameState::getInstance()->isEditorMode())
+		if(GameMode::getInstance()->isEditorMode())
 		{
 			if (gbNewTileSurfaceLoaded[i] || gfEditorForceShadeTableRebuild)
 			{
@@ -390,9 +400,6 @@ static void CompileTileMovementCosts(UINT16 usGridNo)
 	{
 		return;
 	}
-
-/*
-*/
 
 	if ( GridNoOnVisibleWorldTile( usGridNo ) )
 	{
@@ -507,11 +514,18 @@ static void CompileTileMovementCosts(UINT16 usGridNo)
 								SET_CURRMOVEMENTCOST( WEST, TRAVELCOST_OBSTACLE );
 								SET_CURRMOVEMENTCOST( NORTHWEST, TRAVELCOST_OBSTACLE );
 								// set values for the tiles EXITED from this location
-								FORCE_SET_MOVEMENTCOST( usGridNo - WORLD_COLS, NORTH, 0, TRAVELCOST_NONE );
+								if (gubWorldMovementCosts[usGridNo - WORLD_COLS][NORTH][0] < TRAVELCOST_BLOCKED)
+								{
+									// make sure no obstacle costs exists before changing path cost to 0
+									FORCE_SET_MOVEMENTCOST(usGridNo - WORLD_COLS, NORTH, 0, TRAVELCOST_NONE);
+								}
 								SET_MOVEMENTCOST( usGridNo - WORLD_COLS + 1, NORTHEAST, 0, TRAVELCOST_OBSTACLE );
 								SET_MOVEMENTCOST( usGridNo + 1, EAST, 0, TRAVELCOST_OBSTACLE );
 								SET_MOVEMENTCOST( usGridNo + WORLD_COLS + 1, SOUTHEAST, 0, TRAVELCOST_OBSTACLE );
-								FORCE_SET_MOVEMENTCOST( usGridNo + WORLD_COLS, SOUTH, 0, TRAVELCOST_NONE );
+								if (gubWorldMovementCosts[usGridNo + WORLD_COLS][SOUTH][0] < TRAVELCOST_BLOCKED)
+								{
+									FORCE_SET_MOVEMENTCOST(usGridNo + WORLD_COLS, SOUTH, 0, TRAVELCOST_NONE);
+								}
 								SET_MOVEMENTCOST( usGridNo + WORLD_COLS - 1, SOUTHWEST, 0, TRAVELCOST_OBSTACLE );
 								SET_MOVEMENTCOST( usGridNo - 1, WEST, 0, TRAVELCOST_OBSTACLE );
 								SET_MOVEMENTCOST( usGridNo - WORLD_COLS - 1, NORTHWEST, 0, TRAVELCOST_OBSTACLE );
@@ -1076,8 +1090,6 @@ void RecompileLocalMovementCosts( INT16 sCentreGridNo )
 		for( sGridX = sCentreGridX - LOCAL_RADIUS; sGridX < sCentreGridX + LOCAL_RADIUS; sGridX++ )
 		{
 			usGridNo = MAPROWCOLTOPOS( sGridY, sGridX );
-			// times 2 for 2 levels, times 2 for UINT16s
-//			memset( &(gubWorldMovementCosts[usGridNo]), 0, MAXDIR * 2 * 2 );
 			if (isValidGridNo(usGridNo))
 			{
 				for( bDirLoop = 0; bDirLoop < MAXDIR; bDirLoop++)
@@ -1127,8 +1139,6 @@ void RecompileLocalMovementCostsFromRadius( INT16 sCentreGridNo, INT8 bRadius )
 			for( sGridX = sCentreGridX - bRadius; sGridX < sCentreGridX + bRadius; sGridX++ )
 			{
 				usGridNo = MAPROWCOLTOPOS( sGridY, sGridX );
-				// times 2 for 2 levels, times 2 for UINT16s
-	//			memset( &(gubWorldMovementCosts[usGridNo]), 0, MAXDIR * 2 * 2 );
 				if (isValidGridNo(usGridNo))
 				{
 					for( bDirLoop = 0; bDirLoop < MAXDIR; bDirLoop++)
@@ -1278,7 +1288,13 @@ void CompileWorldMovementCosts( )
 {
 	UINT16					usGridNo;
 
-	memset( gubWorldMovementCosts, 0, sizeof( gubWorldMovementCosts ) );
+	for (auto& i : gubWorldMovementCosts)
+	{
+		for (auto& j : i)
+		{
+			std::fill(std::begin(j), std::end(j), 0);
+		}
+	}
 
 	CompileWorldTerrainIDs();
  	for( usGridNo = 0; usGridNo < WORLD_MAX; usGridNo++ )
@@ -1288,21 +1304,21 @@ void CompileWorldMovementCosts( )
 }
 
 
-static bool LimitCheck(UINT8 const n, INT32 const gridno, UINT32& n_warnings, wchar_t const* const kind)
+static bool LimitCheck(UINT8 n, INT32 gridno, UINT32& n_warnings, const ST::string& kind)
 {
 	if (n > 15)
 	{
 		SetErrorCatchString(
-			L"SAVE ABORTED!  %ls count too high (%d) for gridno %d.  Need to fix before map can be saved!  There are %d additional warnings.",
-			kind, n, gridno, n_warnings);
+			ST::format("SAVE ABORTED!  {} count too high ({}) for gridno {}.  Need to fix before map can be saved!  There are {} additional warnings.",
+			kind, n, gridno, n_warnings));
 		return false;
 	}
 	if (n > 10)
 	{
 		++n_warnings;
 		SetErrorCatchString(
-			L"Warnings %d -- Last warning:  %ls count warning of %d for gridno %d.",
-			n_warnings, kind, n, gridno);
+			ST::format("Warnings {} -- Last warning:  {} count warning of {} for gridno {}.",
+			n_warnings, kind, n, gridno));
 	}
 	return true;
 }
@@ -1315,32 +1331,26 @@ static void WriteLevelNode(HWFILE const f, LEVELNODE const* const n)
 	UINT32 const type           = GetTileType(idx);
 	UINT8  const type_sub_index = (UINT8)GetTypeSubIndexFromTileIndex(type, idx);
 	BYTE  data[2];
-	BYTE* d = data;
+	DataWriter d{data};
 	INJ_U8(d, (UINT8)type)
 	INJ_U8(d, (UINT8)type_sub_index)
-	FileWrite(f, data, sizeof(data));
+	Assert(d.getConsumed() == lengthof(data));
+	f->write(data, sizeof(data));
 }
 
 
 static void RemoveWorldWireFrameTiles();
 static void SaveMapLights(HWFILE);
 
-
-BOOLEAN SaveWorld(char const* const filename)
+BOOLEAN SaveWorldToSGPFile(SGPFile* f)
 try
 {
-	// Let's save map into Data/maps
-	std::string path = GCM->getNewMapFolder();
-	FileMan::createDir(path.c_str());
-	path = FileMan::joinPaths(path.c_str(), (const char*)filename);
-	AutoSGPFile f(FileMan::openForWriting(path.c_str()));
-
 	// Write JA2 Version ID
 	FLOAT mapVersion = getMajorMapVersion();
-	FileWrite(f, &mapVersion, sizeof(FLOAT));
+	f->write(&mapVersion, sizeof(FLOAT));
 	if (mapVersion >= 4.00)
 	{
-		FileWrite(f, &gubMinorMapVersion, sizeof(UINT8));
+		f->write(&gubMinorMapVersion, sizeof(UINT8));
 	}
 
 	// Write FLAGS FOR WORLD
@@ -1355,14 +1365,14 @@ try
 	if (gfBasement || gfCaves)
 		flags |= MAP_AMBIENTLIGHTLEVEL_SAVED;
 
-	FileWrite(f, &flags, sizeof(INT32));
+	f->write(&flags, sizeof(INT32));
 
 	// Write tileset ID
-	FileWrite(f, &giCurrentTilesetID, sizeof(INT32));
+	f->write(&giCurrentTilesetID, sizeof(INT32));
 
 	// Write soldier control size
 	UINT32 const uiSoldierSize = sizeof(SOLDIERTYPE);
-	FileWrite(f, &uiSoldierSize, sizeof(UINT32));
+	f->write(&uiSoldierSize, sizeof(UINT32));
 
 	// Remove world visibility tiles
 	RemoveWorldWireFrameTiles();
@@ -1376,7 +1386,7 @@ try
 			heights[2 * i]     = world_data[i].sHeight;
 			heights[2 * i + 1] = 0; // Filler byte
 		}
-		FileWrite(f, heights, sizeof(heights));
+		f->write(heights, sizeof(heights));
 	}
 
 	// Write out # values - we'll have no more than 15 per level!
@@ -1389,11 +1399,11 @@ try
 		// Determine # of land
 		UINT8 n_layers = 0;
 		for (LEVELNODE const* i = e.pLandHead; i; i = i->pNext) ++n_layers;
-		if (!LimitCheck(n_layers, cnt, n_warnings, L"Land")) return FALSE;
+		if (!LimitCheck(n_layers, cnt, n_warnings, "Land")) return FALSE;
 
 		// Combine # of land layers with worlddef flags (first 4 bits)
 		ubCombine = (n_layers & 0xf) | ((e.uiFlags & 0xf) << 4);
-		FileWrite(f, &ubCombine, sizeof(ubCombine));
+		f->write(&ubCombine, sizeof(ubCombine));
 
 
 		// Determine # of objects
@@ -1407,7 +1417,7 @@ try
 			if (uiTileType >= FIRSTPOINTERS) continue;
 			++n_objects;
 		}
-		if (!LimitCheck(n_objects, cnt, n_warnings, L"Object")) return FALSE;
+		if (!LimitCheck(n_objects, cnt, n_warnings, "Object")) return FALSE;
 
 		// Determine # of structs
 		UINT8 n_structs = 0;
@@ -1417,10 +1427,10 @@ try
 			if (i->uiFlags & LEVELNODE_ITEM) continue;
 			++n_structs;
 		}
-		if (!LimitCheck(n_structs, cnt, n_warnings, L"Struct")) return FALSE;
+		if (!LimitCheck(n_structs, cnt, n_warnings, "Struct")) return FALSE;
 
 		ubCombine = (n_objects & 0xf) | ((n_structs & 0xf) << 4);
-		FileWrite(f, &ubCombine, sizeof(ubCombine));
+		f->write(&ubCombine, sizeof(ubCombine));
 
 
 		// Determine # of shadows
@@ -1431,7 +1441,7 @@ try
 			if (i->uiFlags & (LEVELNODE_BUDDYSHADOW  | LEVELNODE_EXITGRID)) continue;
 			++n_shadows;
 		}
-		if (!LimitCheck(n_shadows, cnt, n_warnings, L"Shadow")) return FALSE;
+		if (!LimitCheck(n_shadows, cnt, n_warnings, "Shadow")) return FALSE;
 
 		// Determine # of Roofs
 		UINT8 n_roofs = 0;
@@ -1441,10 +1451,10 @@ try
 			if (i->usIndex == SLANTROOFCEILING1) continue;
 			++n_roofs;
 		}
-		if (!LimitCheck(n_roofs, cnt, n_warnings, L"Roof")) return FALSE;
+		if (!LimitCheck(n_roofs, cnt, n_warnings, "Roof")) return FALSE;
 
 		ubCombine = (n_shadows & 0xf) | ((n_roofs & 0xf) << 4);
-		FileWrite(f, &ubCombine, sizeof(ubCombine));
+		f->write(&ubCombine, sizeof(ubCombine));
 
 
 		// Determine # of OnRoofs
@@ -1453,11 +1463,18 @@ try
 		{
 			++n_on_roofs;
 		}
-		if (!LimitCheck(n_on_roofs, cnt, n_warnings, L"OnRoof")) return FALSE;
+		if (!LimitCheck(n_on_roofs, cnt, n_warnings, "OnRoof")) return FALSE;
 
 		// Write combination of onroof and nothing
 		ubCombine = n_on_roofs & 0xf;
-		FileWrite(f, &ubCombine, sizeof(ubCombine));
+		f->write(&ubCombine, sizeof(ubCombine));
+	}
+
+	if(getMajorMapVersion() == 6.00 && gubMinorMapVersion == 26)
+	{
+		// the data appears to be 37 INT32/UINT32 numbers and is present in russian ja2 maps
+		UINT8 data[148] = {0};
+		f->write(&data, sizeof(data));
 	}
 
 	UINT8 const test[] = { 1, 1 };
@@ -1466,7 +1483,7 @@ try
 		LEVELNODE const* i = e->pLandHead;
 		if (!i)
 		{
-			FileWrite(f, &test, sizeof(test));
+			f->write(&test, sizeof(test));
 		}
 		else
 		{ // Write out land pieces backwards so that they are loaded properly
@@ -1495,10 +1512,11 @@ try
 			UINT16 const type_sub_index = GetTypeSubIndexFromTileIndex(type, i->usIndex);
 
 			BYTE  data[3];
-			BYTE* d = data;
+			DataWriter d{data};
 			INJ_U8( d, (UINT8)type)
 			INJ_U16(d, type_sub_index) // XXX misaligned
-			FileWrite(f, data, sizeof(data));
+			Assert(d.getConsumed() == lengthof(data));
+			f->write(data, sizeof(data));
 		}
 	}
 
@@ -1550,7 +1568,7 @@ try
 	}
 
 	// Write out room information
-	FileWrite(f, gubWorldRoomInfo, sizeof(gubWorldRoomInfo));
+	f->write(gubWorldRoomInfo, sizeof(gubWorldRoomInfo));
 
 	if (flags & MAP_WORLDITEMS_SAVED)
 	{
@@ -1559,9 +1577,9 @@ try
 
 	if (flags & MAP_AMBIENTLIGHTLEVEL_SAVED)
 	{
-		FileWrite(f, &gfBasement,          1);
-		FileWrite(f, &gfCaves,             1);
-		FileWrite(f, &ubAmbientLightLevel, 1);
+		f->write(&gfBasement,          1);
+		f->write(&gfCaves,             1);
+		f->write(&ubAmbientLightLevel, 1);
 	}
 
 	if (flags & MAP_WORLDLIGHTS_SAVED)
@@ -1594,12 +1612,17 @@ try
 		SaveSchedules(f);
 	}
 
-	strlcpy(g_filename, filename, lengthof(g_filename));
 	return TRUE;
 }
 catch (...) { return FALSE; }
 
-
+BOOLEAN SaveWorldAbsolute(const ST::string &absolutePath)
+try
+{
+	AutoSGPFile f(FileMan::openForWriting(absolutePath));
+	return SaveWorldToSGPFile(f);
+}
+catch (...) { return FALSE; }
 
 static void OptimizeMapForShadows()
 {
@@ -1649,7 +1672,7 @@ static void SetBlueFlagFlags(void)
 void InitLoadedWorld(void)
 {
 	//if the current sector is not valid, dont init the world
-	if( gWorldSectorX == 0 || gWorldSectorY == 0 )
+	if (!gWorldSector.IsValid())
 	{
 		return;
 	}
@@ -1681,12 +1704,11 @@ extern BOOLEAN gfUpdatingNow;
  * generates summary information for use within the summary editor.  The header
  * is defined in Summary Info.h, not worlddef.h -- though it's not likely this
  * is going to be used anywhere where it would matter. */
-BOOLEAN EvaluateWorld(const char* const pSector, const UINT8 ubLevel)
+BOOLEAN EvaluateWorld(const ST::string& pSector, const UINT8 ubLevel)
 try
 {
 	// Make sure the file exists... if not, then return false
-	char filename[40];
-	snprintf(filename, lengthof(filename), "%s%s%.0d%s.dat",
+	ST::string filename = ST::format("{}{}{.0d}{}.dat",
 		pSector,
 		ubLevel % 4 != 0 ? "_b" : "",
 		ubLevel % 4,
@@ -1696,13 +1718,12 @@ try
 	if (gfMajorUpdate)
 	{
 		LoadWorld(filename);
-		SaveWorld(filename);
+		SaveWorldAbsolute(filename);
 	}
 
 	AutoSGPFile f(GCM->openMapForReading(filename));
 
-	wchar_t str[40];
-	swprintf(str, lengthof(str), L"Analyzing map %hs", filename);
+	ST::string str = ST::format("Analyzing map {}", filename);
 	if (!gfUpdatingNow)
 	{
 		SetRelativeStartAndEndPercentage(0, 0, 100, str);
@@ -1715,29 +1736,29 @@ try
 	RenderProgressBar(0, 0);
 
 	//clear the summary file info
-	SUMMARYFILE* const pSummary = MALLOCZ(SUMMARYFILE);
+	SUMMARYFILE* const pSummary = new SUMMARYFILE{};
 	pSummary->ubSummaryVersion = GLOBAL_SUMMARY_VERSION;
 	pSummary->dMajorMapVersion = getMajorMapVersion();
 
 	//skip JA2 Version ID
 	FLOAT	dMajorMapVersion;
-	FileRead(f, &dMajorMapVersion, sizeof(dMajorMapVersion));
+	f->read(&dMajorMapVersion, sizeof(dMajorMapVersion));
 	if (dMajorMapVersion >= 4.00)
 	{
-		FileSeek(f, sizeof(UINT8), FILE_SEEK_FROM_CURRENT);
+		f->seek(sizeof(UINT8), FILE_SEEK_FROM_CURRENT);
 	}
 
 	//Read FLAGS FOR WORLD
 	UINT32 uiFlags;
-	FileRead(f, &uiFlags, sizeof(uiFlags));
+	f->read(&uiFlags, sizeof(uiFlags));
 
 	//Read tilesetID
 	INT32 iTilesetID;
-	FileRead(f, &iTilesetID, sizeof(iTilesetID));
+	f->read(&iTilesetID, sizeof(iTilesetID));
 	pSummary->ubTilesetID = (UINT8)iTilesetID;
 
 	// Skip soldier size and height values
-	FileSeek(f, sizeof(UINT32) + (1 + 1) * WORLD_MAX, FILE_SEEK_FROM_CURRENT);
+	f->seek(sizeof(UINT32) + (1 + 1) * WORLD_MAX, FILE_SEEK_FROM_CURRENT);
 
 	// Skip all layers
 	INT32 skip = 0;
@@ -1746,7 +1767,7 @@ try
 		if (row % 16 == 0) RenderProgressBar(0, row * 90 / WORLD_ROWS + 1); // 1 - 90
 
 		UINT8 combine[WORLD_COLS][4];
-		FileRead(f, combine, sizeof(combine));
+		f->read(combine, sizeof(combine));
 		for (UINT8 const (*i)[4] = combine; i != endof(combine); ++i)
 		{
 			skip +=
@@ -1758,14 +1779,14 @@ try
 				((*i)[3] & 0x0F) * 2;  // #on roof
 		}
 	}
-	FileSeek(f, skip, FILE_SEEK_FROM_CURRENT);
+	f->seek(skip, FILE_SEEK_FROM_CURRENT);
 
 	//extract highest room number
 	UINT8 max_room = 0;
 	for (INT32 row = 0; row != WORLD_ROWS; ++row)
 	{
 		UINT8 room[WORLD_COLS];
-		FileRead(f, room, sizeof(room));
+		f->read(room, sizeof(room));
 		for (INT32 col = 0; col != WORLD_COLS; ++col)
 		{
 			if (max_room < room[col]) max_room = room[col];
@@ -1778,16 +1799,16 @@ try
 		RenderProgressBar(0, 91);
 		//Important:  Saves the file position (byte offset) of the position where the numitems
 		//            resides.  Checking this value and comparing to usNumItems will ensure validity.
-		pSummary->uiNumItemsPosition = FileGetPos(f);
+		pSummary->uiNumItemsPosition = f->pos();
 		//get number of items (for now)
 		UINT32 n_items;
-		FileRead(f, &n_items, sizeof(n_items));
+		f->read(&n_items, sizeof(n_items));
 		pSummary->usNumItems = n_items;
 		//Skip the contents of the world items.
-		FileSeek(f, sizeof(WORLDITEM) * n_items, FILE_SEEK_FROM_CURRENT);
+		f->seek(sizeof(WORLDITEM) * n_items, FILE_SEEK_FROM_CURRENT);
 	}
 
-	if (uiFlags & MAP_AMBIENTLIGHTLEVEL_SAVED) FileSeek(f, 3, FILE_SEEK_FROM_CURRENT);
+	if (uiFlags & MAP_AMBIENTLIGHTLEVEL_SAVED) f->seek(3, FILE_SEEK_FROM_CURRENT);
 
 	if (uiFlags & MAP_WORLDLIGHTS_SAVED)
 	{
@@ -1795,29 +1816,29 @@ try
 
 		//skip number of light palette entries
 		UINT8 n_light_colours;
-		FileRead(f, &n_light_colours, sizeof(n_light_colours));
-		FileSeek(f, sizeof(SGPPaletteEntry) * n_light_colours, FILE_SEEK_FROM_CURRENT);
+		f->read(&n_light_colours, sizeof(n_light_colours));
+		f->seek(sizeof(SGPPaletteEntry) * n_light_colours, FILE_SEEK_FROM_CURRENT);
 
 		//get number of lights
-		FileRead(f, &pSummary->usNumLights, sizeof(pSummary->usNumLights));
+		f->read(&pSummary->usNumLights, sizeof(pSummary->usNumLights));
 		//skip the light loading
 		for (INT32 n = pSummary->usNumLights; n != 0; --n)
 		{
-			FileSeek(f, 24 /* size of a LIGHT_SPRITE on disk */, FILE_SEEK_FROM_CURRENT);
+			f->seek(24 /* size of a LIGHT_SPRITE on disk */, FILE_SEEK_FROM_CURRENT);
 			UINT8 ubStrLen;
-			FileRead(f, &ubStrLen, sizeof(ubStrLen));
-			FileSeek(f, ubStrLen, FILE_SEEK_FROM_CURRENT);
+			f->read(&ubStrLen, sizeof(ubStrLen));
+			f->seek(ubStrLen, FILE_SEEK_FROM_CURRENT);
 		}
 	}
 
 	//read the mapinformation
-	FileRead(f, &pSummary->MapInfo, sizeof(pSummary->MapInfo));
+	f->read(&pSummary->MapInfo, sizeof(pSummary->MapInfo));
 
 	if (uiFlags & MAP_FULLSOLDIER_SAVED)
 	{
 		RenderProgressBar(0, 94);
 
-		pSummary->uiEnemyPlacementPosition = FileGetPos(f);
+		pSummary->uiEnemyPlacementPosition = f->pos();
 
 		for (INT32 i = 0; i < pSummary->MapInfo.ubNumIndividuals; ++i)
 		{
@@ -1944,14 +1965,14 @@ try
 		RenderProgressBar(0, 98);
 
 		UINT16 cnt;
-		FileRead(f, &cnt, sizeof(cnt));
+		f->read(&cnt, sizeof(cnt));
 
 		for (INT32 n = cnt; n != 0; --n)
 		{
 			UINT16 usMapIndex;
-			FileRead(f, &usMapIndex, sizeof(usMapIndex));
+			f->read(&usMapIndex, sizeof(usMapIndex));
 			EXITGRID exitGrid;
-			FileRead(f, &exitGrid, 5 /* XXX sic! The 6th byte luckily is padding */);
+			f->read(&exitGrid, 5 /* XXX sic! The 6th byte luckily is padding */);
 			for (INT32 loop = 0;; ++loop)
 			{
 				if (loop >= pSummary->ubNumExitGridDests)
@@ -1966,23 +1987,14 @@ try
 						++pSummary->usExitGridSize[loop];
 						EXITGRID* const eg = &pSummary->ExitGrid[loop];
 						eg->usGridNo      = exitGrid.usGridNo;
-						eg->ubGotoSectorX = exitGrid.ubGotoSectorX;
-						eg->ubGotoSectorY = exitGrid.ubGotoSectorY;
-						eg->ubGotoSectorZ = exitGrid.ubGotoSectorZ;
-						if (eg->ubGotoSectorX != exitGrid.ubGotoSectorX ||
-								eg->ubGotoSectorY != exitGrid.ubGotoSectorY)
-						{
-							pSummary->fInvalidDest[loop] = TRUE;
-						}
+						eg->ubGotoSector = exitGrid.ubGotoSector;
 					}
 					break;
 				}
 
 				const EXITGRID* const eg = &pSummary->ExitGrid[loop];
 				if (eg->usGridNo      == exitGrid.usGridNo      &&
-						eg->ubGotoSectorX == exitGrid.ubGotoSectorX &&
-						eg->ubGotoSectorY == exitGrid.ubGotoSectorY &&
-						eg->ubGotoSectorZ == exitGrid.ubGotoSectorZ)
+						eg->ubGotoSector == exitGrid.ubGotoSector)
 				{ //same destination.
 					++pSummary->usExitGridSize[loop];
 					break;
@@ -1993,12 +2005,12 @@ try
 
 	if (uiFlags & MAP_DOORTABLE_SAVED)
 	{
-		FileRead(f, &pSummary->ubNumDoors, sizeof(pSummary->ubNumDoors));
+		f->read(&pSummary->ubNumDoors, sizeof(pSummary->ubNumDoors));
 
 		for (INT32 n = pSummary->ubNumDoors; n != 0; --n)
 		{
 			DOOR Door;
-			FileRead(f, &Door, sizeof(Door));
+			f->read(&Door, sizeof(Door));
 
 			if      (Door.ubLockID && Door.ubTrapID) ++pSummary->ubNumDoorsLockedAndTrapped;
 			else if (Door.ubLockID)                  ++pSummary->ubNumDoorsLocked;
@@ -2016,60 +2028,83 @@ catch (...) { return FALSE; }
 
 static void LoadMapLights(HWFILE);
 
+void LoadWorldFromSGPFile(SGPFile *f);
 
-void LoadWorld(char const* const filename)
+void LoadWorld(const ST::string &name)
 try
 {
-	LoadShadeTablesFromTextFile();
+	AutoSGPFile f(GCM->openMapForReading(name));
+	LoadWorldFromSGPFile(f);
+}
+catch (const std::runtime_error& err)
+{
+	SET_ERROR(ST::format("Could not load map with name '{}': {}", name, err.what()));
+	throw;
+}
 
+void LoadWorldAbsolute(const ST::string &absolutePath)
+try
+{
+	AutoSGPFile f{FileMan::openForReading(absolutePath)};
+	LoadWorldFromSGPFile(f);
+}
+catch (const std::runtime_error& err)
+{
+	SET_ERROR(ST::format("Could not load map from absolute file '{}': {}", absolutePath, err.what()));
+	throw;
+}
+
+/// Internal load world that reads from sgp file
+void LoadWorldFromSGPFile(SGPFile *f)
+{
 	// Reset flags for outdoors/indoors
 	gfBasement = FALSE;
 	gfCaves    = FALSE;
 
-	AutoSGPFile f(GCM->openMapForReading(filename));
-
-	SetRelativeStartAndEndPercentage(0, 0, 1, L"Trashing world...");
+	SetRelativeStartAndEndPercentage(0, 0, 1, "Trashing world...");
 	TrashWorld();
 
 	LightReset();
 
 	// Read JA2 Version ID
 	FLOAT dMajorMapVersion;
-	FileRead(f, &dMajorMapVersion, sizeof(dMajorMapVersion));
-
-	if(isRussianVersion() && (dMajorMapVersion != 6.00))
-	{
-		throw std::runtime_error("Incompatible major map version");
-	}
+	f->read(&dMajorMapVersion, sizeof(dMajorMapVersion));
 
 	UINT8 ubMinorMapVersion;
 	if (dMajorMapVersion >= 4.00)
 	{
-		FileRead(f, &ubMinorMapVersion, sizeof(ubMinorMapVersion));
+		// major version 4 probably started in minor version 15 since
+		// this value is needed to detect the change in the object layer
+		f->read(&ubMinorMapVersion, sizeof(ubMinorMapVersion));
 	}
 	else
 	{
 		ubMinorMapVersion = 0;
 	}
 
+	if (dMajorMapVersion > 6.00 || ubMinorMapVersion > 26)
+	{
+		throw std::runtime_error("newer versions are not supported");
+	}
+
 	// Read flags for world
 	UINT32 uiFlags;
-	FileRead(f, &uiFlags, sizeof(uiFlags));
+	f->read(&uiFlags, sizeof(uiFlags));
 
 	INT32 iTilesetID;
-	FileRead(f, &iTilesetID, sizeof(iTilesetID));
+	f->read(&iTilesetID, sizeof(iTilesetID));
 
 	LoadMapTileset(static_cast<TileSetID>(iTilesetID));
 
 	// Skip soldier size
-	FileSeek(f, 4, FILE_SEEK_FROM_CURRENT);
+	f->seek(4, FILE_SEEK_FROM_CURRENT);
 
 	{ // Read height values
 		MAP_ELEMENT* world = gpWorldLevelData;
 		for (UINT32 row = 0; row != WORLD_ROWS; ++row)
 		{
 			BYTE height[WORLD_COLS * 2];
-			FileRead(f, height, sizeof(height));
+			f->read(height, sizeof(height));
 			for (BYTE const* i = height; i != endof(height); i += 2)
 			{
 				(world++)->sHeight = *i;
@@ -2077,7 +2112,7 @@ try
 		}
 	}
 
-	SetRelativeStartAndEndPercentage(0, 35, 40, L"Counting layers...");
+	SetRelativeStartAndEndPercentage(0, 35, 40, "Counting layers...");
 	RenderProgressBar(0, 100);
 
 	UINT8 bCounts[WORLD_MAX][6];
@@ -2087,7 +2122,7 @@ try
 		for (UINT32 row = 0; row != WORLD_ROWS; ++row)
 		{
 			BYTE combine[WORLD_COLS][4];
-			FileRead(f, combine, sizeof(combine));
+			f->read(combine, sizeof(combine));
 			for (UINT8 const (*i)[4] = combine; i != endof(combine); ++world, ++cnt, ++i)
 			{
 				// Read combination of land/world flags
@@ -2108,7 +2143,7 @@ try
 		}
 	}
 
-	SetRelativeStartAndEndPercentage(0, 40, 43, L"Loading land layers...");
+	SetRelativeStartAndEndPercentage(0, 40, 43, "Loading land layers...");
 	RenderProgressBar(0, 100);
 
 	for (INT32 cnt = 0; cnt != WORLD_MAX; ++cnt)
@@ -2116,20 +2151,21 @@ try
 		for (INT32 n = bCounts[cnt][0]; n != 0; --n)
 		{
 			BYTE data[2];
-			FileRead(f, data, sizeof(data));
+			f->read(data, sizeof(data));
 
 			UINT8       ubType;
 			UINT8       ubSubIndex;
-			BYTE const* d = data;
+			DataReader d{data};
 			EXTR_U8(d, ubType)
 			EXTR_U8(d, ubSubIndex)
+			Assert(d.getConsumed() == lengthof(data));
 
 			UINT16 const usTileIndex = GetTileIndexFromTypeSubIndex(ubType, ubSubIndex);
 			AddLandToHead(cnt, usTileIndex);
 		}
 	}
 
-	SetRelativeStartAndEndPercentage(0, 43, 46, L"Loading object layer...");
+	SetRelativeStartAndEndPercentage(0, 43, 46, "Loading object layer...");
 	RenderProgressBar(0, 100);
 
 	if (ubMinorMapVersion < 15)
@@ -2139,13 +2175,14 @@ try
 			for (INT32 n = bCounts[cnt][1]; n != 0; --n)
 			{
 				BYTE data[2];
-				FileRead(f, data, sizeof(data));
+				f->read(data, sizeof(data));
 
 				UINT8       ubType;
 				UINT8       ubSubIndex;
-				BYTE const* d = data;
+				DataReader d{data};
 				EXTR_U8(d, ubType)
 				EXTR_U8(d, ubSubIndex)
+				Assert(d.getConsumed() == lengthof(data));
 
 				if (ubType >= FIRSTPOINTERS) continue;
 				UINT16 const usTileIndex = GetTileIndexFromTypeSubIndex(ubType, ubSubIndex);
@@ -2161,13 +2198,14 @@ try
 			for (INT32 n = bCounts[cnt][1]; n != 0; --n)
 			{
 				BYTE data[3];
-				FileRead(f, data, sizeof(data));
+				f->read(data, sizeof(data));
 
 				UINT8       ubType;
 				UINT16      usTypeSubIndex;
-				BYTE const* d = data;
+				DataReader d{data};
 				EXTR_U8( d, ubType)
 				EXTR_U16(d, usTypeSubIndex)
+				Assert(d.getConsumed() == lengthof(data));
 
 				if (ubType >= FIRSTPOINTERS) continue;
 				UINT16 const usTileIndex = GetTileIndexFromTypeSubIndex(ubType, usTypeSubIndex);
@@ -2176,7 +2214,7 @@ try
 		}
 	}
 
-	SetRelativeStartAndEndPercentage(0, 46, 49, L"Loading struct layer...");
+	SetRelativeStartAndEndPercentage(0, 46, 49, "Loading struct layer...");
 	RenderProgressBar(0, 100);
 
 	for (INT32 cnt = 0; cnt != WORLD_MAX; ++cnt)
@@ -2184,13 +2222,14 @@ try
 		for (INT32 n = bCounts[cnt][2]; n != 0; --n)
 		{
 			BYTE data[2];
-			FileRead(f, data, sizeof(data));
+			f->read(data, sizeof(data));
 
 			UINT8       ubType;
 			UINT8       ubSubIndex;
-			BYTE const* d = data;
+			DataReader d{data};
 			EXTR_U8(d, ubType)
 			EXTR_U8(d, ubSubIndex)
+			Assert(d.getConsumed() == lengthof(data));
 
 			UINT16 usTileIndex = GetTileIndexFromTypeSubIndex(ubType, ubSubIndex);
 
@@ -2218,7 +2257,7 @@ try
 		}
 	}
 
-	SetRelativeStartAndEndPercentage(0, 49, 52, L"Loading shadow layer...");
+	SetRelativeStartAndEndPercentage(0, 49, 52, "Loading shadow layer...");
 	RenderProgressBar(0, 100);
 
 	for (INT32 cnt = 0; cnt != WORLD_MAX; ++cnt)
@@ -2226,20 +2265,21 @@ try
 		for (INT32 n = bCounts[cnt][3]; n != 0; --n)
 		{
 			BYTE data[2];
-			FileRead(f, data, sizeof(data));
+			f->read(data, sizeof(data));
 
 			UINT8       ubType;
 			UINT8       ubSubIndex;
-			BYTE const* d = data;
+			DataReader d{data};
 			EXTR_U8(d, ubType)
 			EXTR_U8(d, ubSubIndex)
+			Assert(d.getConsumed() == lengthof(data));
 
 			UINT16 const usTileIndex = GetTileIndexFromTypeSubIndex(ubType, ubSubIndex);
 			AddShadowToTail(cnt, usTileIndex);
 		}
 	}
 
-	SetRelativeStartAndEndPercentage(0, 52, 55, L"Loading roof layer...");
+	SetRelativeStartAndEndPercentage(0, 52, 55, "Loading roof layer...");
 	RenderProgressBar(0, 100);
 
 	for (INT32 cnt = 0; cnt != WORLD_MAX; ++cnt)
@@ -2247,20 +2287,21 @@ try
 		for (INT32 n = bCounts[cnt][4]; n != 0; --n)
 		{
 			BYTE data[2];
-			FileRead(f, data, sizeof(data));
+			f->read(data, sizeof(data));
 
 			UINT8       ubType;
 			UINT8       ubSubIndex;
-			BYTE const* d = data;
+			DataReader d{data};
 			EXTR_U8(d, ubType)
 			EXTR_U8(d, ubSubIndex)
+			Assert(d.getConsumed() == lengthof(data));
 
 			UINT16 const usTileIndex = GetTileIndexFromTypeSubIndex(ubType, ubSubIndex);
 			AddRoofToTail(cnt, usTileIndex);
 		}
 	}
 
-	SetRelativeStartAndEndPercentage(0, 55, 58, L"Loading on roof layer...");
+	SetRelativeStartAndEndPercentage(0, 55, 58, "Loading on roof layer...");
 	RenderProgressBar(0, 100);
 
 	for (INT32 cnt = 0; cnt != WORLD_MAX; ++cnt)
@@ -2268,30 +2309,32 @@ try
 		for (INT32 n = bCounts[cnt][5]; n != 0; --n)
 		{
 			BYTE data[2];
-			FileRead(f, data, sizeof(data));
+			f->read(data, sizeof(data));
 
 			UINT8       ubType;
 			UINT8       ubSubIndex;
-			BYTE const* d = data;
+			DataReader d{data};
 			EXTR_U8(d, ubType)
 			EXTR_U8(d, ubSubIndex)
+			Assert(d.getConsumed() == lengthof(data));
 
 			UINT16 const usTileIndex = GetTileIndexFromTypeSubIndex(ubType, ubSubIndex);
 			AddOnRoofToTail(cnt, usTileIndex);
 		}
 	}
 
-	if(isRussianVersion())
+	if(dMajorMapVersion == 6.00 && ubMinorMapVersion == 26)
 	{
-		FileSeek(f, 148, FILE_SEEK_FROM_CURRENT);
+		// the data appears to be 37 INT32/UINT32 numbers and is present in russian ja2 maps
+		f->seek(148, FILE_SEEK_FROM_CURRENT);
 	}
 
-	SetRelativeStartAndEndPercentage(0, 58, 59, L"Loading room information...");
+	SetRelativeStartAndEndPercentage(0, 58, 59, "Loading room information...");
 	RenderProgressBar(0, 100);
 
-	FileRead(f, gubWorldRoomInfo, sizeof(gubWorldRoomInfo));
+	f->read(gubWorldRoomInfo, sizeof(gubWorldRoomInfo));
 
-	if(GameState::getInstance()->isEditorMode())
+	if(GameMode::getInstance()->isEditorMode())
 	{
 		UINT8 max_room_no = 0;
 		for (INT32 cnt = 0; cnt != WORLD_MAX; ++cnt)
@@ -2303,9 +2346,9 @@ try
 		gubMaxRoomNumber = max_room_no;
 	}
 
-	memset(gubWorldRoomHidden, TRUE, sizeof(gubWorldRoomHidden));
+	std::fill(std::begin(gubWorldRoomHidden), std::end(gubWorldRoomHidden), TRUE);
 
-	SetRelativeStartAndEndPercentage(0, 59, 61, L"Loading items...");
+	SetRelativeStartAndEndPercentage(0, 59, 61, "Loading items...");
 	RenderProgressBar(0, 100);
 
 	if (uiFlags & MAP_WORLDITEMS_SAVED)
@@ -2313,20 +2356,20 @@ try
 		LoadWorldItemsFromMap(f);
 	}
 
-	SetRelativeStartAndEndPercentage(0, 62, 85, L"Loading lights...");
+	SetRelativeStartAndEndPercentage(0, 62, 85, "Loading lights...");
 	RenderProgressBar(0, 0);
 
 	if (uiFlags & MAP_AMBIENTLIGHTLEVEL_SAVED)
 	{ // Ambient light levels are only saved in underground levels
-		FileRead(f, &gfBasement,          sizeof(gfBasement));
-		FileRead(f, &gfCaves,             sizeof(gfCaves));
-		FileRead(f, &ubAmbientLightLevel, sizeof(ubAmbientLightLevel));
+		f->read(&gfBasement,          sizeof(gfBasement));
+		f->read(&gfCaves,             sizeof(gfCaves));
+		f->read(&ubAmbientLightLevel, sizeof(ubAmbientLightLevel));
 	}
 	else
 	{ // We are above ground.
 		gfBasement = FALSE;
 		gfCaves    = FALSE;
-		if (!gfEditMode && guiCurrentScreen != MAPUTILITY_SCREEN)
+		if (!gfEditMode)
 		{
 			ubAmbientLightLevel = GetTimeOfDayAmbientLightLevel();
 		}
@@ -2345,33 +2388,38 @@ try
 	}
 	LightSetBaseLevel(ubAmbientLightLevel);
 
-	SetRelativeStartAndEndPercentage(0, 85, 86, L"Loading map information...");
+	SetRelativeStartAndEndPercentage(0, 85, 86, "Loading map information...");
 	RenderProgressBar(0, 0);
 
 	LoadMapInformation(f);
 
+	if (dMajorMapVersion >= 4.00 && gMapInformation.ubMapVersion != ubMinorMapVersion)
+	{
+		throw std::runtime_error("map version must match minor version");
+	}
+
 	if (uiFlags & MAP_FULLSOLDIER_SAVED)
 	{
-		SetRelativeStartAndEndPercentage(0, 86, 87, L"Loading placements...");
+		SetRelativeStartAndEndPercentage(0, 86, 87, "Loading placements...");
 		RenderProgressBar(0, 0);
 		LoadSoldiersFromMap(f, false);
 	}
 	if (uiFlags & MAP_EXITGRIDS_SAVED)
 	{
-		SetRelativeStartAndEndPercentage(0, 87, 88, L"Loading exit grids...");
+		SetRelativeStartAndEndPercentage(0, 87, 88, "Loading exit grids...");
 		RenderProgressBar(0, 0);
 		LoadExitGrids(f);
 	}
 	if (uiFlags & MAP_DOORTABLE_SAVED)
 	{
-		SetRelativeStartAndEndPercentage(0, 89, 90, L"Loading door tables...");
+		SetRelativeStartAndEndPercentage(0, 89, 90, "Loading door tables...");
 		RenderProgressBar(0, 0);
 		LoadDoorTableFromMap(f);
 	}
 	bool generate_edge_points;
 	if (uiFlags & MAP_EDGEPOINTS_SAVED)
 	{
-		SetRelativeStartAndEndPercentage(0, 90, 91, L"Loading edgepoints...");
+		SetRelativeStartAndEndPercentage(0, 90, 91, "Loading edgepoints...");
 		RenderProgressBar(0, 0);
 		// Only if the map had the older edgepoint system
 		generate_edge_points = !LoadMapEdgepoints(f);
@@ -2382,20 +2430,41 @@ try
 	}
 	if (uiFlags & MAP_NPCSCHEDULES_SAVED)
 	{
-		SetRelativeStartAndEndPercentage(0, 91, 92, L"Loading NPC schedules...");
+		SetRelativeStartAndEndPercentage(0, 91, 92, "Loading NPC schedules...");
 		RenderProgressBar(0, 0);
 		LoadSchedules(f);
 	}
 
+	// check unexpected versions
+	if (dMajorMapVersion == 6.00 && ubMinorMapVersion == 26)
+	{
+		// the unknown data is skipped
+		SLOGD("Map is a russian ja2 map");
+	}
+	else if (dMajorMapVersion == 5.00 && ubMinorMapVersion >= 24 && ubMinorMapVersion <= 25)
+	{
+		SLOGD("Map is a non-russian ja2 map");
+	}
+	else if (dMajorMapVersion == 5.00 && ubMinorMapVersion == 26)
+	{
+		// file structure is the same but the game has different items
+		SLOGW("Map is a ja2 wildfire map, expect problems");
+	}
+	else
+	{
+		// ja2 demo has 3.13
+		SLOGW("Map has an unexpected version ({} {}), expect problems", dMajorMapVersion, gMapInformation.ubMapVersion);
+	}
+
 	ValidateAndUpdateMapVersionIfNecessary();
 
-	SetRelativeStartAndEndPercentage(0, 93, 94, L"Init Loaded World...");
+	SetRelativeStartAndEndPercentage(0, 93, 94, "Init Loaded World...");
 	RenderProgressBar(0, 0);
 	InitLoadedWorld();
 
 	if (generate_edge_points)
 	{
-		SetRelativeStartAndEndPercentage(0, 94, 95, L"Generating map edgepoints...");
+		SetRelativeStartAndEndPercentage(0, 94, 95, "Generating map edgepoints...");
 		RenderProgressBar(0, 0);
 		CompileWorldMovementCosts();
 		GenerateMapEdgepoints();
@@ -2403,7 +2472,7 @@ try
 
 	RenderProgressBar(0, 20);
 
-	SetRelativeStartAndEndPercentage(0, 95, 100, L"General initialization...");
+	SetRelativeStartAndEndPercentage(0, 95, 100, "General initialization...");
 	// Reset AI!
 	InitOpponentKnowledgeSystem();
 
@@ -2424,21 +2493,9 @@ try
 
 	gfWorldLoaded = TRUE;
 
-	if(GameState::getInstance()->isEditorMode())
-	{
-		strlcpy(g_filename, filename, lengthof(g_filename));
-	}
-
-	// ATE: Not while updating maps!
-	if (guiCurrentScreen != MAPUTILITY_SCREEN) GenerateBuildings();
+	GenerateBuildings();
 
 	RenderProgressBar(0, 100);
-	DequeueAllKeyBoardEvents();
-}
-catch (...)
-{
-	SET_ERROR("Could not load map file %s", filename);
-	throw;
 }
 
 
@@ -2451,7 +2508,7 @@ void NewWorld()
 	for (INT32 cnt = 0; cnt != WORLD_MAX; ++cnt)
 	{
 		// Set land index
-		UINT16 const idx = rand() % 10;
+		UINT16 const idx = Random(10);
 		AddLandToHead(cnt, idx);
 	}
 
@@ -2468,7 +2525,7 @@ void FreeLevelNodeList(LEVELNODE** const head)
 	while (i != NULL)
 	{
 		LEVELNODE* const next = i->pNext;
-		MemFree(i);
+		delete i;
 		i = next;
 	}
 }
@@ -2480,6 +2537,9 @@ void TrashWorld(void)
 
 	TrashWorldItems();
 	TrashOverheadMap();
+
+	DecaySmokeEffects(0xffffff, false);
+	DecayLightEffects(0xffffff, false);
 	ResetSmokeEffects();
 	ResetLightEffects();
 
@@ -2533,7 +2593,7 @@ void TrashWorld(void)
 	}
 
 	// Zero world
-	memset(gpWorldLevelData, 0, WORLD_MAX * sizeof(*gpWorldLevelData));
+	std::fill_n(gpWorldLevelData, WORLD_MAX, MAP_ELEMENT{});
 
 	// Set some default flags
 	FOR_EACH_WORLD_TILE(i)
@@ -2546,58 +2606,25 @@ void TrashWorld(void)
 	TrashDoorStatusArray();
 
 	gfWorldLoaded = FALSE;
-	if(GameState::getInstance()->isEditorMode())
-	{
-		strcpy(g_filename, "none");
-	}
 }
 
-static void TrashMapTile(const INT16 MapTile)
-{
-	MAP_ELEMENT* const me = &gpWorldLevelData[MapTile];
-
-	// Free the memory associated with the map tile link lists
-	me->pLandStart = NULL;
-	FreeLevelNodeList(&me->pLandHead);
-	FreeLevelNodeList(&me->pObjectHead);
-	FreeLevelNodeList(&me->pStructHead);
-	FreeLevelNodeList(&me->pShadowHead);
-	FreeLevelNodeList(&me->pMercHead);
-	FreeLevelNodeList(&me->pRoofHead);
-	FreeLevelNodeList(&me->pOnRoofHead);
-	FreeLevelNodeList(&me->pTopmostHead);
-
-	while (me->pStructureHead != NULL)
-	{
-		DeleteStructureFromWorld(me->pStructureHead);
-	}
-}
 
 void LoadMapTileset(TileSetID const id)
 {
-	if (id >= NUM_TILESETS)
+	if (id >= gubNumTilesets)
 	{
 		throw std::logic_error("Tried to load tileset with invalid ID");
 	}
 
 	// Init tile surface used values
-	memset(gbNewTileSurfaceLoaded, 0, sizeof(gbNewTileSurfaceLoaded));
+	std::fill(std::begin(gbNewTileSurfaceLoaded), std::end(gbNewTileSurfaceLoaded), 0);
 
 	if (id == giCurrentTilesetID) return;
 
-	TILESET const& t = gTilesets[id];
-	LoadTileSurfaces(&t.TileSurfaceFilenames[0], id);
+	LoadTileSurfaces(id);
 
 	// Set terrain costs
-	if (t.MovementCostFnc)
-	{
-		t.MovementCostFnc();
-	}
-	else
-	{
-		SLOGD(DEBUG_TAG_WORLDDEF, "Tileset %d has no callback function for movement costs. Using default.", id);
-		SetTilesetOneTerrainValues();
-	}
+	gTilesets[id].MovementCostFnc();
 
 	DeallocateTileDatabase();
 	CreateTileDatabase();
@@ -2891,17 +2918,21 @@ void ReloadTileset(TileSetID const ubID)
 	giCurrentTilesetID = ubID;
 
 	// Save Map
-	SaveWorld( TEMP_FILE_FOR_TILESET_CHANGE );
+	AutoSGPFile f1(GCM->tempFiles()->openForWriting(TEMP_FILE_FOR_TILESET_CHANGE, true));
+	SaveWorldToSGPFile(f1);
+	f1.Deallocate();
 
 	//IMPORTANT:  If this is not set, the LoadTileset() will assume that
 	//it is loading the same tileset and ignore it...
 	giCurrentTilesetID = iCurrTilesetID;
 
 	// Load Map with new tileset
-	LoadWorld( TEMP_FILE_FOR_TILESET_CHANGE );
+	AutoSGPFile f2(GCM->tempFiles()->openForReading(TEMP_FILE_FOR_TILESET_CHANGE));
+	LoadWorldFromSGPFile(f2);
+	f2.Deallocate();
 
 	// Delete file
-	FileDelete(GCM->getMapPath(TEMP_FILE_FOR_TILESET_CHANGE).c_str());
+	GCM->tempFiles()->deleteFile(TEMP_FILE_FOR_TILESET_CHANGE);
 }
 
 
@@ -2921,9 +2952,9 @@ static void SaveMapLights(HWFILE hfile)
 
 	// Save the current light colors!
 	const UINT8 ubNumColors = 1;
-	FileWrite(hfile, &ubNumColors, 1);
+	hfile->write(&ubNumColors, 1);
 	const SGPPaletteEntry* LColor = LightGetColor();
-	FileWrite(hfile, LColor, sizeof(*LColor));
+	hfile->write(LColor, sizeof(*LColor));
 
 	//count number of non-merc lights.
 	CFOR_EACH_LIGHT_SPRITE(l)
@@ -2932,7 +2963,7 @@ static void SaveMapLights(HWFILE hfile)
 	}
 
 	//save the number of lights.
-	FileWrite(hfile, &usNumLights, 2);
+	hfile->write(&usNumLights, 2);
 
 	CFOR_EACH_LIGHT_SPRITE(l)
 	{
@@ -2951,8 +2982,8 @@ static void LoadMapLights(HWFILE const f)
 	LightReset();
 
 	// read in the light colors!
-	FileRead(f, &ubNumColors, sizeof(ubNumColors));
-	FileRead(f, LColors,      sizeof(*LColors) * ubNumColors); // XXX buffer overflow if ubNumColors is too large
+	f->read(&ubNumColors, sizeof(ubNumColors));
+	f->read(LColors,      sizeof(*LColors) * ubNumColors); // XXX buffer overflow if ubNumColors is too large
 
 	LightSetColor(LColors);
 
@@ -2971,7 +3002,7 @@ static void LoadMapLights(HWFILE const f)
 		}
 	}
 
-	FileRead(f, &usNumLights, sizeof(usNumLights));
+	f->read(&usNumLights, sizeof(usNumLights));
 	for (INT32 cnt = 0; cnt < usNumLights; ++cnt)
 	{
 		ExtractLightSprite(f, light_time);
@@ -2990,8 +3021,8 @@ static bool IsRoofVisibleForWireframe(GridNo const sMapPos)
 
 TEST(WorldDef, asserts)
 {
-	EXPECT_EQ(sizeof(TEAMSUMMARY), 15);
-	EXPECT_EQ(sizeof(SUMMARYFILE), 408);
+	EXPECT_EQ(sizeof(TEAMSUMMARY), 15u);
+	EXPECT_EQ(sizeof(SUMMARYFILE), 416u);
 }
 
 #endif

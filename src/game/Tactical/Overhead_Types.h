@@ -4,17 +4,24 @@
 
 #include "Types.h"
 
-
-#define REFINE_AIM_1					0
-#define REFINE_AIM_MID1				1
-#define REFINE_AIM_2					2
-#define REFINE_AIM_MID2				3
-#define REFINE_AIM_3					4
-#define REFINE_AIM_MID3				5
-#define REFINE_AIM_4					6
-#define REFINE_AIM_MID4				7
-#define REFINE_AIM_5					8
-#define REFINE_AIM_BURST				10
+// Possible values for SOLDIERTYPE::bShownAimTime
+enum RefineAim : INT8
+{
+	REFINE_AIM_1 = 0,
+	REFINE_AIM_MID1 = 1,
+	REFINE_AIM_2 = 2,
+	REFINE_AIM_MID2 = 3,
+	REFINE_AIM_3 = 4,
+	REFINE_AIM_MID3 = 5,
+	REFINE_AIM_4 = 6,
+	REFINE_AIM_MID4 = 7,
+	REFINE_AIM_5 = 8,
+	REFINE_AIM_BURST = 10,
+	REFINE_PUNCH_1 = 0,
+	REFINE_PUNCH_2 = 6,
+	REFINE_KNIFE_1 = 0,
+	REFINE_KNIFE_2 = 6
+};
 
 #define AIM_SHOT_RANDOM				0
 #define AIM_SHOT_HEAD					1
@@ -38,7 +45,7 @@
 // TACTICAL ENGINE STATUS FLAGS
 #define IN_ENDGAME_SEQUENCE             		0x000000008
 #define SHOW_ALL_ITEMS					0x000000010
-#define SHOW_AP_LEFT					0x000000020
+// 0x000000020 was the never set SHOW_AP_LEFT
 #define SHOW_ALL_MERCS					0x000000040
 #define GODMODE					0x000000100
 #define DISALLOW_SIGHT					0x000001000
@@ -47,7 +54,7 @@
 #define NOHIDE_REDUNDENCY				0x000010000
 #define DEBUGCLIFFS					0x000020000
 #define INCOMBAT					0x000040000
-#define ACTIVE						0x000100000
+// 0x000100000 was the unused ACTIVE
 #define SHOW_Z_BUFFER					0x000200000
 #define SLOW_ANIMATION					0x000400000
 #define ENGAGED_IN_CONV				0x000800000
@@ -223,22 +230,27 @@ enum WorldDirections
 
 // ENUMERATION OF SOLDIER POSIITONS IN GLOBAL SOLDIER LIST
 #define MAX_NUM_SOLDIERS				148
-#define NUM_PLANNING_MERCS				8
+#define NUM_PLANNING_MERCS				8 // XXX this is a remnant of the planning mode, see issue #902
 #define TOTAL_SOLDIERS					( NUM_PLANNING_MERCS + MAX_NUM_SOLDIERS )
 
 // DEFINE TEAMS
-#define OUR_TEAM					0
-#define ENEMY_TEAM					1
-#define CREATURE_TEAM					2
-#define MILITIA_TEAM					3
-#define CIV_TEAM					4
-#define LAST_TEAM					CIV_TEAM
-
+enum Team
+{
+	OUR_TEAM = 0,
+	ENEMY_TEAM = 1,
+	CREATURE_TEAM = 2,
+	MILITIA_TEAM = 3,
+	CIV_TEAM = 4,
+	LAST_TEAM = CIV_TEAM
+};
 
 //-----------------------------------------------
+//NOTE:  The editor uses these enumerations, so please update the text as well if you modify or
+//       add new groups.  Try to abbreviate the team name as much as possible.  The text is in
+//       EditorMercs.c
 //
 // civilian "sub teams":
-enum
+enum CivilianGroup
 {
 	NON_CIV_GROUP = 0,
 	REBEL_CIV_GROUP,
@@ -282,21 +294,11 @@ enum BoxingStates
 	LOST_ROUND
 };
 
-//NOTE:  The editor uses these enumerations, so please update the text as well if you modify or
-//       add new groups.  Try to abbreviate the team name as much as possible.  The text is in
-//       EditorMercs.c
-extern const wchar_t* gszCivGroupNames[NUM_CIV_GROUPS];
-
 //
 //-----------------------------------------------
 
 // PALETTE SUBSITUTION TYPES
 
-typedef CHAR8 PaletteRepID[ 30 ];
-
-
-// MACROS
-// This will set an animation ID
-#define SET_PALETTEREP_ID( a, b )			( strcpy( a, b ) )
+#define PaletteRepID_LENGTH 30
 
 #endif

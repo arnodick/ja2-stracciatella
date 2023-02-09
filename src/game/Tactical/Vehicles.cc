@@ -1,5 +1,3 @@
-#include <stdexcept>
-
 #include "LoadSaveVehicleType.h"
 #include "SaveLoadGame.h"
 #include "Soldier_Find.h"
@@ -34,47 +32,23 @@
 #include "Soldier_Macros.h"
 #include "OppList.h"
 #include "Soldier_Ani.h"
-#include "MemMan.h"
 #include "Debug.h"
 #include "ScreenIDs.h"
 #include "FileMan.h"
 
 #include "ContentManager.h"
 #include "GameInstance.h"
+#include "ShippingDestinationModel.h"
+#include "VehicleModel.h"
+
+#include <stdexcept>
+#include <vector>
 
 
 INT8 gubVehicleMovementGroups[ MAX_VEHICLES ];
 
-// the list of vehicles
-VEHICLETYPE *pVehicleList = NULL;
-
-// number of vehicle slots on the list
-UINT8 ubNumberOfVehicles = 0;
-
-
-//ATE: These arrays below should all be in a large LUT which contains
-// static info for each vehicle....
-
-
-struct VehicleTypeInfo
-{
-	SoundID   enter_sound;
-	SoundID   move_sound;
-	ProfileID profile;
-	UINT8     movement_type;
-	UINT16    armour_type;
-	UINT8     seats;
-};
-
-static const VehicleTypeInfo g_vehicle_type_info[] =
-{
-	{ S_VECH1_INTO, S_VECH1_MOVE, PROF_ELDERODO,   CAR, KEVLAR_VEST,  6 }, // Eldorado
-	{ S_VECH1_INTO, S_VECH1_MOVE, PROF_HUMMER,     CAR, SPECTRA_VEST, 6 }, // Hummer
-	{ S_VECH1_INTO, S_VECH1_MOVE, PROF_ICECREAM,   CAR, KEVLAR_VEST,  6 }, // Ice cream truck
-	{ S_VECH1_INTO, S_VECH1_MOVE, NPC164,          CAR, KEVLAR_VEST,  6 }, // Jeep
-	{ S_VECH1_INTO, S_VECH1_MOVE, NPC164,          CAR, SPECTRA_VEST, 6 }, // Tank
-	{ S_VECH1_INTO, S_VECH1_MOVE, PROF_HELICOPTER, AIR, KEVLAR_VEST,  6 }  // Helicopter
-};
+// the list of vehicle slots
+std::vector<VEHICLETYPE> pVehicleList;
 
 
 // Loop through and create a few soldier squad ID's for vehicles ( max # 3 )
@@ -84,7 +58,7 @@ void InitVehicles(void)
 	for( cnt = 0; cnt <  MAX_VEHICLES; cnt++ )
 	{
 		// create mvt groups
-		GROUP* const g = CreateNewVehicleGroupDepartingFromSector(1, 1);
+		GROUP* const g = CreateNewVehicleGroupDepartingFromSector(SGPSector(1, 1));
 		g->fPersistant = TRUE;
 		gubVehicleMovementGroups[cnt] = g->ubGroupID;
 	}
@@ -94,22 +68,23 @@ void InitVehicles(void)
 void SetVehicleValuesIntoSoldierType(SOLDIERTYPE* const vs)
 {
 	const VEHICLETYPE* const v = &pVehicleList[vs->bVehicleID];
-	wcscpy(vs->name, zVehicleName[v->ubVehicleType]);
-	vs->ubProfile           = g_vehicle_type_info[v->ubVehicleType].profile;
+	vs->name = zVehicleName[v->ubVehicleType];
+	vs->ubProfile           = GCM->getVehicle(v->ubVehicleType)->profile;
 	vs->sBreathRed          = 10000; // Init fuel
 	vs->bBreath             = 100;
 	vs->ubWhatKindOfMercAmI = MERC_TYPE__VEHICLE;
 }
 
 
-INT32 AddVehicleToList(const INT16 sMapX, const INT16 sMapY, const INT16 sGridNo, const UINT8 ubType)
+INT32 AddVehicleToList(const SGPSector& sMap, const INT16 sGridNo, const UINT8 ubType)
 {
 	INT32 vid;
 	for (vid = 0;; ++vid)
 	{
-		if (vid == ubNumberOfVehicles)
+		Assert(pVehicleList.size() <= INT32_MAX);
+		if (vid == static_cast<INT32>(pVehicleList.size()))
 		{
-			pVehicleList = REALLOC(pVehicleList, VEHICLETYPE, ++ubNumberOfVehicles);
+			pVehicleList.push_back(VEHICLETYPE{});
 			break;
 		}
 		if (!pVehicleList[vid].fValid) break;
@@ -117,11 +92,9 @@ INT32 AddVehicleToList(const INT16 sMapX, const INT16 sMapY, const INT16 sGridNo
 	VEHICLETYPE* const v = &pVehicleList[vid];
 
 	// found a slot
-	memset(v, 0, sizeof(*v));
+	*v = VEHICLETYPE{};
 	v->ubMovementGroup = 0;
-	v->sSectorX        = sMapX;
-	v->sSectorY        = sMapY;
-	v->sSectorZ        = 0;
+	v->sSector         = sMap;
 	v->sGridNo         = sGridNo;
 	v->fValid          = TRUE;
 	v->ubVehicleType   = ubType;
@@ -136,11 +109,9 @@ INT32 AddVehicleToList(const INT16 sMapX, const INT16 sMapY, const INT16 sGridNo
 	Assert(g);
 
 	// ARM: setup group movement defaults
-	g->ubTransportationMask = g_vehicle_type_info[ubType].movement_type;
-	g->ubSectorX            = sMapX;
-	g->ubNextX              = sMapX;
-	g->ubSectorY            = sMapY;
-	g->ubNextY              = sMapY;
+	g->ubTransportationMask = GCM->getVehicle(ubType)->movement_type;
+	g->ubSector             = sMap;
+	g->ubNext               = sMap;
 	g->uiTraverseTime       = 0;
 	g->uiArrivalTime        = 0;
 
@@ -151,22 +122,20 @@ INT32 AddVehicleToList(const INT16 sMapX, const INT16 sMapY, const INT16 sGridNo
 void RemoveVehicleFromList(VEHICLETYPE& v)
 {
 	v.pMercPath = ClearStrategicPathList(v.pMercPath, 0);
-	memset(&v, 0, sizeof(v));
+	v = VEHICLETYPE{};
 }
 
 
 void ClearOutVehicleList(void)
 {
-	if (pVehicleList == NULL) return;
+	if (pVehicleList.size() == 0) return;
 
 	FOR_EACH_VEHICLE(v)
 	{
-		v->pMercPath = ClearStrategicPathList(v->pMercPath, 0);
+		v.pMercPath = ClearStrategicPathList(v.pMercPath, 0);
 	}
 
-	MemFree(pVehicleList);
-	pVehicleList       = NULL;
-	ubNumberOfVehicles = 0;
+	pVehicleList.clear();
 }
 
 
@@ -174,10 +143,8 @@ bool IsThisVehicleAccessibleToSoldier(SOLDIERTYPE const& s, VEHICLETYPE const& v
 {
 	return !s.fBetweenSectors &&
 		!v.fBetweenSectors &&
-		s.sSectorX == v.sSectorX &&
-		s.sSectorY == v.sSectorY &&
-		s.bSectorZ == v.sSectorZ &&
-		OKUseVehicle(g_vehicle_type_info[v.ubVehicleType].profile);
+		s.sSector == v.sSector &&
+		OKUseVehicle(GCM->getVehicle(v.ubVehicleType)->profile);
 }
 
 
@@ -236,7 +203,7 @@ static bool AddSoldierToVehicle(SOLDIERTYPE& s, VEHICLETYPE& v)
 			SelectSoldier(vs, SELSOLDIER_FORCE_RESELECT);
 		}
 
-		PlayLocationJA2Sample(vs->sGridNo, g_vehicle_type_info[v.ubVehicleType].enter_sound, HIGHVOLUME, 1);
+		PlayLocationJA2Sample(vs->sGridNo, GCM->getVehicle(v.ubVehicleType)->enter_sound, HIGHVOLUME, 1);
 	}
 
 	INT32 const seats = GetVehicleSeats(v);
@@ -315,9 +282,8 @@ void SetSoldierExitHelicopterInsertionData(SOLDIERTYPE* const s)
 {
 	if (s->bInSector) return;
 
-	if (s->sSectorX == BOBBYR_SHIPPING_DEST_SECTOR_X &&
-		s->sSectorY == BOBBYR_SHIPPING_DEST_SECTOR_Y &&
-		s->bSectorZ == BOBBYR_SHIPPING_DEST_SECTOR_Z)
+	auto shippingDest = GCM->getPrimaryShippingDestination();
+	if (s->sSector == shippingDest->deliverySector)
 	{
 		// This is Drassen, make insertion gridno specific
 		s->ubStrategicInsertionCode = INSERTION_CODE_GRIDNO;
@@ -352,9 +318,7 @@ static bool RemoveSoldierFromVehicle(SOLDIERTYPE& s)
 	RemovePlayerFromGroup(s);
 
 	s.ubGroupID      = 0;
-	s.sSectorY       = v.sSectorY;
-	s.sSectorX       = v.sSectorX;
-	s.bSectorZ       = v.sSectorZ;
+	s.sSector        = v.sSector;
 	s.uiStatusFlags &= ~(SOLDIER_DRIVER | SOLDIER_PASSENGER);
 
 	if (IsHelicopter(v))
@@ -365,17 +329,15 @@ static bool RemoveSoldierFromVehicle(SOLDIERTYPE& s)
 		{
 			// Mark the sector as visited (flying around in the chopper doesn't, so
 			// this does it as soon as we get off it)
-			SetSectorFlag(s.sSectorX, s.sSectorY, s.bSectorZ, SF_ALREADY_VISITED);
+			SetSectorFlag(s.sSector, SF_ALREADY_VISITED);
 		}
 
 		SetSoldierExitHelicopterInsertionData(&s);
 
 		// Update in sector if this is the current sector
-		if (s.sSectorX == gWorldSectorX &&
-			s.sSectorY == gWorldSectorY &&
-			s.bSectorZ == gbWorldSectorZ)
+		if (s.sSector == gWorldSector)
 		{
-			UpdateMercInSector(s, gWorldSectorX, gWorldSectorY, gbWorldSectorZ);
+			UpdateMercInSector(s, gWorldSector);
 		}
 	}
 	else
@@ -456,7 +418,8 @@ void SetUpMvtGroupForVehicle(SOLDIERTYPE* const s)
 
 VEHICLETYPE& GetVehicle(INT32 const vehicle_id)
 {
-	if (0 <= vehicle_id && vehicle_id < ubNumberOfVehicles)
+	Assert(pVehicleList.size() <= INT32_MAX);
+	if (0 <= vehicle_id && vehicle_id < static_cast<INT32>(pVehicleList.size()))
 	{
 		VEHICLETYPE& v = pVehicleList[vehicle_id];
 		if (v.fValid) return v;
@@ -468,9 +431,8 @@ VEHICLETYPE& GetVehicle(INT32 const vehicle_id)
 VEHICLETYPE& GetVehicleFromMvtGroup(GROUP const& g)
 {
 	// given the id of a mvt group, find a vehicle in this group
-	FOR_EACH_VEHICLE(i)
+	FOR_EACH_VEHICLE(v)
 	{
-		VEHICLETYPE& v = *i;
 		if (v.ubMovementGroup == g.ubGroupID) return v;
 	}
 	throw std::logic_error("Group does not contain a vehicle");
@@ -537,7 +499,7 @@ bool AnyAccessibleVehiclesInSoldiersSector(SOLDIERTYPE const& s)
 {
 	CFOR_EACH_VEHICLE(v)
 	{
-		if (IsThisVehicleAccessibleToSoldier(s, *v)) return true;
+		if (IsThisVehicleAccessibleToSoldier(s, v)) return true;
 	}
 	return false;
 }
@@ -554,9 +516,7 @@ BOOLEAN TakeSoldierOutOfVehicle(SOLDIERTYPE* const s)
 	// if not in vehicle, don't take out, not much point, now is there?
 	if (s->bAssignment != VEHICLE) return FALSE;
 
-	if (s->sSectorX == gWorldSectorX &&
-		s->sSectorY == gWorldSectorY &&
-		s->bSectorZ == 0 &&
+	if (s->sSector == gWorldSector &&
 		s->bInSector &&
 		!InHelicopter(*s)) // helicopter isn't a soldiertype instance
 	{
@@ -573,9 +533,7 @@ bool PutSoldierInVehicle(SOLDIERTYPE& s, VEHICLETYPE& v)
 {
 	if (!AddSoldierToVehicle(s, v)) return false;
 
-	if (s.sSectorX == gWorldSectorX &&
-		s.sSectorY == gWorldSectorY &&
-		s.bSectorZ == 0 &&
+	if (s.sSector == gWorldSector &&
 		!IsHelicopter(v) &&
 		guiCurrentScreen == GAME_SCREEN)
 	{
@@ -622,7 +580,8 @@ BOOLEAN ExitVehicle(SOLDIERTYPE* const s)
 		SelectSoldier(s, SELSOLDIER_FORCE_RESELECT);
 	}
 
-	PlayLocationJA2Sample(vs.sGridNo, g_vehicle_type_info[pVehicleList[vs.bVehicleID].ubVehicleType].enter_sound, HIGHVOLUME, 1);
+	UINT8 ubVehicleType = pVehicleList[vs.bVehicleID].ubVehicleType;
+	PlayLocationJA2Sample(vs.sGridNo, GCM->getVehicle(ubVehicleType)->enter_sound, HIGHVOLUME, 1);
 	return TRUE;
 }
 
@@ -768,18 +727,19 @@ SOLDIERTYPE& GetSoldierStructureForVehicle(VEHICLETYPE const& v)
 void SaveVehicleInformationToSaveGameFile(HWFILE const f)
 {
 	//Save the number of elements
-	FileWrite(f, &ubNumberOfVehicles, sizeof(UINT8));
+	Assert(pVehicleList.size() <= UINT8_MAX);
+	UINT8 numVehicles = static_cast<UINT8>(pVehicleList.size());
+	f->write(&numVehicles, sizeof(UINT8));
 
 	//loop through all the vehicles and save each one
-	for (UINT8 i = 0; i < ubNumberOfVehicles; ++i)
+	for (const VEHICLETYPE& v : pVehicleList)
 	{
-		const VEHICLETYPE* const v = &pVehicleList[i];
 		//save if the vehicle spot is valid
-		FileWrite(f, &v->fValid, sizeof(BOOLEAN));
-		if (!v->fValid) continue;
+		f->write(&v.fValid, sizeof(BOOLEAN));
+		if (!v.fValid) continue;
 
-		InjectVehicleTypeIntoFile(f, v);
-		SaveMercPath(f, v->pMercPath);
+		InjectVehicleTypeIntoFile(f, &v);
+		SaveMercPath(f, v.pMercPath);
 	}
 }
 
@@ -789,42 +749,39 @@ void LoadVehicleInformationFromSavedGameFile(HWFILE const hFile, UINT32 const ui
 	ClearOutVehicleList();
 
 	//Load the number of elements
-	FileRead(hFile, &ubNumberOfVehicles, sizeof(UINT8));
-	if (ubNumberOfVehicles == 0) return;
+	UINT8 numVehicles = 0;
+	hFile->read(&numVehicles, sizeof(UINT8));
+	if (numVehicles == 0) return;
 
 	//allocate memory to hold the vehicle list
-	VEHICLETYPE* const vl = MALLOCNZ(VEHICLETYPE, ubNumberOfVehicles);
-	pVehicleList = vl;
+	pVehicleList.assign(numVehicles, VEHICLETYPE{});
 
 	//loop through all the vehicles and load each one
-	for (UINT8 cnt = 0; cnt < ubNumberOfVehicles; ++cnt)
+	for (VEHICLETYPE& v : pVehicleList)
 	{
-		VEHICLETYPE* const v = &vl[cnt];
 		//Load if the vehicle spot is valid
-		FileRead(hFile, &v->fValid, sizeof(BOOLEAN));
-		if (!v->fValid) continue;
+		hFile->read(&v.fValid, sizeof(BOOLEAN));
+		if (!v.fValid) continue;
 
-		ExtractVehicleTypeFromFile(hFile, v, uiSavedGameVersion);
-		LoadMercPath(hFile, &v->pMercPath);
+		ExtractVehicleTypeFromFile(hFile, &v, uiSavedGameVersion);
+		LoadMercPath(hFile, &v.pMercPath);
 	}
 }
 
 
-void SetVehicleSectorValues(VEHICLETYPE& v, UINT8 const x, UINT8 const y)
+void SetVehicleSectorValues(VEHICLETYPE& v, const SGPSector& sMap)
 {
-	v.sSectorX = x;
-	v.sSectorY = y;
+	v.sSector = sMap;
 
-	MERCPROFILESTRUCT& p = GetProfile(g_vehicle_type_info[v.ubVehicleType].profile);
-	p.sSectorX = x;
-	p.sSectorY = y;
+	ProfileID vehicleProfile = GCM->getVehicle(v.ubVehicleType)->profile;
+	MERCPROFILESTRUCT& p = GetProfile(vehicleProfile);
+	p.sSector = sMap;
 
 	// Go through list of mercs in vehicle and set all their states as arrived
 	CFOR_EACH_PASSENGER(v, i)
 	{
 		SOLDIERTYPE& s = **i;
-		s.sSectorX        = x;
-		s.sSectorY        = y;
+		s.sSector        = sMap;
 		s.fBetweenSectors = FALSE;
 	}
 }
@@ -849,12 +806,12 @@ void LoadVehicleMovementInfoFromSavedGameFile(HWFILE const hFile)
 	INT32 cnt;
 
 	//Load in the Squad movement id's
-	FileRead(hFile, gubVehicleMovementGroups, sizeof(INT8) * 5);
+	hFile->read(gubVehicleMovementGroups, sizeof(INT8) * 5);
 
 	for( cnt = 5; cnt <  MAX_VEHICLES; cnt++ )
 	{
 		// create mvt groups
-		GROUP* const g = CreateNewVehicleGroupDepartingFromSector(1, 1);
+		GROUP* const g = CreateNewVehicleGroupDepartingFromSector(SGPSector(1, 1));
 		g->fPersistant = TRUE;
 		gubVehicleMovementGroups[cnt] = g->ubGroupID;
 	}
@@ -864,14 +821,14 @@ void LoadVehicleMovementInfoFromSavedGameFile(HWFILE const hFile)
 void NewSaveVehicleMovementInfoToSavedGameFile(HWFILE const hFile)
 {
 	//Save all the vehicle movement id's
-	FileWrite(hFile, gubVehicleMovementGroups, sizeof(INT8) * MAX_VEHICLES);
+	hFile->write(gubVehicleMovementGroups, sizeof(INT8) * MAX_VEHICLES);
 }
 
 
 void NewLoadVehicleMovementInfoFromSavedGameFile(HWFILE const hFile)
 {
 	//Load in the Squad movement id's
-	FileRead(hFile, gubVehicleMovementGroups, sizeof(INT8) * MAX_VEHICLES);
+	hFile->read(gubVehicleMovementGroups, sizeof(INT8) * MAX_VEHICLES);
 }
 
 
@@ -902,13 +859,11 @@ static void TeleportVehicleToItsClosestSector(const UINT8 ubGroupID)
 	GROUP  *pGroup = NULL;
 	UINT32 uiTimeToNextSector;
 	UINT32 uiTimeToLastSector;
-	INT16  sPrevX, sPrevY, sNextX, sNextY;
-
+	SGPSector sPrev, sNext;
 
 	pGroup = GetGroup( ubGroupID );
 	Assert( pGroup );
 
-	Assert( pGroup->uiTraverseTime != -1 );
 	Assert(pGroup->uiTraverseTime > 0 && pGroup->uiTraverseTime != TRAVERSE_TIME_IMPOSSIBLE);
 
 	Assert( pGroup->uiArrivalTime >= GetWorldTotalMin() );
@@ -920,35 +875,28 @@ static void TeleportVehicleToItsClosestSector(const UINT8 ubGroupID)
 	if ( uiTimeToNextSector >= uiTimeToLastSector )
 	{
 		// go to the last sector
-		sPrevX = pGroup->ubNextX;
-		sPrevY = pGroup->ubNextY;
-
-		sNextX = pGroup->ubSectorX;
-		sNextY = pGroup->ubSectorY;
+		sPrev = pGroup->ubNext;
+		sNext = pGroup->ubSector;
 	}
 	else
 	{
 		// go to the next sector
-		sPrevX = pGroup->ubSectorX;
-		sPrevY = pGroup->ubSectorY;
-
-		sNextX = pGroup->ubNextX;
-		sNextY = pGroup->ubNextY;
+		sPrev = pGroup->ubSector;
+		sNext = pGroup->ubNext;
 	}
 
 	// make it arrive immediately, not eventually (it's driverless)
-	SetGroupArrivalTime(*pGroup, GetWorldTotalMin());
+	pGroup->setArrivalTime(GetWorldTotalMin());
 
 	// change where it is and where it's going, then make it arrive there.  Don't check for battle
-	PlaceGroupInSector(*pGroup, sPrevX, sPrevY, sNextX, sNextY, 0, false);
+	PlaceGroupInSector(*pGroup, sPrev, sNext, false);
 }
 
 
 void AddVehicleFuelToSave( )
 {
-	CFOR_EACH_VEHICLE(i)
+	CFOR_EACH_VEHICLE(v)
 	{
-		VEHICLETYPE const& v = *i;
 		if (IsHelicopter(v)) continue;
 		SOLDIERTYPE& vs = GetSoldierStructureForVehicle(v);
 		// Init fuel!
@@ -1059,17 +1007,17 @@ void HandleVehicleMovementSound(const SOLDIERTYPE* const s, const BOOLEAN fOn)
 	VEHICLETYPE* const v = &pVehicleList[s->bVehicleID];
 	if (fOn)
 	{
-		if (v->iMovementSoundID == NO_SAMPLE)
+		if (v->uiMovementSoundID == NO_SAMPLE)
 		{
-			v->iMovementSoundID = PlayLocationJA2Sample(s->sGridNo, g_vehicle_type_info[v->ubVehicleType].move_sound, HIGHVOLUME, 1);
+			v->uiMovementSoundID = PlayLocationJA2Sample(s->sGridNo, GCM->getVehicle(v->ubVehicleType)->move_sound, HIGHVOLUME, 1);
 		}
 	}
 	else
 	{
-		if (v->iMovementSoundID != NO_SAMPLE)
+		if (v->uiMovementSoundID != NO_SAMPLE)
 		{
-			SoundStop(v->iMovementSoundID);
-			v->iMovementSoundID = NO_SAMPLE;
+			SoundStop(v->uiMovementSoundID);
+			v->uiMovementSoundID = NO_SAMPLE;
 		}
 	}
 }
@@ -1077,11 +1025,12 @@ void HandleVehicleMovementSound(const SOLDIERTYPE* const s, const BOOLEAN fOn)
 
 UINT8 GetVehicleArmourType(const UINT8 vehicle_id)
 {
-	return GCM->getItem(g_vehicle_type_info[pVehicleList[vehicle_id].ubVehicleType].armour_type)->getClassIndex();
+	auto armourItemIndex = GCM->getVehicle(pVehicleList[vehicle_id].ubVehicleType)->armour_type;
+	return GCM->getItem(armourItemIndex)->getClassIndex();
 }
 
 
 UINT8 GetVehicleSeats(VEHICLETYPE const& v)
 {
-	return g_vehicle_type_info[v.ubVehicleType].seats;
+	return GCM->getVehicle(v.ubVehicleType)->seats;
 }

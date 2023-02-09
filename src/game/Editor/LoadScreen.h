@@ -3,21 +3,25 @@
 
 #include "ScreenIDs.h"
 
+#include <string_theory/string>
 
-struct FDLG_LIST
-{
-	char       filename[260];
-	FDLG_LIST* pNext;
-	FDLG_LIST* pPrev;
+enum class FileType {
+	Parent,
+	Directory,
+	File,
 };
 
-FDLG_LIST* AddToFDlgList(FDLG_LIST*, char const* filename);
+struct FileDialogEntry
+{
+	FileType type;
+	ST::string filename;
+};
 
 
-BOOLEAN ExternalLoadMap(const wchar_t* szFilename);
-BOOLEAN ExternalSaveMap(const wchar_t* szFilename);
+extern ST::string gFileForIO;
+BOOLEAN ExternalLoadMap(const ST::string& szFilename);
 
-void SetErrorCatchString(wchar_t const* fmt, ...);
+void SetErrorCatchString(const ST::string& str);
 
 ScreenID LoadSaveScreenHandle(void);
 

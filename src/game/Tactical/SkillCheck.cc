@@ -21,7 +21,7 @@ INT8 EffectiveStrength(const SOLDIERTYPE* s)
 	iEffStrength += (s->bStrength / 2) * (s->bLife + bBandaged / 2) / (s->bLifeMax);
 
 	// ATE: Make sure at least 2...
-	iEffStrength = __max( iEffStrength, 2 );
+	iEffStrength = std::max(iEffStrength, 2);
 
 	return( (INT8) iEffStrength );
 }
@@ -102,7 +102,7 @@ INT8 EffectiveExpLevel(const SOLDIERTYPE* s)
 
 	if (s->ubProfile != NO_PROFILE)
 	{
-		if ( (gMercProfiles[s->ubProfile].bPersonalityTrait == CLAUSTROPHOBIC) && s->bActive && s->bInSector && gbWorldSectorZ > 0)
+		if ((gMercProfiles[s->ubProfile].bPersonalityTrait == CLAUSTROPHOBIC) && s->bActive && s->bInSector && gWorldSector.z > 0)
 		{
 			// claustrophobic!
 			iEffExpLevel--;
@@ -213,7 +213,10 @@ INT32 SkillCheck( SOLDIERTYPE * pSoldier, INT8 bReason, INT8 bChanceMod )
 				// this should never happen, but might as well check...
 				iSkill = 0;
 			}
-			iSkill = iSkill * pSoldier->inv[bSlot].bStatus[0] / 100;
+			else
+			{
+				iSkill = iSkill * pSoldier->inv[bSlot].bStatus[0] / 100;
+			}
 			break;
 		case ATTACHING_DETONATOR_CHECK:
 		case ATTACHING_REMOTE_DETONATOR_CHECK:
@@ -268,7 +271,7 @@ INT32 SkillCheck( SOLDIERTYPE * pSoldier, INT8 bReason, INT8 bChanceMod )
 
 			fForceDamnSound = TRUE;
 
-			iSkill = __max( EffectiveMechanical( pSoldier ) , EffectiveExplosive( pSoldier ) ) * 7;
+			iSkill = std::max( EffectiveMechanical( pSoldier ) , EffectiveExplosive( pSoldier ) ) * 7;
 			if ( iSkill == 0 )
 			{
 				break;

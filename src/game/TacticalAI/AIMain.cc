@@ -40,6 +40,8 @@
 #include "Queen_Command.h"
 #include "Debug.h"
 
+#include <algorithm>
+
 #define AI_DELAY 100
 
 
@@ -69,7 +71,7 @@ void InitAI(void)
 #ifdef _DEBUG
 	if (gfDisplayCoverValues)
 	{
-		memset( gsCoverValue, 0x7F, sizeof( INT16 ) * WORLD_MAX );
+		std::fill_n(gsCoverValue, WORLD_MAX, 0x7F7F);
 	}
 #endif
 
@@ -143,7 +145,7 @@ void HandleSoldierAI( SOLDIERTYPE *pSoldier )
 
 		if ( pSoldier->bTeam != gTacticalStatus.ubCurrentTeam )
 		{
-			SLOGE(DEBUG_TAG_AI, "Turning off AI flag for %d because trying to act out of turn", pSoldier->ubID );
+			SLOGE("Turning off AI flag for {} because trying to act out of turn", pSoldier->ubID);
 			pSoldier->uiStatusFlags &= ~SOLDIER_UNDERAICONTROL;
 			return;
 		}
@@ -151,7 +153,7 @@ void HandleSoldierAI( SOLDIERTYPE *pSoldier )
 		{
 			if (gfTurnBasedAI)
 			{
-				SLOGD(DEBUG_TAG_AI, "Ending turn for %d because set to moved", pSoldier->ubID);
+				SLOGD("Ending turn for {} because set to moved", pSoldier->ubID);
 			}
 			// this guy doesn't get to act!
 			EndAIGuysTurn(*pSoldier);
@@ -198,7 +200,7 @@ void HandleSoldierAI( SOLDIERTYPE *pSoldier )
 			// do nothing!
 			if (gfTurnBasedAI)
 			{
-				SLOGD(DEBUG_TAG_AI, "Ending turn for %d because not a boxer", pSoldier->ubID);
+				SLOGD("Ending turn for {} because not a boxer", pSoldier->ubID);
 			}
 			EndAIGuysTurn(*pSoldier);
 			return;
@@ -214,7 +216,7 @@ void HandleSoldierAI( SOLDIERTYPE *pSoldier )
 		}
 		if (gfTurnBasedAI)
 		{
-			SLOGD(DEBUG_TAG_AI, "Ending turn for %d because bad life/inactive", pSoldier->ubID);
+			SLOGD("Ending turn for {} because bad life/inactive", pSoldier->ubID);
 		}
 
 		EndAIGuysTurn(*pSoldier);
@@ -234,7 +236,7 @@ void HandleSoldierAI( SOLDIERTYPE *pSoldier )
 			// don't do anything!
 			if (gfTurnBasedAI)
 			{
-				SLOGD(DEBUG_TAG_AI, "Ending turn for %d because asleep and no scheduled action", pSoldier->ubID);
+				SLOGD("Ending turn for {} because asleep and no scheduled action", pSoldier->ubID);
 			}
 
 			EndAIGuysTurn(*pSoldier);
@@ -247,7 +249,7 @@ void HandleSoldierAI( SOLDIERTYPE *pSoldier )
 		// don't do anything!
 		if (gfTurnBasedAI)
 		{
-			SLOGD(DEBUG_TAG_AI, "Ending turn for %d because out of sector and no scheduled action", pSoldier->ubID);
+			SLOGD("Ending turn for {} because out of sector and no scheduled action", pSoldier->ubID);
 		}
 
 		EndAIGuysTurn(*pSoldier);
@@ -259,7 +261,7 @@ void HandleSoldierAI( SOLDIERTYPE *pSoldier )
 		// bail out!
 		if (gfTurnBasedAI)
 		{
-			SLOGD(DEBUG_TAG_AI, "Ending turn for %d because is vehicle or robot", pSoldier->ubID);
+			SLOGD("Ending turn for {} because is vehicle or robot", pSoldier->ubID);
 		}
 
 		EndAIGuysTurn(*pSoldier);
@@ -275,7 +277,7 @@ void HandleSoldierAI( SOLDIERTYPE *pSoldier )
 		}
 		if (gfTurnBasedAI)
 		{
-			SLOGD(DEBUG_TAG_AI, "Ending turn for %d because unconscious", pSoldier->ubID);
+			SLOGD("Ending turn for {} because unconscious", pSoldier->ubID);
 		}
 
 		// stunned/collapsed!
@@ -308,7 +310,7 @@ void HandleSoldierAI( SOLDIERTYPE *pSoldier )
 				if ( guiNumBullets == 0 )
 				{
 					// abort attack!
-					SLOGD(DEBUG_TAG_AI, "Attack busy count lobotomized due to new situation for %d", pSoldier->ubID );
+					SLOGD("Attack busy count lobotomized due to new situation for {}", pSoldier->ubID);
 					//gTacticalStatus.ubAttackBusyCount = 0;
 					fProcessNewSituation = TRUE;
 				}
@@ -318,7 +320,7 @@ void HandleSoldierAI( SOLDIERTYPE *pSoldier )
 				if ( guiNumObjectSlots == 0 )
 				{
 					// abort attack!
-					SLOGD(DEBUG_TAG_AI, "Attack busy count lobotomized due to new situation for %d", pSoldier->ubID);
+					SLOGD("Attack busy count lobotomized due to new situation for {}", pSoldier->ubID);
 					gTacticalStatus.ubAttackBusyCount = 0;
 					fProcessNewSituation = TRUE;
 				}
@@ -363,7 +365,7 @@ void HandleSoldierAI( SOLDIERTYPE *pSoldier )
 		// might have been in 'was' state; no longer so...
 		pSoldier->bNewSituation = NOT_NEW_SITUATION;
 	}
-	SLOGD(DEBUG_TAG_AI, "handling AI for %d",pSoldier->ubID);
+	SLOGD("handling AI for {}", pSoldier->ubID);
 
 	/*********
 	Start of new overall AI system
@@ -376,9 +378,9 @@ void HandleSoldierAI( SOLDIERTYPE *pSoldier )
 		if (GetJA2Clock() - gTacticalStatus.uiTimeSinceMercAIStart > DEADLOCK_DELAY)
 		{
 			// ATE: Display message that deadlock occured...
-			SLOGI(DEBUG_TAG_AI, "Breaking Deadlock");
+			SLOGI("Breaking Deadlock");
 			// If we are in beta version, also report message!
-			SLOGE(DEBUG_TAG_AI, "Aborting AI deadlock for %d. Please sent LOG file and SAVE.", pSoldier->ubID );
+			SLOGE("Aborting AI deadlock for {}. Please sent LOG file and SAVE.", pSoldier->ubID);
 			// just abort
 			EndAIDeadlock();
 			if ( !(pSoldier->uiStatusFlags & SOLDIER_UNDERAICONTROL) )
@@ -467,7 +469,7 @@ void HandleSoldierAI( SOLDIERTYPE *pSoldier )
 				}
 
 				// reached destination
-				SLOGD(DEBUG_TAG_AI, "Opponent %d reaches dest - action done",pSoldier->ubID);
+				SLOGD("Opponent {} reaches dest - action done", pSoldier->ubID);
 
 				if ( pSoldier->sGridNo == pSoldier->sFinalDestination )
 				{
@@ -511,7 +513,7 @@ void HandleSoldierAI( SOLDIERTYPE *pSoldier )
 					else
 					{
 						// OK, we have a move to finish...
-						SLOGD(DEBUG_TAG_AI, "going to try to continue path for %d", pSoldier->ubID);
+						SLOGD("going to try to continue path for {}", pSoldier->ubID);
 						SoldierTriesToContinueAlongPath(pSoldier);
 					}
 				}
@@ -567,7 +569,7 @@ void EndAIGuysTurn(SOLDIERTYPE& s)
 	s.bMoved           = TRUE;
 	s.bBypassToGreen   = FALSE;
 
-	SLOGD(DEBUG_TAG_AI, "Ending control for %d", s.ubID);
+	SLOGD("Ending control for {}", s.ubID);
 
 	// Find the next AI guy
 	if (SOLDIERTYPE* const s = RemoveFirstAIListEntry())
@@ -576,7 +578,7 @@ void EndAIGuysTurn(SOLDIERTYPE& s)
 	}
 	else
 	{ // We are at the end, return control to next team
-		SLOGD(DEBUG_TAG_AI, "Ending AI turn");
+		SLOGD("Ending AI turn");
 		EndAITurn();
 	}
 }
@@ -595,11 +597,11 @@ void EndAIDeadlock()
 		CancelAIAction(&s);
 		if (gfTurnBasedAI)
 		{
-			SLOGD(DEBUG_TAG_AI, "Ending turn for %d because breaking deadlock", s.ubID);
+			SLOGD("Ending turn for {} because breaking deadlock", s.ubID);
 		}
 
-		SLOGD(DEBUG_TAG_AI, "Number of bullets in the air is %ld", guiNumBullets);
-		SLOGD(DEBUG_TAG_AI, "Setting attack busy count to 0 from deadlock break");
+		SLOGD("Number of bullets in the air is {}", guiNumBullets);
+		SLOGD("Setting attack busy count to 0 from deadlock break");
 		gTacticalStatus.ubAttackBusyCount = 0;
 
 		EndAIGuysTurn(s);
@@ -619,7 +621,7 @@ void StartNPCAI(SOLDIERTYPE& s)
 	s.sLastTwoLocations[1] = NOWHERE;
 
 	RefreshAI(&s);
-	SLOGD(DEBUG_TAG_AI, "Giving control to %d", s.ubID);
+	SLOGD("Giving control to {}", s.ubID);
 
 	TacticalStatusType& ts = gTacticalStatus;
 	ts.uiTimeSinceMercAIStart = GetJA2Clock();
@@ -697,7 +699,7 @@ void FreeUpNPCFromAttacking(SOLDIERTYPE* const pSoldier)
 	/*
 	if (pSoldier->bActionInProgress)
 	{
-		SLOGD(DEBUG_TAG_AI, "FreeUpNPCFromAttacking for %d", pSoldier->ubID);
+		SLOGD("FreeUpNPCFromAttacking for {}", pSoldier->ubID);
 		if (pSoldier->bAction == AI_ACTION_FIRE_GUN)
 		{
 			if (pSoldier->bDoBurst)
@@ -752,7 +754,7 @@ void FreeUpNPCFromTurning(SOLDIERTYPE* pSoldier)
 	// if NPC is in the process of changing facing, mark him as being done!
 	if ((pSoldier->bAction == AI_ACTION_CHANGE_FACING) && pSoldier->bActionInProgress)
 	{
-		SLOGD(DEBUG_TAG_AI, "FreeUpNPCFromTurning: our action %d, desdir %d dir %d",
+		SLOGD("FreeUpNPCFromTurning: our action {}, desdir {} dir {}",
 			pSoldier->bAction, pSoldier->bDesiredDirection, pSoldier->bDirection);
 		ActionDone(pSoldier);
 	}
@@ -801,7 +803,7 @@ void ActionDone(SOLDIERTYPE *pSoldier)
 	{
 		if (pSoldier->uiStatusFlags & SOLDIER_MONSTER)
 		{
-			SLOGD(DEBUG_TAG_AI, "Cancelling actiondone: our action %d, desdir %d dir %d",
+			SLOGD("Cancelling actiondone: our action {}, desdir {} dir {}",
 				pSoldier->bAction, pSoldier->bDesiredDirection, pSoldier->bDirection);
 		}
 
@@ -809,7 +811,7 @@ void ActionDone(SOLDIERTYPE *pSoldier)
 		//if ( gTacticalStatus.ubAttackBusyCount )
 		//{
 		//	gTacticalStatus.ubAttackBusyCount = 0;
-		//	SLOGD(DEBUG_TAG_AI, "Setting attack busy count to 0 due to Action Done");
+		//	SLOGD("Setting attack busy count to 0 due to Action Done");
 		//	pSoldier->bBulletsLeft = 0;
 		//}
 
@@ -916,7 +918,7 @@ static void NPCDoesNothing(SOLDIERTYPE* pSoldier)
 
 	if (gfTurnBasedAI)
 	{
-		SLOGD(DEBUG_TAG_AI, "Ending turn for %d because doing no-action", pSoldier->ubID);
+		SLOGD("Ending turn for {} because doing no-action", pSoldier->ubID);
 	}
 
 	EndAIGuysTurn(*pSoldier);
@@ -928,7 +930,7 @@ static void NPCDoesNothing(SOLDIERTYPE* pSoldier)
 void CancelAIAction(SOLDIERTYPE* const pSoldier)
 {
 	if (SkipCoverCheck)
-		SLOGD(DEBUG_TAG_AI, "CancelAIAction: SkipCoverCheck turned OFF");
+		SLOGD("CancelAIAction: SkipCoverCheck turned OFF");
 
 	// re-enable cover checking, something is new or something strange happened
 	SkipCoverCheck = FALSE;
@@ -946,7 +948,7 @@ void CancelAIAction(SOLDIERTYPE* const pSoldier)
 }
 
 
-INT16 ActionInProgress(SOLDIERTYPE *pSoldier)
+bool ActionInProgress(SOLDIERTYPE * const pSoldier)
 {
 	// if NPC has a desired destination, but isn't currently going there
 	if ((pSoldier->sFinalDestination != NOWHERE) && (pSoldier->sDestination != pSoldier->sFinalDestination))
@@ -959,16 +961,14 @@ INT16 ActionInProgress(SOLDIERTYPE *pSoldier)
 	// this here should never happen, but it seems to (turns sometimes hang!)
 	if ((pSoldier->bAction == AI_ACTION_CHANGE_FACING) && (pSoldier->bDesiredDirection != pSoldier->usActionData))
 	{
-		SLOGD(DEBUG_TAG_AI, "ActionInProgress: WARNING - CONTINUING FACING CHANGE...");
+		SLOGD("ActionInProgress: WARNING - CONTINUING FACING CHANGE...");
 
 		// don't try to pay any more APs for this, it was paid for once already!
 		pSoldier->bDesiredDirection = (INT8) pSoldier->usActionData;   // turn to face direction in actionData
-		return(TRUE);
 	}
 
-
 	// needs more time to complete action
-	return(TRUE);
+	return true;
 }
 
 
@@ -1049,7 +1049,7 @@ static void TurnBasedHandleNPCAI(SOLDIERTYPE* pSoldier)
 			//(IC?) if (pSoldier->bAction == AI_ACTION_RANDOM_PATROL && ( pSoldier->ubPathIndex == pSoldier->ubPathDataSize ) )
 			//(old?) if (pSoldier->bAction == AI_ACTION_RANDOM_PATROL && ( pSoldier->usActionData == pSoldier->sGridNo ) )
 			{
-			SLOGD(DEBUG_TAG_AI, "OPPONENT %d REACHES DEST - ACTION DONE",pSoldier->ubID);
+			SLOGD("OPPONENT {} REACHES DEST - ACTION DONE", pSoldier->ubID);
 				ActionDone(pSoldier);
 			}
 
@@ -1058,7 +1058,7 @@ static void TurnBasedHandleNPCAI(SOLDIERTYPE* pSoldier)
 			//if (pSoldier->bAction == AI_ACTION_RANDOM_PATROL && pSoldier->fNoAPToFinishMove)
 			{
 				// OK, we have a move to finish...
-				SLOGD(DEBUG_TAG_AI, "GONNA TRY TO CONTINUE PATH FOR %d", pSoldier->ubID);
+				SLOGD("GONNA TRY TO CONTINUE PATH FOR {}", pSoldier->ubID);
 				SoldierTriesToContinueAlongPath(pSoldier);
 
 				// since we just gave up on our action due to running out of points, better end our turn
@@ -1076,8 +1076,8 @@ static void TurnBasedHandleNPCAI(SOLDIERTYPE* pSoldier)
 	}
 
 
-	SLOGD(DEBUG_TAG_AI, "HandleManAI - DECIDING for guynum %d(%s) at gridno %d, APs %d",
-		pSoldier->ubID,pSoldier->name,pSoldier->sGridNo,pSoldier->bActionPoints);
+	SLOGD("HandleManAI - DECIDING for guynum {}({}) at gridno {}, APs {}",
+		pSoldier->ubID, pSoldier->name, pSoldier->sGridNo, pSoldier->bActionPoints);
 
 
 	// if man has nothing to do
@@ -1201,7 +1201,7 @@ static void TurnBasedHandleNPCAI(SOLDIERTYPE* pSoldier)
 		// This is mainly to finish a weapon_AWAY anim that preceeds a TOSS attack
 		if (!AnimControl[ pSoldier->anitype[pSoldier->anim] ].interruptable)
 		{
-			SLOGD(DEBUG_TAG_AI, "Uninterruptable animation %d, skipping guy %d",pSoldier->anitype[pSoldier->anim],pSoldier->ubID);
+			SLOGD("Uninterruptable animation {}, skipping guy {}",pSoldier->anitype[pSoldier->anim],pSoldier->ubID);
 
 			return;      // wait a while, let the animation finish first
 		}
@@ -1323,12 +1323,12 @@ INT8 ExecuteAction(SOLDIERTYPE *pSoldier)
 
 	if (gfTurnBasedAI || gTacticalStatus.fAutoBandageMode)
 	{
-		SLOGD(DEBUG_TAG_AI, "%d does %hs (a.d. %d) in %d with %d APs left",
+		SLOGD("{} does {} (a.d. {}) in {} with {} APs left",
 			pSoldier->ubID, gzActionStr[pSoldier->bAction], pSoldier->usActionData,
 			pSoldier->sGridNo, pSoldier->bActionPoints);
 	}
 
-	SLOGD(DEBUG_TAG_AI, "%d does %hs (a.d. %d) at time %ld", pSoldier->ubID,
+	SLOGD("{} does {} (a.d. {}) at time {}", pSoldier->ubID,
 		gzActionStr[pSoldier->bAction], pSoldier->usActionData, GetJA2Clock());
 
 	switch (pSoldier->bAction)
@@ -1348,8 +1348,7 @@ INT8 ExecuteAction(SOLDIERTYPE *pSoldier)
 				RESETTIMECOUNTER( pSoldier->AICounter, pSoldier->usActionData );
 				if (pSoldier->ubProfile != NO_PROFILE)
 				{
-					SLOGD(DEBUG_TAG_AI, "%s waiting %d from %d",
-								pSoldier->name, pSoldier->AICounter, GetJA2Clock());
+					SLOGD("{} waiting {} from {}", pSoldier->name, pSoldier->AICounter, GetJA2Clock());
 				}
 			}
 			ActionDone( pSoldier );
@@ -1360,7 +1359,7 @@ INT8 ExecuteAction(SOLDIERTYPE *pSoldier)
 			// if we see someone new, it will cause a new situation & remove this
 			SkipCoverCheck = TRUE;
 
-			SLOGD(DEBUG_TAG_AI, "ExecuteAction: SkipCoverCheck ON");
+			SLOGD("ExecuteAction: SkipCoverCheck ON");
 
 			//pSoldier->bDesiredDirection = (UINT8) ;   // turn to face direction in actionData
 			SendSoldierSetDesiredDirectionEvent( pSoldier, pSoldier->usActionData );
@@ -1435,7 +1434,7 @@ INT8 ExecuteAction(SOLDIERTYPE *pSoldier)
 				// check for loop
 				else if ( pSoldier->usActionData == pSoldier->sLastTwoLocations[1] && pSoldier->sGridNo == pSoldier->sLastTwoLocations[0] )
 				{
-					SLOGD(DEBUG_TAG_AI, "%d in movement loop, aborting turn", pSoldier->ubID);
+					SLOGD("{} in movement loop, aborting turn", pSoldier->ubID);
 
 					// loop found!
 					ActionDone( pSoldier );
@@ -1493,7 +1492,7 @@ INT8 ExecuteAction(SOLDIERTYPE *pSoldier)
 					// Check if we were told to move by NPC stuff
 					if ( pSoldier->sAbsoluteFinalDestination != NOWHERE && !(gTacticalStatus.uiFlags & INCOMBAT) )
 					{
-						SLOGE(DEBUG_TAG_AI, "AI %ls failed to get path for dialogue-related move!", pSoldier->name);
+						SLOGE("AI {} failed to get path for dialogue-related move!", pSoldier->name);
 
 						// Are we close enough?
 						if ( !ACTING_ON_SCHEDULE( pSoldier ) && SpacesAway( pSoldier->sGridNo, pSoldier->sAbsoluteFinalDestination ) < 4 )
@@ -1563,7 +1562,7 @@ INT8 ExecuteAction(SOLDIERTYPE *pSoldier)
 				// temporarily black list this gridno to stop enemy from going there
 				pSoldier->sBlackList = (INT16) pSoldier->usActionData;
 
-				SLOGW(DEBUG_TAG_AI, "Setting blacklist for %d to %d",
+				SLOGW("Setting blacklist for {} to {}",
 							pSoldier->ubID, pSoldier->sBlackList);
 
 				CancelAIAction(pSoldier);
@@ -1590,15 +1589,15 @@ INT8 ExecuteAction(SOLDIERTYPE *pSoldier)
 
 		case AI_ACTION_TOSS_PROJECTILE:       // throw grenade at/near opponent(s)
 			LoadWeaponIfNeeded(pSoldier);
-			// drop through here...
+			// fallthrough
 
 		case AI_ACTION_KNIFE_MOVE:            // preparing to stab opponent
 			if (pSoldier->bAction == AI_ACTION_KNIFE_MOVE) // if statement because toss falls through
 			{
 				pSoldier->usUIMovementMode = DetermineMovementMode( pSoldier, AI_ACTION_KNIFE_MOVE );
 			}
+			// fallthrough
 
-			// fall through
 		case AI_ACTION_FIRE_GUN:              // shoot at nearby opponent
 		case AI_ACTION_THROW_KNIFE:						// throw knife at nearby opponent
 		{
@@ -1621,13 +1620,13 @@ INT8 ExecuteAction(SOLDIERTYPE *pSoldier)
 			{
 				if ( iRetCode != ITEM_HANDLE_BROKEN ) // if the item broke, this is 'legal' and doesn't need reporting
 				{
-					SLOGW(DEBUG_TAG_AI, "AI %d got error code %d from HandleItem, doing action %d, has %d APs... aborting deadlock!",
+					SLOGW("AI {} got error code {} from HandleItem, doing action {}, has {} APs... aborting deadlock!",
 								pSoldier->ubID, iRetCode, pSoldier->bAction, pSoldier->bActionPoints);
 				}
 				CancelAIAction(pSoldier);
 				if (gfTurnBasedAI)
 				{
-					SLOGD(DEBUG_TAG_AI, "Ending turn for %d because of error from HandleItem", pSoldier->ubID);
+					SLOGD("Ending turn for {} because of error from HandleItem", pSoldier->ubID);
 				}
 				EndAIGuysTurn(*pSoldier);
 			}
@@ -1682,10 +1681,10 @@ INT8 ExecuteAction(SOLDIERTYPE *pSoldier)
 			{
 				HandleInitialRedAlert(pSoldier->bTeam);
 			}
-			SLOGD(DEBUG_TAG_AI, "AI radios your position!" );
-			// DROP THROUGH HERE!
+			SLOGD("AI radios your position!" );
+			// fallthrough
 		case AI_ACTION_YELLOW_ALERT:          // tell friends opponent(s) heard
-			SLOGD(DEBUG_TAG_AI, "Debug: AI radios about a noise!" );
+			SLOGD("Debug: AI radios about a noise!" );
 			DeductPoints(pSoldier,AP_RADIO,BP_RADIO);// pay for it!
 			RadioSightings(pSoldier,EVERYBODY,pSoldier->bTeam);      // about everybody
 			// action completed immediately, cancel it right away
@@ -1710,7 +1709,7 @@ INT8 ExecuteAction(SOLDIERTYPE *pSoldier)
 			}
 
 			SkipCoverCheck = TRUE;
-			SLOGD(DEBUG_TAG_AI, "ExecuteAction: SkipCoverCheck ON");
+			SLOGD("ExecuteAction: SkipCoverCheck ON");
 			ChangeSoldierStance(pSoldier, pSoldier->usActionData);
 			break;
 
@@ -1750,7 +1749,7 @@ INT8 ExecuteAction(SOLDIERTYPE *pSoldier)
 			ItemHandleResult const iRetCode = HandleItem(pSoldier, pSoldier->usActionData, 0, pSoldier->inv[HANDPOS].usItem, FALSE);
 			if ( iRetCode != ITEM_HANDLE_OK)
 			{
-				SLOGW(DEBUG_TAG_AI, "AI %d got error code %d from HandleItem, doing action %d... aborting deadlock!",
+				SLOGW("AI {} got error code {} from HandleItem, doing action {}... aborting deadlock!",
 							pSoldier->ubID, iRetCode, pSoldier->bAction);
 				CancelAIAction(pSoldier);
 				EndAIGuysTurn(*pSoldier);
@@ -1779,10 +1778,11 @@ INT8 ExecuteAction(SOLDIERTYPE *pSoldier)
 				pStructure = FindStructure( sDoorGridNo, STRUCTURE_ANYDOOR );
 				if (pStructure == NULL)
 				{
-					SLOGD(DEBUG_TAG_AI, "AI %d tried to open door it could not then find in %d",
+					SLOGD("AI {} tried to open door it could not then find in {}",
 								pSoldier->ubID, sDoorGridNo );
 					CancelAIAction(pSoldier);
 					EndAIGuysTurn(*pSoldier);
+					break;
 				}
 
 				StartInteractiveObject(sDoorGridNo, *pStructure, *pSoldier, bDirection);
@@ -1914,7 +1914,7 @@ void HandleInitialRedAlert(INT8 bTeam)
 {
 	if (!gTacticalStatus.Team[bTeam].bAwareOfOpposition)
 	{
-		SLOGE(DEBUG_TAG_AI, "Enemies on team %d prompted to go on RED ALERT!", bTeam );
+		SLOGD("Enemies on team {} prompted to go on RED ALERT!", bTeam);
 	}
 
 	// if there is a stealth mission in progress here, and a panic trigger exists
@@ -1924,7 +1924,8 @@ void HandleInitialRedAlert(INT8 bTeam)
 		MakeClosestEnemyChosenOne();
 	}
 
-	if ( bTeam == ENEMY_TEAM && gWorldSectorX == 3 && gWorldSectorY == MAP_ROW_P && gbWorldSectorZ == 0 )
+	static const SGPSector meduna(3, MAP_ROW_P);
+	if (bTeam == ENEMY_TEAM && gWorldSector == meduna)
 	{
 		// alert Queen and Joe if they are around
 		SOLDIERTYPE *			pSoldier;
@@ -2012,7 +2013,7 @@ void SetNewSituation( SOLDIERTYPE * pSoldier )
 
 			if ( gTacticalStatus.ubAttackBusyCount != 0 )
 			{
-				SLOGD(DEBUG_TAG_AI, "bNewSituation is set for %d when ABC !=0.", pSoldier->ubID);
+				SLOGD("bNewSituation is set for {} when ABC !=0.", pSoldier->ubID);
 			}
 
 			if (!(gTacticalStatus.uiFlags & INCOMBAT))
@@ -2040,7 +2041,7 @@ static void HandleAITacticalTraversal(SOLDIERTYPE& s)
 	}
 	if (gfTurnBasedAI)
 	{
-		SLOGD(DEBUG_TAG_AI, "Ending turn for %d because traversing out", s.ubID);
+		SLOGD("Ending turn for {} because traversing out", s.ubID);
 	}
 
 	EndAIGuysTurn(s);

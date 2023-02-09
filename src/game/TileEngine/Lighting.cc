@@ -14,8 +14,6 @@
 * Written by Derek Beland, April 14, 1997
 *
 ***************************************************************************************/
-#include <stdexcept>
-
 #include "Buffer.h"
 #include "HImage.h"
 #include "Overhead.h"
@@ -42,11 +40,19 @@
 #include "FileMan.h"
 #include "Environment.h"
 #include "PathAI.h"
-#include "MemMan.h"
 
 #include "ContentManager.h"
 #include "GameInstance.h"
-#include "slog/slog.h"
+#include "Logger.h"
+
+#include <string_theory/iostream>
+#include <string_theory/string>
+
+#include <algorithm>
+#include <iterator>
+#include <sstream>
+#include <stdexcept>
+#include <vector>
 
 #define MAX_LIGHT_TEMPLATES 32 // maximum number of light types
 
@@ -63,11 +69,9 @@ struct LIGHT_NODE
 
 struct LightTemplate
 {
-	LIGHT_NODE* lights;
-	UINT16*     rays;
-	UINT16      n_lights;
-	UINT16      n_rays;
-	char*       name;
+	std::vector<LIGHT_NODE> lights;
+	std::vector<UINT16> rays;
+	ST::string name;
 };
 
 static LightTemplate g_light_templates[MAX_LIGHT_TEMPLATES];
@@ -77,7 +81,7 @@ static LightTemplate g_light_templates[MAX_LIGHT_TEMPLATES];
 
 #define FOR_EACH_LIGHT_TEMPLATE(iter) \
 	FOR_EACH_LIGHT_TEMPLATE_SLOT(iter) \
-		if (!iter->lights) continue; else
+		if (iter->lights.empty()) continue; else
 
 
 // Sprite data
@@ -179,37 +183,7 @@ static UINT16 gusShadeLevels[16][3] =
 	{  48, 222,  48 }
 };
 
-//Set this true if you want the shadetables to be loaded from the text file.
-BOOLEAN gfLoadShadeTablesFromTextFile = FALSE;
-
-void LoadShadeTablesFromTextFile()
-{
-	FILE *fp;
-	INT32 i, j;
-	INT32 num;
-	if( gfLoadShadeTablesFromTextFile )
-	{
-		fp = fopen("ShadeTables.txt", "r");
-		Assert( fp );
-		if( fp )
-		{
-			for( i = 0; i < 16; i++ )
-			{
-				for( j = 0; j < 3; j++ )
-				{
-					char str[10];
-					fscanf( fp, "%s", str );
-					sscanf( str, "%d", &num );
-					gusShadeLevels[i][j] = (UINT16)num;
-				}
-			}
-			fclose( fp );
-		}
-	}
-}
-
-
-static LightTemplate* LightLoad(const char* pFilename);
+static LightTemplate* LightLoad(const ST::string& pFilename);
 
 
 /****************************************************************************************
@@ -220,13 +194,11 @@ InitLightingSystem
 ***************************************************************************************/
 void InitLightingSystem(void)
 {
-	LoadShadeTablesFromTextFile();
-
 	// init all light lists
-	memset(g_light_templates, 0, sizeof(g_light_templates));
+	std::fill(std::begin(g_light_templates), std::end(g_light_templates), LightTemplate{});
 
 	// init all light sprites
-	memset(LightSprites, 0, sizeof(LightSprites));
+	std::fill(std::begin(LightSprites), std::end(LightSprites), LIGHT_SPRITE{});
 
 	LightLoad("TRANSLUC.LHT");
 }
@@ -235,7 +207,7 @@ void InitLightingSystem(void)
 // THIS MUST BE CALLED ONCE ALL SURFACE VIDEO OBJECTS HAVE BEEN LOADED!
 void SetDefaultWorldLightingColors(void)
 {
-	static const SGPPaletteEntry pPal = { 0, 0, 0 };
+	static const SGPPaletteEntry pPal = { 0, 0, 0, 0 };
 	LightSetColor(&pPal);
 }
 
@@ -275,7 +247,7 @@ void LightReset(void)
 	}
 
 	// init all light sprites
-	memset(LightSprites, 0, sizeof(LightSprites));
+	std::fill(std::begin(LightSprites), std::end(LightSprites), LIGHT_SPRITE{});
 
 	LightLoad("TRANSLUC.LHT");
 
@@ -288,19 +260,18 @@ void LightReset(void)
 	* list is returned. */
 static UINT16 LightCreateTemplateNode(LightTemplate* const t, const INT16 iX, const INT16 iY, const UINT8 ubLight)
 {
-	const UINT16 n_lights = t->n_lights;
-	Assert((t->lights == NULL) == (n_lights == 0));
+	Assert(t->lights.size() <= UINT16_MAX);
+	const UINT16 idx = static_cast<UINT16>(t->lights.size());
 
-	t->lights = REALLOC(t->lights, LIGHT_NODE, n_lights + 1);
+	t->lights.push_back(LIGHT_NODE{});
 
-	LIGHT_NODE* const l = &t->lights[n_lights];
+	LIGHT_NODE* const l = &t->lights.back();
 	l->iDX     = iX;
 	l->iDY     = iY;
 	l->ubLight = ubLight;
 	l->uiFlags = 0;
 
-	t->n_lights = n_lights + 1;
-	return n_lights;
+	return idx;
 }
 
 
@@ -308,7 +279,8 @@ static UINT16 LightCreateTemplateNode(LightTemplate* const t, const INT16 iX, co
 	* new one.  Returns the index into the list. */
 static UINT16 LightAddTemplateNode(LightTemplate* const t, const INT16 iX, const INT16 iY, const UINT8 ubLight)
 {
-	for (UINT16 i = 0; i < t->n_lights; ++i)
+	Assert(t->lights.size() <= UINT16_MAX);
+	for (UINT16 i = 0; i < static_cast<UINT16>(t->lights.size()); ++i)
 	{
 		if (t->lights[i].iDX == iX && t->lights[i].iDY == iY) return i;
 	}
@@ -319,31 +291,19 @@ static UINT16 LightAddTemplateNode(LightTemplate* const t, const INT16 iX, const
 // Adds a node to the ray casting list.
 static UINT16 LightAddRayNode(LightTemplate* const t, const INT16 iX, const INT16 iY, const UINT8 ubLight, const UINT16 usFlags)
 {
-	const UINT16 n_rays = t->n_rays;
-	Assert((t->rays == NULL) == (n_rays == 0));
-
-	t->rays = REALLOC(t->rays, UINT16, n_rays + 1);
-
-	t->rays[n_rays] = LightAddTemplateNode(t, iX, iY, ubLight) | usFlags;
-	t->n_rays       = n_rays + 1;
-	return n_rays;
+	Assert(t->rays.size() <= UINT16_MAX);
+	const UINT16 usIndex = static_cast<UINT16>(t->rays.size());
+	UINT16 usNodeIndex = LightAddTemplateNode(t, iX, iY, ubLight) | usFlags;
+	t->rays.push_back(usNodeIndex);
+	return usIndex;
 }
 
 
 // Adds a node to the ray casting list.
-static UINT16 LightInsertRayNode(LightTemplate* const t, const UINT16 usIndex, const INT16 iX, const INT16 iY, const UINT8 ubLight, const UINT16 usFlags)
+static void LightInsertRayNode(LightTemplate* const t, const UINT16 usIndex, const INT16 iX, const INT16 iY, const UINT8 ubLight, const UINT16 usFlags)
 {
-	const UINT16 n_rays = t->n_rays;
-	Assert((t->rays == NULL) == (n_rays == 0));
-	Assert(usIndex <= n_rays);
-
-	t->rays = REALLOC(t->rays, UINT16, n_rays + 1);
-
-	memmove(t->rays + usIndex + 1, t->rays + usIndex, (n_rays - usIndex) * sizeof(*t->rays));
-
-	t->rays[usIndex] = LightAddTemplateNode(t, iX, iY, ubLight) | usFlags;
-	t->n_rays        = n_rays + 1;
-	return n_rays;
+	UINT16 usNodeIndex = LightAddTemplateNode(t, iX, iY, ubLight) | usFlags;
+	t->rays.insert(t->rays.begin() + usIndex, 1, usNodeIndex);
 }
 
 
@@ -360,12 +320,12 @@ static BOOLEAN LightTileBlocked(INT16 iSrcX, INT16 iSrcY, INT16 iX, INT16 iY)
 	usTileNo=MAPROWCOLTOPOS(iY, iX);
 	usSrcTileNo=MAPROWCOLTOPOS(iSrcY, iSrcX);
 
-	if ( usTileNo >= NOWHERE )
+	if ( usTileNo >= GRIDSIZE )
 	{
 		return( FALSE );
 	}
 
-	if ( usSrcTileNo >= NOWHERE )
+	if ( usSrcTileNo >= GRIDSIZE )
 	{
 		return( FALSE );
 	}
@@ -418,12 +378,12 @@ static BOOLEAN LightTileHasWall(INT16 iSrcX, INT16 iSrcY, INT16 iX, INT16 iY)
 	//	int i = 0;
 	//}
 
-	if ( usTileNo >= NOWHERE )
+	if ( usTileNo >= GRIDSIZE )
 	{
 		return( FALSE );
 	}
 
-	if ( usSrcTileNo >= NOWHERE )
+	if ( usSrcTileNo >= GRIDSIZE )
 	{
 		return( FALSE );
 	}
@@ -501,25 +461,12 @@ static BOOLEAN LightTileHasWall(INT16 iSrcX, INT16 iSrcY, INT16 iX, INT16 iY)
 // Removes a light template from the list, and frees up the associated node memory.
 static BOOLEAN LightDelete(LightTemplate* const t)
 {
-	if (t->lights == NULL) return FALSE;
+	if (t->lights.empty()) return FALSE;
 
-	MemFree(t->lights);
-	t->lights = NULL;
+	t->lights.clear();
+	t->rays.clear();
+	t->name = ""; // clear() before ST 3.4
 
-	if (t->rays != NULL)
-	{
-		MemFree(t->rays);
-		t->rays = NULL;
-	}
-
-	if (t->name != NULL)
-	{
-		MemFree(t->name);
-		t->name = NULL;
-	}
-
-	t->n_lights = 0;
-	t->n_rays   = 0;
 	return TRUE;
 }
 
@@ -529,7 +476,7 @@ static LightTemplate* LightGetFree(void)
 {
 	FOR_EACH_LIGHT_TEMPLATE_SLOT(t)
 	{
-		if (!t->lights) return t;
+		if (t->lights.empty()) return t;
 	}
 	throw std::runtime_error("Out of light template slots");
 }
@@ -541,9 +488,9 @@ static DOUBLE LinearDistanceDouble(INT16 iX1, INT16 iY1, INT16 iX2, INT16 iY2)
 {
 	INT32 iDx, iDy;
 
-	iDx=ABS(iX1-iX2);
+	iDx = std::abs(iX1 - iX2);
 	iDx*=iDx;
-	iDy=ABS(iY1-iY2);
+	iDy = std::abs(iY1 - iY2);
 	iDy*=iDy;
 
 	return(sqrt((DOUBLE)(iDx+iDy)));
@@ -558,7 +505,6 @@ LightTrueLevel
 UINT8 LightTrueLevel( INT16 sGridNo, INT8 bLevel )
 {
 	LEVELNODE * pNode;
-	INT32 iSum;
 
 	if (bLevel == 0)
 	{
@@ -575,10 +521,8 @@ UINT8 LightTrueLevel( INT16 sGridNo, INT8 bLevel )
 	}
 	else
 	{
-		iSum=pNode->ubNaturalShadeLevel - (pNode->ubSumLights - pNode->ubFakeShadeLevel );
-
-		iSum=__min(SHADE_MIN, iSum);
-		iSum=__max(SHADE_MAX, iSum);
+		int iSum = pNode->ubNaturalShadeLevel - (pNode->ubSumLights - pNode->ubFakeShadeLevel);
+		iSum = std::clamp(iSum, SHADE_MAX, SHADE_MIN); // looks wrong because min and max have inverted values
 		return( (UINT8) iSum );
 	}
 }
@@ -587,8 +531,6 @@ UINT8 LightTrueLevel( INT16 sGridNo, INT8 bLevel )
 // Does the addition of light values to individual LEVELNODEs in the world tile list.
 static void LightAddTileNode(LEVELNODE* const pNode, const UINT8 ubShadeAdd, const BOOLEAN fFake)
 {
-	INT16 sSum;
-
 	pNode->ubSumLights += ubShadeAdd;
 	if (fFake)
 	{
@@ -596,12 +538,10 @@ static void LightAddTileNode(LEVELNODE* const pNode, const UINT8 ubShadeAdd, con
 	}
 
 	// Now set max
-	pNode->ubMaxLights = __max( pNode->ubMaxLights, ubShadeAdd );
+	pNode->ubMaxLights = std::max(pNode->ubMaxLights, ubShadeAdd);
 
-	sSum=pNode->ubNaturalShadeLevel - pNode->ubMaxLights;
-
-	sSum=__min(SHADE_MIN, sSum);
-	sSum=__max(SHADE_MAX, sSum);
+	int sSum = pNode->ubNaturalShadeLevel - pNode->ubMaxLights;
+	sSum = std::clamp(sSum, SHADE_MAX, SHADE_MIN);
 
 	pNode->ubShadeLevel=(UINT8)sSum;
 }
@@ -610,8 +550,6 @@ static void LightAddTileNode(LEVELNODE* const pNode, const UINT8 ubShadeAdd, con
 // Does the subtraction of light values to individual LEVELNODEs in the world tile list.
 static void LightSubtractTileNode(LEVELNODE* const pNode, const UINT8 ubShadeSubtract, const BOOLEAN fFake)
 {
-	INT16 sSum;
-
 	if (ubShadeSubtract > pNode->ubSumLights )
 	{
 		pNode->ubSumLights = 0;
@@ -633,14 +571,10 @@ static void LightSubtractTileNode(LEVELNODE* const pNode, const UINT8 ubShadeSub
 	}
 
 	// Now set max
-	pNode->ubMaxLights = __min( pNode->ubMaxLights, pNode->ubSumLights );
+	pNode->ubMaxLights = std::min(pNode->ubMaxLights, pNode->ubSumLights);
 
-
-	sSum=pNode->ubNaturalShadeLevel - pNode->ubMaxLights;
-
-	sSum=__min(SHADE_MIN, sSum);
-	sSum=__max(SHADE_MAX, sSum);
-
+	int sSum = pNode->ubNaturalShadeLevel - pNode->ubMaxLights;
+	sSum = std::clamp(sSum, SHADE_MAX, SHADE_MIN);
 	pNode->ubShadeLevel=(UINT8)sSum;
 }
 
@@ -661,7 +595,7 @@ static BOOLEAN LightAddTile(const INT16 iSrcX, const INT16 iSrcY, const INT16 iX
 
 	uiTile= MAPROWCOLTOPOS( iY, iX );
 
-	if ( uiTile >= NOWHERE )
+	if ( uiTile >= GRIDSIZE )
 	{
 		return( FALSE );
 	}
@@ -702,7 +636,7 @@ static BOOLEAN LightAddTile(const INT16 iSrcX, const INT16 iSrcY, const INT16 iX
 						// ATE: Limit shade for walls if in caves
 						if ( fLitWall && gfCaves )
 						{
-							LightAddTileNode(pStruct, __min(ubShadeAdd, SHADE_MAX + 5), FALSE);
+							LightAddTileNode(pStruct, std::min(ubShadeAdd, UINT8(SHADE_MAX + 5)), FALSE);
 						}
 						else if ( fLitWall )
 						{
@@ -796,7 +730,7 @@ static BOOLEAN LightSubtractTile(const INT16 iSrcX, const INT16 iSrcY, const INT
 
 	uiTile= MAPROWCOLTOPOS( iY, iX );
 
-	if ( uiTile >= NOWHERE )
+	if ( uiTile >= GRIDSIZE )
 	{
 		return( FALSE );
 	}
@@ -837,7 +771,7 @@ static BOOLEAN LightSubtractTile(const INT16 iSrcX, const INT16 iSrcY, const INT
 						// ATE: Limit shade for walls if in caves
 						if ( fLitWall && gfCaves )
 						{
-							LightSubtractTileNode(pStruct, __max(ubShadeSubtract - 5, 0), FALSE);
+							LightSubtractTileNode(pStruct, std::max(ubShadeSubtract - 5, 0), FALSE);
 						}
 						else if ( fLitWall )
 						{
@@ -1033,7 +967,8 @@ static void LightInsertNode(LightTemplate* const t, const UINT16 usLightIns, con
 static UINT16 LightFindNextRay(const LightTemplate* const t, const UINT16 usIndex)
 {
 	UINT16 usNodeIndex = usIndex;
-	while ((usNodeIndex < t->n_rays) && !(t->rays[usNodeIndex] & LIGHT_NEW_RAY))
+	Assert(t->rays.size() <= UINT16_MAX);
+	while ((usNodeIndex < static_cast<UINT16>(t->rays.size())) && !(t->rays[usNodeIndex] & LIGHT_NEW_RAY))
 		usNodeIndex++;
 
 	return(usNodeIndex);
@@ -1089,9 +1024,10 @@ static BOOLEAN LightCastRay(LightTemplate* const t, const INT16 iStartX, const I
 	if((XDelta==0) && (YDelta==0))
 		return(FALSE);
 
-	SLOGD(DEBUG_TAG_LIGHTING, "Drawing (%d,%d) to (%d,%d)", iXPos, iYPos, iEndX, iEndY);
+	SLOGD("Drawing ({},{}) to ({},{})", iXPos, iYPos, iEndX, iEndY);
 	LightAddNode(t, 32767, 32767, 32767, 32767, 0, LIGHT_NEW_RAY);
-	if (fInsertNodes) usCurNode = t->n_rays;
+	Assert(t->rays.size() <= UINT16_MAX);
+	if (fInsertNodes) usCurNode = static_cast<UINT16>(t->rays.size());
 	/* Special-case horizontal, vertical, and diagonal lines, for speed
 		and to avoid nasty boundary conditions and division by 0 */
 	if (XDelta == 0)
@@ -1490,9 +1426,7 @@ void LightSetBaseLevel(UINT8 iIntensity)
 		}
 	}
 
-	UINT16 shade = iIntensity;
-	shade = __max(SHADE_MAX, shade);
-	shade = __min(SHADE_MIN, shade);
+	UINT16 shade = std::clamp(int(iIntensity), SHADE_MAX, SHADE_MIN);
 	FOR_EACH_WORLD_TILE(i)
 	{
 		LightSetNaturalTile(*i, shade);
@@ -1511,7 +1445,7 @@ void LightAddBaseLevel(const UINT8 iIntensity)
 {
 	INT16 iCountY, iCountX;
 
-	ubAmbientLightLevel=__max(SHADE_MAX, ubAmbientLightLevel-iIntensity);
+	ubAmbientLightLevel = std::max(SHADE_MAX, ubAmbientLightLevel - iIntensity);
 
 	for(iCountY=0; iCountY < WORLD_ROWS; iCountY++)
 		for(iCountX=0; iCountX < WORLD_COLS; iCountX++)
@@ -1528,7 +1462,7 @@ void LightSubtractBaseLevel(const UINT8 iIntensity)
 {
 	INT16 iCountY, iCountX;
 
-	ubAmbientLightLevel=__min(SHADE_MIN, ubAmbientLightLevel+iIntensity);
+	ubAmbientLightLevel = std::min(SHADE_MIN, ubAmbientLightLevel + iIntensity);
 
 	for(iCountY=0; iCountY < WORLD_ROWS; iCountY++)
 		for(iCountX=0; iCountX < WORLD_COLS; iCountX++)
@@ -1547,10 +1481,7 @@ LightTemplate* LightCreateOmni(const UINT8 ubIntensity, const INT16 iRadius)
 
 	LightGenerateElliptical(t, ubIntensity, iRadius * DISTANCE_SCALE, iRadius * DISTANCE_SCALE);
 
-	char usName[14];
-	sprintf(usName, "LTO%d.LHT", iRadius);
-	t->name = MALLOCN(char, strlen(usName) + 1);
-	strcpy(t->name, usName);
+	t->name = ST::format("LTO{}.LHT", iRadius);
 
 	return t;
 }
@@ -1591,13 +1522,13 @@ BOOLEAN LightDraw(const LIGHT_SPRITE* const l)
 	BOOLEAN fBlocked = FALSE;
 	BOOLEAN fOnlyWalls;
 
-	const LightTemplate* const t = l->light_template;
-	if (t->lights == NULL) return FALSE;
+	LightTemplate* const t = l->light_template;
+	if (t->lights.empty()) return FALSE;
 
 	// clear out all the flags
-	for (UINT16 uiCount = 0; uiCount < t->n_lights; ++uiCount)
+	for (LIGHT_NODE& light : t->lights)
 	{
-		t->lights[uiCount].uiFlags &= ~LIGHT_NODE_DRAWN;
+		light.uiFlags &= ~LIGHT_NODE_DRAWN;
 	}
 
 	const INT16 iX = l->iX;
@@ -1606,7 +1537,8 @@ BOOLEAN LightDraw(const LIGHT_SPRITE* const l)
 	iOldX = iX;
 	iOldY = iY;
 
-	for (UINT16 uiCount = 0; uiCount < t->n_rays; ++uiCount)
+	Assert(t->rays.size() <= UINT16_MAX);
+	for (UINT16 uiCount = 0; uiCount < static_cast<UINT16>(t->rays.size()); ++uiCount)
 	{
 		const UINT16 usNodeIndex = t->rays[uiCount];
 		if(!(usNodeIndex&LIGHT_NEW_RAY))
@@ -1733,9 +1665,10 @@ static BOOLEAN LightHideWall(const INT16 sX, const INT16 sY, const INT16 sSrcX, 
 BOOLEAN ApplyTranslucencyToWalls(INT16 iX, INT16 iY)
 {
 	LightTemplate* const t = &g_light_templates[0];
-	if (t->lights == NULL) return FALSE;
+	if (t->lights.empty()) return FALSE;
 
-	for (UINT16 uiCount = 0; uiCount < t->n_rays; ++uiCount)
+	Assert(t->rays.size() <= UINT16_MAX);
+	for (UINT16 uiCount = 0; uiCount < static_cast<UINT16>(t->rays.size()); ++uiCount)
 	{
 		const UINT16 usNodeIndex = t->rays[uiCount];
 		if (!(usNodeIndex & LIGHT_NEW_RAY))
@@ -1743,10 +1676,10 @@ BOOLEAN ApplyTranslucencyToWalls(INT16 iX, INT16 iY)
 			const LIGHT_NODE* const pLight = &t->lights[usNodeIndex & ~LIGHT_BACKLIGHT];
 			//Kris:  added map boundary checking!!!
 			if(LightHideWall(
-				(INT16)MIN(MAX((iX+pLight->iDX),0),WORLD_COLS-1),
-				(INT16)MIN(MAX((iY+pLight->iDY),0),WORLD_ROWS-1),
-				(INT16)MIN(MAX(iX,0),WORLD_COLS-1),
-				(INT16)MIN(MAX(iY,0),WORLD_ROWS-1)
+				(INT16) std::clamp(int(iX + pLight->iDX), 0, WORLD_COLS - 1),
+				(INT16) std::clamp(int(iY + pLight->iDY), 0, WORLD_ROWS - 1),
+				(INT16) std::clamp(int(iX), 0, WORLD_COLS - 1),
+				(INT16) std::clamp(int(iY), 0, WORLD_ROWS - 1)
 			))
 			{
 				uiCount = LightFindNextRay(t, uiCount);
@@ -1768,12 +1701,12 @@ static BOOLEAN LightErase(const LIGHT_SPRITE* const l)
 	BOOLEAN fOnlyWalls;
 
 	LightTemplate* const t = l->light_template;
-	if (t->lights == NULL) return FALSE;
+	if (t->lights.empty()) return FALSE;
 
 	// clear out all the flags
-	for (UINT16 uiCount = 0; uiCount < t->n_lights; ++uiCount)
+	for (LIGHT_NODE& light : t->lights)
 	{
-		t->lights[uiCount].uiFlags &= ~LIGHT_NODE_DRAWN;
+		light.uiFlags &= ~LIGHT_NODE_DRAWN;
 	}
 
 	const INT16 iX = l->iX;
@@ -1781,7 +1714,8 @@ static BOOLEAN LightErase(const LIGHT_SPRITE* const l)
 	iOldX = iX;
 	iOldY = iY;
 
-	for (UINT16 uiCount = 0; uiCount < t->n_rays; ++uiCount)
+	Assert(t->rays.size() <= UINT16_MAX);
+	for (UINT16 uiCount = 0; uiCount < static_cast<UINT16>(t->rays.size()); ++uiCount)
 	{
 		const UINT16 usNodeIndex = t->rays[uiCount];
 		if (!(usNodeIndex & LIGHT_NEW_RAY))
@@ -1841,53 +1775,54 @@ LightSave
 	filename forces the system to save the light with the internal filename (recommended).
 
 ***************************************************************************************/
-void LightSave(LightTemplate const* const t, char const* const pFilename)
+void LightSave(LightTemplate const* const t, const ST::string& pFilename)
 {
-	if (t->lights == NULL) throw std::logic_error("Tried to save invalid light template");
+	if (t->lights.empty()) throw std::logic_error("Tried to save invalid light template");
 
-	const char* const pName = (pFilename != NULL ? pFilename : t->name);
+	const ST::string& pName = (pFilename.empty() ? t->name : pFilename);
 	AutoSGPFile f(FileMan::openForWriting(pName));
-	FileWriteArray(f, t->n_lights, t->lights);
-	FileWriteArray(f, t->n_rays,   t->rays);
+	Assert(t->lights.size() <= UINT16_MAX);
+	UINT16 numLights = static_cast<UINT16>(t->lights.size());
+	f->writeArray(numLights, t->lights.data());
+	Assert(t->rays.size() <= UINT16_MAX);
+	UINT16 numRays = static_cast<UINT16>(t->rays.size());
+	f->writeArray(numRays, t->rays.data());
 }
 
 
 /* Loads a light template from disk. The light template is returned, or NULL if
 	* the file wasn't loaded. */
-static LightTemplate* LightLoad(const char* pFilename)
+static LightTemplate* LightLoad(const ST::string& pFilename)
 {
 	AutoSGPFile hFile(GCM->openGameResForReading(pFilename));
 
-	UINT16 n_lights;
-	FileRead(hFile, &n_lights, sizeof(n_lights));
-	SGP::Buffer<LIGHT_NODE> lights(n_lights);
-	FileRead(hFile, lights, sizeof(*lights) * n_lights);
+	UINT16 numLights;
+	hFile->read(&numLights, sizeof(UINT16));
+	std::vector<LIGHT_NODE> lights;
+	lights.assign(numLights, LIGHT_NODE{});
+	hFile->read(lights.data(), sizeof(LIGHT_NODE) * numLights);
 
-	UINT16 n_rays;
-	FileRead(hFile, &n_rays, sizeof(n_rays));
-	SGP::Buffer<UINT16> rays(n_rays);
-	FileRead(hFile, rays, sizeof(*rays) * n_rays);
-
-	SGP::Buffer<char> name(strlen(pFilename) + 1);
-	strcpy(name, pFilename);
+	UINT16 numRays;
+	hFile->read(&numRays, sizeof(UINT16));
+	std::vector<UINT16> rays;
+	rays.assign(numRays, 0);
+	hFile->read(rays.data(), sizeof(UINT16) * numRays);
 
 	LightTemplate* const t = LightGetFree();
-	t->n_lights = n_lights;
-	t->lights   = lights.Release();
-	t->n_rays   = n_rays;
-	t->rays     = rays.Release();
-	t->name     = name.Release();
+	t->lights   = std::move(lights);
+	t->rays     = std::move(rays);
+	t->name     = pFilename;
 	return t;
 }
 
 
 /* Figures out whether a light template is already in memory, or needs to be
 	* loaded from disk. */
-static LightTemplate* LightLoadCachedTemplate(const char* pFilename)
+static LightTemplate* LightLoadCachedTemplate(const ST::string& pFilename)
 {
 	FOR_EACH_LIGHT_TEMPLATE(t)
 	{
-		if (strcasecmp(pFilename, t->name) == 0) return t;
+		if (pFilename.compare_i(t->name) == 0) return t;
 	}
 	return LightLoad(pFilename);
 }
@@ -1942,12 +1877,12 @@ static LIGHT_SPRITE* LightSpriteGetFree(void)
 }
 
 
-LIGHT_SPRITE* LightSpriteCreate(const char* const pName)
+LIGHT_SPRITE* LightSpriteCreate(const ST::string& pName)
 try
 {
 	LIGHT_SPRITE* const l = LightSpriteGetFree();
 
-	memset(l, 0, sizeof(LIGHT_SPRITE));
+	*l = LIGHT_SPRITE{};
 	l->iX          = WORLD_COLS + 1;
 	l->iY          = WORLD_ROWS + 1;
 
@@ -2127,9 +2062,9 @@ static void AddSaturatePalette(SGPPaletteEntry Dst[256], const SGPPaletteEntry S
 	UINT8 b = Bias->b;
 	for (UINT i = 0; i < 256; i++)
 	{
-		Dst[i].r = __min(Src[i].r + r, 255);
-		Dst[i].g = __min(Src[i].g + g, 255);
-		Dst[i].b = __min(Src[i].b + b, 255);
+		Dst[i].r = std::min(Src[i].r + r, 255);
+		Dst[i].g = std::min(Src[i].g + g, 255);
+		Dst[i].b = std::min(Src[i].b + b, 255);
 	}
 }
 
@@ -2179,7 +2114,7 @@ void CreateTilePaletteTables(const HVOBJECT pObj)
 
 const char* LightSpriteGetTypeName(const LIGHT_SPRITE* const l)
 {
-	return l->light_template->name;
+	return l->light_template->name.c_str();
 }
 
 
@@ -2189,7 +2124,7 @@ const char* LightSpriteGetTypeName(const LIGHT_SPRITE* const l)
 
 TEST(Lighting, asserts)
 {
-	EXPECT_EQ(sizeof(LIGHT_NODE), 6);
+	EXPECT_EQ(sizeof(LIGHT_NODE), 6u);
 }
 
 #endif

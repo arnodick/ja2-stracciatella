@@ -1,132 +1,132 @@
 #ifdef WITH_UNITTESTS
-#include "gtest/gtest.h"
 
-#include "boost/filesystem.hpp"
-
-#include "sgp/FileMan.h"
-
-#include "DefaultContentManager.h"
 #include "DefaultContentManagerUT.h"
+#include "FileMan.h"
+#include "TestUtils.h"
 
-#define TMPDIR "temp"
-
-#define PS PATH_SEPARATOR_STR
+#include "gtest/gtest.h"
 
 TEST(TempFiles, createFile)
 {
-	DefaultContentManager * cm = createDefaultCMForTesting();
-	boost::filesystem::remove_all(TMPDIR);
-	FileMan::createDir(TMPDIR);
+	DefaultContentManager * cm = DefaultContentManagerUT::createDefaultCMForTesting();
 
 	{
-		AutoSGPFile file(cm->openTempFileForWriting("foo.txt", true));
+		AutoSGPFile file(cm->tempFiles()->openForWriting("foo.txt", true));
 	}
 
-	std::vector<std::string> results = FindFilesInDir(TMPDIR, ".txt", false, false);
-	ASSERT_EQ(results.size(), 1);
-	EXPECT_STREQ(results[0].c_str(), TMPDIR PS "foo.txt");
+	std::vector<ST::string> results = cm->tempFiles()->findAllFilesInDir(ST::string(""), false, false, true);
+	ASSERT_EQ(results.size(), 1u);
+	EXPECT_STREQ(results[0].c_str(), "foo.txt");
 
-	boost::filesystem::remove_all(TMPDIR);
 	delete cm;
 }
 
 TEST(TempFiles, writeToFile)
 {
-	DefaultContentManager * cm = createDefaultCMForTesting();
-	boost::filesystem::remove_all(TMPDIR);
-	FileMan::createDir(TMPDIR);
+	DefaultContentManager * cm = DefaultContentManagerUT::createDefaultCMForTesting();
 
 	{
-		AutoSGPFile file(cm->openTempFileForWriting("foo.txt", true));
-		FileWrite(file, "hello", 5);
+		AutoSGPFile file(cm->tempFiles()->openForWriting("foo.txt", true));
+		file->write("hello", 5);
 	}
 
 	// open for writing, but don't truncate
 	{
-		AutoSGPFile file(cm->openTempFileForWriting("foo.txt", false));
-		ASSERT_EQ(FileGetSize(file), 5);
+		AutoSGPFile file(cm->tempFiles()->openForWriting("foo.txt", false));
+		ASSERT_EQ(file->size(), 5u);
 	}
 
 	// open with truncate and check that it is empty
 	{
-		AutoSGPFile file(cm->openTempFileForWriting("foo.txt", true));
-		ASSERT_EQ(FileGetSize(file), 0);
+		AutoSGPFile file(cm->tempFiles()->openForWriting("foo.txt", true));
+		ASSERT_EQ(file->size(), 0u);
 	}
 
-	// // void FileRead(SGPFile* const f, void* const pDest, size_t const uiBytesToRead)
-
-	boost::filesystem::remove_all(TMPDIR);
 	delete cm;
 }
 
 TEST(TempFiles, writeAndRead)
 {
-	DefaultContentManager * cm = createDefaultCMForTesting();
-	boost::filesystem::remove_all(TMPDIR);
-	FileMan::createDir(TMPDIR);
+	DefaultContentManager * cm = DefaultContentManagerUT::createDefaultCMForTesting();
 
 	{
-		AutoSGPFile file(cm->openTempFileForWriting("foo.txt", true));
-		FileWrite(file, "hello", 5);
+		AutoSGPFile file(cm->tempFiles()->openForWriting("foo.txt", true));
+		file->write("hello", 5);
 	}
 
 	{
 		char buf[10];
-		AutoSGPFile file(cm->openTempFileForReading("foo.txt"));
-		FileRead(file, buf, 5);
+		AutoSGPFile file(cm->tempFiles()->openForReading("foo.txt"));
+		file->read(buf, 5);
 		buf[5] = 0;
 		ASSERT_STREQ(buf, "hello");
 	}
 
-	boost::filesystem::remove_all(TMPDIR);
 	delete cm;
 }
 
 TEST(TempFiles, append)
 {
-	DefaultContentManager * cm = createDefaultCMForTesting();
-	boost::filesystem::remove_all(TMPDIR);
-	FileMan::createDir(TMPDIR);
+	DefaultContentManager * cm = DefaultContentManagerUT::createDefaultCMForTesting();
 
 	{
-		AutoSGPFile file(cm->openTempFileForWriting("foo.txt", true));
-		FileWrite(file, "hello", 5);
+		AutoSGPFile file(cm->tempFiles()->openForWriting("foo.txt", true));
+		file->write("hello", 5);
 	}
 
 	{
-		AutoSGPFile file(cm->openTempFileForAppend("foo.txt"));
-		FileWrite(file, "hello", 5);
+		AutoSGPFile file(cm->tempFiles()->openForAppend("foo.txt"));
+		file->write("hello", 5);
 	}
 
 	{
-		AutoSGPFile file(cm->openTempFileForReading("foo.txt"));
-		ASSERT_EQ(FileGetSize(file), 10);
+		AutoSGPFile file(cm->tempFiles()->openForReading("foo.txt"));
+		ASSERT_EQ(file->size(), 10u);
 	}
 
-	boost::filesystem::remove_all(TMPDIR);
 	delete cm;
 }
 
 TEST(TempFiles, deleteFile)
 {
-	DefaultContentManager * cm = createDefaultCMForTesting();
-	boost::filesystem::remove_all(TMPDIR);
-	FileMan::createDir(TMPDIR);
+	DefaultContentManager * cm = DefaultContentManagerUT::createDefaultCMForTesting();
 
 	{
-		AutoSGPFile file(cm->openTempFileForWriting("foo.txt", true));
+		AutoSGPFile file(cm->tempFiles()->openForWriting("foo.txt", true));
 	}
 
-	std::vector<std::string> results = FindFilesInDir(TMPDIR, ".txt", false, false);
-	ASSERT_EQ(results.size(), 1);
+	std::vector<ST::string> results = cm->tempFiles()->findAllFilesInDir("", false, false, true);
+	ASSERT_EQ(results.size(), 1u);
 
-	cm->deleteTempFile("foo.txt");
+	cm->tempFiles()->deleteFile("foo.txt");
 
-	results = FindFilesInDir(TMPDIR, ".txt", false, false);
-	ASSERT_EQ(results.size(), 0);
+	results = cm->tempFiles()->findAllFilesInDir("", false, false, true);
+	ASSERT_EQ(results.size(), 0u);
 
-	boost::filesystem::remove_all(TMPDIR);
 	delete cm;
 }
 
+TEST(ExternalizedData, readAllData)
+{
+	DefaultContentManager* cm = DefaultContentManagerUT::createDefaultCMForTesting();
+	ASSERT_TRUE(cm->loadGameData());
+	delete cm;
+}
+
+TEST(ExternalizedData, readEveryFile)
+{
+	// Not all files (e.g. translations) are covered by the previous test
+	DefaultContentManagerUT* cm = DefaultContentManagerUT::createDefaultCMForTesting();
+
+	ST::string dataPath = ST::format("{}/externalized", GetExtraDataDir());
+	std::vector<ST::string> results = FileMan::findFilesInDir(dataPath, "json", true, true, false, true);
+	for (ST::string f : results)
+	{
+		ST::string relativePath = f.substr(dataPath.size() + 1);
+		auto json = cm->readJsonDataFile(relativePath);
+		ASSERT_FALSE(json.get() == NULL);
+	}
+
+	delete cm;
+}
 #endif

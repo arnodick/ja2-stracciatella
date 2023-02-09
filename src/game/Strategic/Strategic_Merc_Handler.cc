@@ -39,8 +39,12 @@
 
 #include "ContentManager.h"
 #include "GameInstance.h"
+#include "MercProfile.h"
 #include "WeaponModels.h"
-#include "slog/slog.h"
+#include "Logger.h"
+
+#include <string_theory/string>
+
 
 #define NUM_DAYS_TILL_UNPAID_RPC_QUITS 3
 
@@ -53,22 +57,20 @@ void StrategicHandlePlayerTeamMercDeath(SOLDIERTYPE& s)
 	{ // Add to the history log the fact that the merc died and the circumstances
 
 		// CJC Nov 11, 2002: Use the soldier's sector location unless impossible
-		INT16 x = s.sSectorX;
-		INT16 y = s.sSectorY;
-		if (s.sSectorX == 0 || s.sSectorY == 0)
+		SGPSector sMap = s.sSector;
+		if (!sMap.IsValid())
 		{
-			x = gWorldSectorX;
-			y = gWorldSectorY;
+			sMap = gWorldSector;
 		}
 
 		SOLDIERTYPE const* const killer = s.attacker;
 		UINT8              const code   = killer && killer->bTeam == OUR_TEAM ? HISTORY_MERC_KILLED_CHARACTER : HISTORY_MERC_KILLED;
-		AddHistoryToPlayersLog(code, s.ubProfile, now, x, y);
+		AddHistoryToPlayersLog(code, s.ubProfile, now, sMap);
 	}
 
 	if (guiCurrentScreen != GAME_SCREEN)
 	{
-		ScreenMsg(FONT_RED, MSG_INTERFACE, pMercDeadString, s.name);
+		ScreenMsg(FONT_RED, MSG_INTERFACE, st_format_printf(pMercDeadString, s.name));
 	}
 
 	/* Robot and EPCs don't count against death rate - the mercs back home don't
@@ -84,33 +86,36 @@ void StrategicHandlePlayerTeamMercDeath(SOLDIERTYPE& s)
 	s.bBreath        = 0;
 	s.fMercAsleep    = FALSE; // Not asleep, dead
 
-	MERCPROFILESTRUCT& p = GetProfile(s.ubProfile);
-	p.bMercStatus = MERC_IS_DEAD;
-
-	if (s.usLifeInsurance)
+	if (s.ubProfile != NO_PROFILE)
 	{
-		if (guiCurrentScreen != AUTORESOLVE_SCREEN)
-		{ // Check whether this was obviously a suspicious death
-			if (now >= s.uiStartTimeOfInsuranceContract && now - s.uiStartTimeOfInsuranceContract < 60)
-			{ // Killed within an hour of being insured
-				p.ubSuspiciousDeath = VERY_SUSPICIOUS_DEATH;
-			}
-			else if (s.attacker->bTeam == OUR_TEAM || !gTacticalStatus.fEnemyInSector)
-			{ /* Killed by someone on our team or while there weren't any opponents
-				 * around, cause insurance company to suspect fraud and investigate this
-				 * claim */
-				p.ubSuspiciousDeath = SUSPICIOUS_DEATH;
-			}
-		}
+		MERCPROFILESTRUCT& p = GetProfile(s.ubProfile);
+		p.bMercStatus = MERC_IS_DEAD;
 
-		AddLifeInsurancePayout(&s);
+		if (s.usLifeInsurance)
+		{
+			if (guiCurrentScreen != AUTORESOLVE_SCREEN)
+			{ // Check whether this was obviously a suspicious death
+				if (now >= s.uiStartTimeOfInsuranceContract && now - s.uiStartTimeOfInsuranceContract < 60)
+				{ // Killed within an hour of being insured
+					p.ubSuspiciousDeath = VERY_SUSPICIOUS_DEATH;
+				}
+				else if (s.attacker->bTeam == OUR_TEAM || !gTacticalStatus.fEnemyInSector)
+				{ /* Killed by someone on our team or while there weren't any opponents
+					* around, cause insurance company to suspect fraud and investigate this
+					* claim */
+					p.ubSuspiciousDeath = SUSPICIOUS_DEATH;
+				}
+			}
+
+			AddLifeInsurancePayout(&s);
+		}
 	}
 
 	/* Robot and EPCs don't penalize morale - merc don't care about fighting
 	 * machines and the lives of locals much */
 	if (!AM_AN_EPC(&s) && !AM_A_ROBOT(&s))
 	{ // Change morale of others based on this
-		HandleMoraleEvent(&s, MORALE_TEAMMATE_DIED, s.sSectorX, s.sSectorY, s.bSectorZ);
+		HandleMoraleEvent(&s, MORALE_TEAMMATE_DIED, s.sSector);
 	}
 
 	if (s.ubWhatKindOfMercAmI == MERC_TYPE__MERC)
@@ -131,14 +136,15 @@ void MercDailyUpdate()
 	// if its the first day, leave
 	if (GetWorldDay() == 1) return;
 
-	SLOGD(DEBUG_TAG_SOLDIER, "%ls - Doing MercDailyUpdate", WORLDTIMESTR);
+	SLOGD("{} - Doing MercDailyUpdate", WORLDTIMESTR);
 
 	/* if the death rate is very low (this is independent of mercs' personal
 	 * deathrate tolerances) */
 	if (CalcDeathRate() < 5)
 	{
 		// everyone gets a morale bonus, which also gets player a reputation bonus.
-		HandleMoraleEvent(NULL, MORALE_LOW_DEATHRATE, -1, -1, -1);
+		static const SGPSector nowhere(-1, -1, -1);
+		HandleMoraleEvent(nullptr, MORALE_LOW_DEATHRATE, nowhere);
 	}
 
 	/* add an event so the merc will say the departing warning (2 hours prior to
@@ -170,6 +176,7 @@ void MercDailyUpdate()
 			if (--s->bCorpseQuoteTolerance < 0) s->bCorpseQuoteTolerance = 0;
 
 			MERCPROFILESTRUCT& p = GetProfile(s->ubProfile);
+			MercProfile const profile(s->ubProfile);
 
 			// CJC: For some personalities, reset personality quote said flag
 			switch (p.bPersonalityTrait)
@@ -199,7 +206,7 @@ void MercDailyUpdate()
 			p.ubMiscFlags3 |= PROFILE_MISC_FLAG3_PLAYER_HAD_CHANCE_TO_HIRE;
 
 			//if the character is an RPC
-			if (FIRST_RPC <= s->ubProfile && s->ubProfile < FIRST_NPC)
+			if (profile.isRPC())
 			{
 				//increment the number of days the mercs has been on the team
 				++s->iTotalContractLength;
@@ -226,9 +233,8 @@ void MercDailyUpdate()
 					else
 					{
 						// Display a screen msg indicating that the npc was NOT paid
-						wchar_t zMoney[128];
-						SPrintMoney(zMoney, sSalary);
-						ScreenMsg(FONT_MCOLOR_WHITE, MSG_INTERFACE, pMessageStrings[MSG_CANT_AFFORD_TO_PAY_NPC_DAILY_SALARY_MSG], p.zNickname, zMoney);
+						ST::string zMoney = SPrintMoney(sSalary);
+						ScreenMsg(FONT_MCOLOR_WHITE, MSG_INTERFACE, st_format_printf(pMessageStrings[MSG_CANT_AFFORD_TO_PAY_NPC_DAILY_SALARY_MSG], p.zNickname, zMoney));
 
 						/* if the merc hasnt been paid for NUM_DAYS_TILL_UNPAID_RPC_QUITS
 						 * days, the merc will quit */
@@ -289,7 +295,7 @@ void MercDailyUpdate()
 		// skip anyone currently on the player's team
 		if (IsMercOnTeam(cnt)) continue;
 
-		if (cnt < AIM_AND_MERC_MERCS && p.bMercStatus != MERC_RETURNING_HOME)
+		if (IsProfileIdAnAimOrMERCMerc((UINT8) cnt) && p.bMercStatus != MERC_RETURNING_HOME)
 		{
 			// check if any of his stats improve through working or training
 			HandleUnhiredMercImprovement(p);
@@ -323,7 +329,7 @@ void MercDailyUpdate()
 		}
 		else	// was already available today
 		{
-			if (cnt < AIM_AND_MERC_MERCS)
+			if (IsProfileIdAnAimOrMERCMerc((UINT8) cnt))
 			{
 				// check to see if he goes on another assignment
 				UINT32 uiChance;
@@ -541,9 +547,7 @@ void UpdateBuddyAndHatedCounters(void)
 				}
 				else
 				{ // Check to see if the location is the same
-					if (other->sSectorX != s->sSectorX) continue;
-					if (other->sSectorY != s->sSectorY) continue;
-					if (other->bSectorZ != s->bSectorZ) continue;
+					if (other->sSector != s->sSector) continue;
 
 					// if the OTHER soldier is in motion then we don't do anything!
 					if (other->ubGroupID != 0 && PlayerIDGroupInMotion(other->ubGroupID))
@@ -738,7 +742,7 @@ void HourlyCamouflageUpdate()
 				s.bCamo = 0;
 				if (s.bInSector) CreateSoldierPalettes(s);
 
-				ScreenMsg(FONT_MCOLOR_LTYELLOW, MSG_INTERFACE, g_langRes->Message[STR_CAMO_WORN_OFF], s.name);
+				ScreenMsg(FONT_MCOLOR_LTYELLOW, MSG_INTERFACE, st_format_printf(g_langRes->Message[STR_CAMO_WORN_OFF], s.name));
 				DirtyMercPanelInterface(&s, DIRTYLEVEL2);
 			}
 			else

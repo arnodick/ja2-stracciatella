@@ -23,7 +23,6 @@
 #include "Scheduling.h"
 #include "BobbyRGuns.h"
 #include "Arms_Dealer_Init.h"
-#include "Air_Raid.h"
 #include "Meanwhile.h"
 #include "Overhead.h"
 #include "Random.h"
@@ -111,7 +110,7 @@ BOOLEAN ExecuteStrategicEvent( STRATEGICEVENT *pEvent )
 		//Called once a day to update the number of days that a hired merc from M.E.R.C. has been on contract.
 		// Also if the player hasn't paid for a while Specks will start sending e-mails to the player
 		case EVENT_DAILY_UPDATE_OF_MERC_SITE:
-			DailyUpdateOfMercSite( (UINT16)GetWorldDay() );
+			DailyUpdateOfMercSite();
 			break;
 		case EVENT_DAY3_ADD_EMAIL_FROM_SPECK:
 			AddEmail(MERC_INTRO, MERC_INTRO_LENGTH, SPECK_FROM_MERC, GetWorldTotalMin( ) );
@@ -154,7 +153,7 @@ BOOLEAN ExecuteStrategicEvent( STRATEGICEVENT *pEvent )
 			break;
 		case EVENT_HANDLE_MINE_INCOME:
 			HandleIncomeFromMines( );
-			//ScreenMsg( FONT_MCOLOR_DKRED, MSG_INTERFACE, L"Income From Mines at %d", GetWorldTotalMin( ) );
+			//ScreenMsg( FONT_MCOLOR_DKRED, MSG_INTERFACE, ST::format("Income From Mines at {}", GetWorldTotalMin()) );
 			break;
 		case EVENT_SETUP_MINE_INCOME:
 			PostEventsForMineProduction();
@@ -211,9 +210,6 @@ BOOLEAN ExecuteStrategicEvent( STRATEGICEVENT *pEvent )
 
 		case EVENT_MAKE_CIV_GROUP_HOSTILE_ON_NEXT_SECTOR_ENTRANCE:
 			MakeCivGroupHostileOnNextSectorEntrance( (UINT8)pEvent->uiParam );
-			break;
-		case EVENT_BEGIN_AIR_RAID:
-			BeginAirRaid( );
 			break;
 		case EVENT_MEANWHILE:
 			if( !DelayEventIfBattleInProgress( pEvent ) )

@@ -1,112 +1,127 @@
-#include <stdexcept>
-
-#include "Directories.h"
-#include "Font.h"
-#include "HImage.h"
-#include "Interface.h"
-#include "LoadSaveSectorInfo.h"
-#include "LoadSaveStrategicMapElement.h"
-#include "Local.h"
-#include "MapScreen.h"
-#include "Merc_Contract.h"
-#include "Merc_Hiring.h"
-#include "Radar_Screen.h"
 #include "StrategicMap.h"
-#include "Strategic.h"
-#include "Strategic_Mines.h"
-#include "Tactical_Turns.h"
-#include "Timer.h"
-#include "Timer_Control.h"
-#include "Types.h"
-#include "JAScreens.h"
-#include "Soldier_Control.h"
-#include "Overhead.h"
+
+#include "AI.h"
+#include "Ambient_Control.h"
+#include "Animated_ProgressBar.h"
+#include "Animation_Control.h"
+#include "Assignments.h"
+#include "Auto_Resolve.h"
+#include "Boxing.h"
+#include "Bullets.h"
+#include "Campaign_Types.h"
+#include "ContentManager.h"
+#include "ContentMusic.h"
+#include "Creature_Spreading.h"
+#include "Cursor_Control.h"
+#include "Cursors.h"
+#include "Debug.h"
+#include "Dialogue_Control.h"
+#include "Directories.h"
+#include "Enemy_Soldier_Save.h"
+#include "Environment.h"
+#include "Event_Pump.h"
+#include "Exit_Grids.h"
+#include "Explosion_Control.h"
+#include "Faces.h"
+#include "Fade_Screen.h"
+#include "FileMan.h"
+#include "Font.h"
+#include "Font_Control.h"
+#include "GameInstance.h"
+#include "GameLoop.h"
+#include "GamePolicy.h"
+#include "GameScreen.h"
+#include "GameSettings.h"
+#include "Game_Clock.h"
+#include "Game_Events.h"
+#include "HImage.h"
+#include "Handle_UI.h"
+#include "History.h"
+#include "Interface.h"
+#include "Interface_Dialogue.h"
 #include "Interface_Panels.h"
 #include "Isometric_Utils.h"
-#include "Ambient_Control.h"
-#include "VObject.h"
-#include "WorldDef.h"
-#include "WorldDat.h"
-#include "Text.h"
-#include "Soldier_Add.h"
-#include "Soldier_Macros.h"
-#include "Strategic_Pathing.h"
-#include "Soldier_Create.h"
-#include "Handle_UI.h"
-#include "Faces.h"
-#include "RenderWorld.h"
-#include "GameScreen.h"
-#include "Game_Clock.h"
-#include "Soldier_Init_List.h"
-#include "Strategic_Turns.h"
-#include "Merc_Entering.h"
-#include "Map_Information.h"
-#include "Assignments.h"
-#include "Message.h"
-#include "Font_Control.h"
-#include "Environment.h"
-#include "Game_Events.h"
-#include "Quests.h"
-#include "FileMan.h"
-#include "Animated_ProgressBar.h"
-#include "Music_Control.h"
-#include "ContentMusic.h"
-#include "Fade_Screen.h"
-#include "Strategic_Movement.h"
-#include "Campaign_Types.h"
-#include "Sys_Globals.h"
-#include "Exit_Grids.h"
-#include "Tactical_Save.h"
-#include "PathAI.h"
-#include "Animation_Control.h"
-#include "Squads.h"
-#include "WorldMan.h"
-#include "Strategic_Town_Loyalty.h"
-#include "Queen_Command.h"
-#include "Cursor_Control.h"
-#include "PreBattle_Interface.h"
-#include "Scheduling.h"
-#include "GameLoop.h"
-#include "Random.h"
-#include "AI.h"
-#include "OppList.h"
-#include "Keys.h"
-#include "Tactical_Placement_GUI.h"
-#include "Map_Screen_Helicopter.h"
-#include "Map_Edgepoints.h"
-#include "Player_Command.h"
-#include "Event_Pump.h"
-#include "Meanwhile.h"
-#include "Creature_Spreading.h"
-#include "SaveLoadMap.h"
-#include "Militia_Control.h"
-#include "GameSettings.h"
-#include "Dialogue_Control.h"
-#include "Town_Militia.h"
-#include "SysUtil.h"
-#include "Sound_Control.h"
-#include "Points.h"
-#include "Render_Dirty.h"
-#include "Loading_Screen.h"
-#include "Enemy_Soldier_Save.h"
-#include "Boxing.h"
-#include "NPC.h"
-#include "Strategic_Event_Handler.h"
-#include "MessageBoxScreen.h"
-#include "Interface_Dialogue.h"
-#include "History.h"
-#include "Bullets.h"
-#include "Physics.h"
-#include "Explosion_Control.h"
-#include "Auto_Resolve.h"
-#include "Cursors.h"
-#include "Video.h"
-#include "VSurface.h"
-#include "Debug.h"
-#include "ScreenIDs.h"
 #include "Items.h"
+#include "JAScreens.h"
+#include "Keys.h"
+#include "LoadSaveSectorInfo.h"
+#include "LoadSaveStrategicMapElement.h"
+#include "Loading_Screen.h"
+#include "Local.h"
+#include "Logger.h"
+#include "MapScreen.h"
+#include "Map_Edgepoints.h"
+#include "Map_Information.h"
+#include "Map_Screen_Helicopter.h"
+#include "Meanwhile.h"
+#include "Merc_Contract.h"
+#include "Merc_Entering.h"
+#include "Merc_Hiring.h"
+#include "Message.h"
+#include "MessageBoxScreen.h"
+#include "Militia_Control.h"
+#include "MineModel.h"
+#include "Music_Control.h"
+#include "NPC.h"
+#include "OppList.h"
+#include "Overhead.h"
+#include "PathAI.h"
+#include "Physics.h"
+#include "Player_Command.h"
+#include "Points.h"
+#include "PreBattle_Interface.h"
+#include "Queen_Command.h"
+#include "Quests.h"
+#include "Radar_Screen.h"
+#include "Random.h"
+#include "RenderWorld.h"
+#include "Render_Dirty.h"
+#include "SamSiteModel.h"
+#include "SaveLoadMap.h"
+#include "Scheduling.h"
+#include "ScreenIDs.h"
+#include "Soldier_Add.h"
+#include "Soldier_Control.h"
+#include "Soldier_Create.h"
+#include "Soldier_Init_List.h"
+#include "Soldier_Macros.h"
+#include "Sound_Control.h"
+#include "Squads.h"
+#include "Strategic.h"
+#include "StrategicMap_Secrets.h"
+#include "StrategicMapSecretModel.h"
+#include "Strategic_Event_Handler.h"
+#include "Strategic_Mines.h"
+#include "Strategic_Movement.h"
+#include "Strategic_Pathing.h"
+#include "Strategic_Town_Loyalty.h"
+#include "Strategic_Turns.h"
+#include "SysUtil.h"
+#include "Sys_Globals.h"
+#include "Tactical_Placement_GUI.h"
+#include "Tactical_Save.h"
+#include "Tactical_Turns.h"
+#include "Text.h"
+#include "Timer.h"
+#include "Timer_Control.h"
+#include "TownModel.h"
+#include "Town_Militia.h"
+#include "Types.h"
 #include "UILayout.h"
-#include "slog/slog.h"
+#include "VObject.h"
+#include "VSurface.h"
+#include "Video.h"
+#include "WorldDat.h"
+#include "WorldDef.h"
+#include "WorldMan.h"
+
+#include <string_theory/format>
+#include <string_theory/string>
+
+#include <algorithm>
+#include <iterator>
+#include <map>
+#include <stdexcept>
 
 //Used by PickGridNoToWalkIn
 #define MAX_ATTEMPTS 200
@@ -122,13 +137,9 @@ extern INT16 gsRobotGridNo;
 
 BOOLEAN gfGettingNameFromSaveLoadScreen;
 
-INT16 gWorldSectorX = 0;
-INT16 gWorldSectorY = 0;
-INT8  gbWorldSectorZ = -1;
+SGPSector gWorldSector(0, 0, -1);
 
-static INT16  gsAdjacentSectorX;
-static INT16  gsAdjacentSectorY;
-static INT8   gbAdjacentSectorZ;
+static SGPSector gsAdjacentSector;
 static GROUP* gpAdjacentGroup = 0;
 static UINT8  gubAdjacentJumpCode;
 static UINT32 guiAdjacentTraverseTime;
@@ -149,97 +160,20 @@ INT8 gbMilitiaPromotions = 0;
 
 
 BOOLEAN		gfUseAlternateMap = FALSE;
-// whether or not we have found Orta yet
-BOOLEAN fFoundOrta = FALSE;
 
-// have any of the sam sites been found
-BOOLEAN fSamSiteFound[ NUMBER_OF_SAMS ]={
-	FALSE,
-	FALSE,
-	FALSE,
-	FALSE,
-};
-
-INT16 const pSamList[] =
+static const SGPSector SectorIncrementer[8] =
 {
-	SEC_D2,
-	SEC_D15,
-	SEC_I8,
-	SEC_N4
+	{ 0, -1 }, // N
+	{ 1, -1 }, // NE
+	{ 1, 0 },  // E
+	{ 1, 1 },  // SE
+	{ 0, 1 },  // S
+	{ -1, 1 }, // SW
+	{ -1, 0 }, // W
+	{ -1, -1 } // NW
 };
 
-INT16 pSamGridNoAList[ NUMBER_OF_SAMS ]={
-	10196,
-	11295,
-	16080,
-	11913,
-};
-
-INT16 pSamGridNoBList[ NUMBER_OF_SAMS ]={
-	10195,
-	11135,
-	15920,
-	11912,
-};
-
-// ATE: Update this w/ graphic used
-// Use 3 if / orientation, 4 if \ orientation
-INT8 gbSAMGraphicList[ NUMBER_OF_SAMS ]={
-	4,
-	3,
-	3,
-	4
-};
-
-
-UINT8 ubSAMControlledSectors[ MAP_WORLD_Y ][ MAP_WORLD_X ] = {
-//       1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16
-	{ 0,   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,   0 },
-
-	{ 0,   1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 2, 2, 2, 2, 2, 2,   0 }, // A
-	{ 0,   1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2,   0 }, // B
-	{ 0,   1, 1, 1, 1, 1, 1, 1, 3, 2, 2, 2, 2, 2, 2, 2, 2,   0 }, // C
-	{ 0,   1,01, 1, 1, 1, 1, 1, 3, 3, 2, 2, 2, 2, 2,02, 2,   0 }, // D
-	{ 0,   1, 1, 1, 1, 1, 1, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2,   0 }, // E
-	{ 0,   1, 1, 1, 1, 1, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2,   0 }, // F
-	{ 0,   1, 1, 1, 1, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2,   0 }, // G
-	{ 0,   1, 1, 1, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2,   0 }, // H
-	{ 0,   1, 1, 3, 3, 3, 3, 3,03, 3, 3, 3, 3, 3, 2, 2, 2,   0 }, // I
-	{ 0,   1, 4, 4, 4, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2,   0 }, // J
-	{ 0,   4, 4, 4, 4, 4, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2,   0 }, // K
-	{ 0,   4, 4, 4, 4, 4, 4, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2,   0 }, // L
-	{ 0,   4, 4, 4, 4, 4, 4, 4, 3, 3, 3, 3, 3, 3, 2, 2, 2,   0 }, // M
-	{ 0,   4, 4, 4,04, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2, 2, 2,   0 }, // N
-	{ 0,   4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2, 2,   0 }, // O
-	{ 0,   4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2,   0 }, // P
-
-	{ 0,   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,   0 }
-};
-
-static INT16 const DirXIncrementer[8] =
-{
-	0,        //N
-	1,        //NE
-	1,        //E
-	1,        //SE
-	0,         //S
-	-1,       //SW
-	-1,       //W
-	-1       //NW
-};
-
-static INT16 const DirYIncrementer[8] =
-{
-	-1,        //N
-	-1,        //NE
-	0,        //E
-	1,        //SE
-	1,         //S
-	1,       //SW
-	0,       //W
-	-1       //NW
-};
-
+Observable<> BeforePrepareSector = {};
 
 extern BOOLEAN gfOverrideSector;
 
@@ -271,7 +205,6 @@ void BeginLoadScreen( )
 	UINT32 uiStartTime, uiCurrTime;
 	INT32 iPercentage, iFactor;
 	UINT32 uiTimeRange;
-	INT32 iLastShadePercentage;
 
 	SetCurrentCursorFromDatabase( VIDEO_NO_CURSOR );
 
@@ -280,7 +213,6 @@ void BeginLoadScreen( )
 		SGPBox const DstRect = { 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT };
 		uiTimeRange = 2000;
 		iPercentage = 0;
-		iLastShadePercentage = 0;
 		uiStartTime = GetClock();
 		BltVideoSurface(guiSAVEBUFFER, FRAME_BUFFER, 0, 0, NULL);
 		PlayJA2SampleFromFile(SOUNDSDIR "/final psionic blast 01 (16-44).wav", HIGHVOLUME, 1, MIDDLEPAN);
@@ -288,7 +220,7 @@ void BeginLoadScreen( )
 		{
 			uiCurrTime = GetClock();
 			iPercentage = (uiCurrTime-uiStartTime) * 100 / uiTimeRange;
-			iPercentage = MIN( iPercentage, 100 );
+			iPercentage = std::min(iPercentage, 100);
 
 			//Factor the percentage so that it is modified by a gravity falling acceleration effect.
 			iFactor = (iPercentage - 50) * 2;
@@ -299,19 +231,7 @@ void BeginLoadScreen( )
 
 			if( iPercentage > 50 )
 			{
-				//iFactor = (iPercentage - 50) * 2;
-				//if( iFactor > iLastShadePercentage )
-			//	{
-					//Calculate the difference from last shade % to the new one.  Ex:  Going from
-					//50% shade value to 60% shade value requires applying 20% to the 50% to achieve 60%.
-					//if( iLastShadePercentage )
-					//	iReqShadePercentage = 100 - (iFactor * 100 / iLastShadePercentage);
-					//else
-					//	iReqShadePercentage = iFactor;
-					//Record the new final shade percentage.
-					//iLastShadePercentage = iFactor;
-					guiSAVEBUFFER->ShadowRectUsingLowPercentTable(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
-			//	}
+				guiSAVEBUFFER->ShadowRectUsingLowPercentTable(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
 			}
 
 			SGPBox const SrcRect =
@@ -334,15 +254,16 @@ void BeginLoadScreen( )
 	// ( which gets reloaded into gubLastLoadingScreenID )
 	if( !gfGotoSectorTransition )
 	{
-		LoadingScreenID const id = gTacticalStatus.uiFlags & LOADING_SAVED_GAME ?
+		UINT8 const id = gTacticalStatus.uiFlags & LOADING_SAVED_GAME ?
 			gubLastLoadingScreenID :
-			GetLoadScreenID(gWorldSectorX, gWorldSectorY, gbWorldSectorZ);
+			GetLoadScreenID(gWorldSector);
 		DisplayLoadScreenWithID(id);
 	}
 }
 
 static void InitializeMapStructure(void);
 
+static void HandleAirspaceControlUpdated();
 
 void InitStrategicEngine()
 {
@@ -353,15 +274,15 @@ void InitStrategicEngine()
 
 	// set up town stuff
 	BuildListOfTownSectors( );
+
+	OnAirspaceControlUpdated.addListener("default", HandleAirspaceControlUpdated);
 }
 
 
-UINT8 GetTownIdForSector(UINT8 const sector)
+UINT8 GetTownIdForSector(const SGPSector& sSector)
 {
-	// return the name value of the town in this sector
-	return StrategicMap[SECTOR_INFO_TO_STRATEGIC_INDEX(sector)].bNameId;
+	return StrategicMap[sSector.AsStrategicIndex()].bNameId;
 }
-
 
 UINT8 GetTownSectorSize(INT8 const town_id)
 {
@@ -376,10 +297,9 @@ UINT8 GetTownSectorsUnderControl(INT8 const town_id)
 	UINT8 n = 0;
 	FOR_EACH_SECTOR_IN_TOWN(i, town_id)
 	{
-		UINT32 const x = SECTORX(i->sector);
-		UINT32 const y = SECTORY(i->sector);
-		if (StrategicMap[CALCULATE_STRATEGIC_INDEX(x, y)].fEnemyControlled) continue;
-		if (NumEnemiesInSector(x, y) != 0)                                  continue;
+		SGPSector sSector(i->sector);
+		if (StrategicMap[sSector.AsStrategicIndex()].fEnemyControlled) continue;
+		if (NumEnemiesInSector(sSector) != 0)                          continue;
 		++n;
 	}
 	return n;
@@ -391,60 +311,44 @@ static void InitializeStrategicMapSectorTownNames(void);
 
 static void InitializeMapStructure(void)
 {
-	memset(StrategicMap, 0, sizeof(StrategicMap));
+	std::fill(std::begin(StrategicMap), std::end(StrategicMap), StrategicMapElement{});
 
 	InitializeStrategicMapSectorTownNames( );
 }
 
-
-void InitializeSAMSites()
+ST::string GetMapFileName(const SGPSector& sector, BOOLEAN const add_alternate_map_letter)
 {
-	// Move the landing zone over to the start sector.
-	g_merc_arrive_sector = START_SECTOR;
-
-	// All SAM sites start game in perfect working condition.
-	FOR_EACH(INT16 const, i, pSamList)
+	ST::string fileName;
+	if (sector.z == 0)
 	{
-		StrategicMap[SECTOR_INFO_TO_STRATEGIC_INDEX(*i)].bSAMCondition = 100;
+		fileName = sector.AsShortString();
 	}
-
-	UpdateAirspaceControl();
-}
-
-
-// get short sector name without town name
-void GetShortSectorString(const INT16 sMapX, const INT16 sMapY, wchar_t* const sString, const size_t Length)
-{
-	// OK, build string id like J11
-	swprintf(sString, Length, L"%lc%d", L'A' - 1 + sMapY, sMapX);
-}
-
-
-void GetMapFileName(INT16 const x, INT16 const y, INT8 const z, char* const buf, BOOLEAN const add_alternate_map_letter)
-{
-	size_t n = sprintf(buf, "%c%d", 'A' - 1 + y, x);
-
-	if (z != 0) n += sprintf(buf + n, "_b%d", z);
+	else
+	{
+		fileName = sector.AsLongString(true);
+	}
 
 	/* The gfUseAlternateMap flag is set while loading saved games. When starting
 	 * a new game the underground sector info has not been initialized, so we need
 	 * the flag to load an alternate sector. */
-	if (GetSectorFlagStatus(x, y, z, SF_USE_ALTERNATE_MAP) || gfUseAlternateMap)
+	if (GetSectorFlagStatus(sector, SF_USE_ALTERNATE_MAP) || gfUseAlternateMap)
 	{
 		gfUseAlternateMap = FALSE;
-		if (add_alternate_map_letter) n += sprintf(buf + n, "_a");
+		if (add_alternate_map_letter) fileName += "_a";
 	}
 
-	if (AreInMeanwhile() && x == 3 && y == 16 && z == 0)
+	static const SGPSector MedunaHQ(3, 16, 0);
+	if (AreInMeanwhile() && sector == MedunaHQ)
 	{
-		if (add_alternate_map_letter) n += sprintf(buf + n, "_m");
+		if (add_alternate_map_letter) fileName += "_m";
 	}
 
-	sprintf(buf + n, ".dat");
+	fileName += ".dat";
+	return fileName;
 }
 
 
-static void HandleRPCDescriptionOfSector(INT16 const x, INT16 const y, INT16 const z)
+static void HandleRPCDescriptionOfSector(const SGPSector& sector)
 {
 	struct SectorDescriptionInfo
 	{
@@ -497,24 +401,24 @@ static void HandleRPCDescriptionOfSector(INT16 const x, INT16 const y, INT16 con
 	// Default to false
 	ts.fCountingDownForGuideDescription = FALSE;
 
-	if (GetSectorFlagStatus(x, y, z, SF_HAVE_USED_GUIDE_QUOTE)) return;
-	if (z != 0) return;
+	if (GetSectorFlagStatus(sector, SF_HAVE_USED_GUIDE_QUOTE)) return;
+	if (sector.z != 0) return;
 
 	// Check if we are in a good sector
 	FOR_EACH(SectorDescriptionInfo const, i, sector_description)
 	{
-		if (x != i->x || y != i->y) continue;
+		if (sector.x != i->x || sector.y != i->y) continue;
 
 		// If we're not scifi, skip some
 		if (i == &sector_description[3] && !gGameOptions.fSciFi) continue;
 
-		SetSectorFlag(x, y, z, SF_HAVE_USED_GUIDE_QUOTE);
+		SetSectorFlag(sector, SF_HAVE_USED_GUIDE_QUOTE);
 
 		ts.fCountingDownForGuideDescription = TRUE;
 		ts.bGuideDescriptionCountDown       = 4 + Random(5); // 4 to 8 tactical turns
 		ts.ubGuideDescriptionToUse          = i->quote;
-		ts.bGuideDescriptionSectorX         = x;
-		ts.bGuideDescriptionSectorY         = y;
+		ts.bGuideDescriptionSectorX         = sector.x;
+		ts.bGuideDescriptionSectorY         = sector.y;
 
 		// Handle guide description (will be needed if a SAM one)
 		HandleRPCDescription();
@@ -523,7 +427,7 @@ static void HandleRPCDescriptionOfSector(INT16 const x, INT16 const y, INT16 con
 }
 
 
-static void EnterSector(INT16 x, INT16 y, INT8 z);
+static void EnterSector(const SGPSector& sector);
 enum
 {
 	ABOUT_TO_LOAD_NEW_MAP,
@@ -531,13 +435,12 @@ enum
 };
 static void HandleDefiniteUnloadingOfWorld(UINT8 ubUnloadCode);
 
-
-void SetCurrentWorldSector(INT16 const x, INT16 const y, INT8 const z)
+void SetCurrentWorldSector(const SGPSector& sector)
 {
 	SyncStrategicTurnTimes();
 
 	// is the sector already loaded?
-	if (gWorldSectorX == x && y == gWorldSectorY && z == gbWorldSectorZ)
+	if (gWorldSector == sector)
 	{
 		/* Insert the enemies into the newly loaded map based on the strategic
 		 * information. Note, the flag will return TRUE only if enemies were added.
@@ -550,8 +453,8 @@ void SetCurrentWorldSector(INT16 const x, INT16 const y, INT8 const z)
 			PrepareEnemyForSectorBattle();
 		}
 		if (gubNumCreaturesAttackingTown != 0 &&
-				z                            == 0 &&
-				gubSectorIDOfCreatureAttack  == SECTOR(x, y))
+				sector.z                    == 0 &&
+				gubSectorIDOfCreatureAttack == sector.AsByte())
 		{
 			PrepareCreaturesForBattle();
 		}
@@ -569,18 +472,16 @@ void SetCurrentWorldSector(INT16 const x, INT16 const y, INT8 const z)
 		return;
 	}
 
-	if (gWorldSectorX != 0 && gWorldSectorY != 0 && gbWorldSectorZ != -1)
+	if (gWorldSector.IsValid())
 	{
 		HandleDefiniteUnloadingOfWorld(ABOUT_TO_LOAD_NEW_MAP);
 	}
 
 	// make this the currently loaded sector
-	gWorldSectorX  = x;
-	gWorldSectorY  = y;
-	gbWorldSectorZ = z;
+	gWorldSector = sector;
 
 	// update currently selected map sector to match
-	ChangeSelectedMapSector(x, y, z);
+	ChangeSelectedMapSector(sector);
 
 	bool const loading_savegame = gTacticalStatus.uiFlags & LOADING_SAVED_GAME;
 	if (loading_savegame)
@@ -594,7 +495,8 @@ void SetCurrentWorldSector(INT16 const x, INT16 const y, INT8 const z)
 		/* Check to see if the sector we are loading is the cave sector under Tixa.
 		 * If so then we will set up the meanwhile scene to start the creature
 		 * quest. */
-		if (x == 9 && y == 10 && z == 2)
+		static const SGPSector TixaCave = SGPSector(9, 10, 2);
+		if (sector == TixaCave)
 		{
 			InitCreatureQuest(); // Ignored if already active.
 		}
@@ -604,7 +506,7 @@ void SetCurrentWorldSector(INT16 const x, INT16 const y, INT8 const z)
 		HandleHelicopterOnGround(false);
 	}
 
-	EnterSector(x, y, z);
+	EnterSector(sector);
 
 	if (!loading_savegame)
 	{
@@ -617,7 +519,7 @@ void SetCurrentWorldSector(INT16 const x, INT16 const y, INT8 const z)
 	UpdateDoorGraphicsFromStatus();
 
 	// Set the fact we have visited the  sector
-	SetSectorFlag(x, y, z, SF_ALREADY_LOADED);
+	SetSectorFlag(sector, SF_ALREADY_LOADED);
 
 	// Check for helicopter being on the ground in this sector
 	HandleHelicopterOnGround(true);
@@ -625,8 +527,8 @@ void SetCurrentWorldSector(INT16 const x, INT16 const y, INT8 const z)
 	if (!loading_savegame)
 	{
 		if (gubMusicMode == MUSIC_TACTICAL_ENEMYPRESENT ?
-					NumHostilesInSector(x, y, z) == 0 :
-					gubMusicMode != MUSIC_TACTICAL_BATTLE)
+			NumHostilesInSector(sector) == 0 :
+			gubMusicMode != MUSIC_TACTICAL_BATTLE)
 		{
 			// ATE: Fade FAST
 			SetMusicFadeSpeed(5);
@@ -634,10 +536,7 @@ void SetCurrentWorldSector(INT16 const x, INT16 const y, INT8 const z)
 		}
 
 		// ATE: Check what sector we are in, to show description if we have an RPC
-		HandleRPCDescriptionOfSector(x, y, z);
-
-		// ATE: Set Flag for being visited
-		SetSectorFlag(x, y, z, SF_HAS_ENTERED_TACTICAL);
+		HandleRPCDescriptionOfSector(sector);
 
 		ResetMultiSelection();
 
@@ -647,11 +546,9 @@ void SetCurrentWorldSector(INT16 const x, INT16 const y, INT8 const z)
 		// Adjust delay for tense quote
 		gTacticalStatus.sCreatureTenseQuoteDelay = 10 + Random(20);
 
-		INT16 sWarpWorldX;
-		INT16 sWarpWorldY;
-		INT8  bWarpWorldZ;
+		SGPSector sWarpWorld;
 		INT16 sWarpGridNo;
-		if (z >= 2 && GetWarpOutOfMineCodes(&sWarpWorldX, &sWarpWorldY, &bWarpWorldZ, &sWarpGridNo))
+		if (sector.z >= 2 && GetWarpOutOfMineCodes(sWarpWorld, &sWarpGridNo))
 		{
 			gTacticalStatus.uiFlags |= IN_CREATURE_LAIR;
 		}
@@ -680,6 +577,8 @@ void PrepareLoadedSector()
 	BOOLEAN fAddCivs = TRUE;
 	INT8 bMineIndex = -1;
 
+	BeforePrepareSector();
+
 	if( !(gTacticalStatus.uiFlags & LOADING_SAVED_GAME ) )
 	{
 		UpdateMercsInSector();
@@ -702,9 +601,9 @@ void PrepareLoadedSector()
 
 		//Check to see if civilians should be added.  Always add civs to maps unless they are
 		//in a mine that is shutdown.
-		if( gbWorldSectorZ )
+		if (gWorldSector.z)
 		{
-			bMineIndex = GetIdOfMineForSector( gWorldSectorX, gWorldSectorY, gbWorldSectorZ );
+			bMineIndex = GetIdOfMineForSector(gWorldSector);
 			if( bMineIndex != -1 )
 			{
 				if( !AreThereMinersInsideThisMine( (UINT8)bMineIndex ) )
@@ -763,48 +662,44 @@ void PrepareLoadedSector()
 		CalculateNonPersistantPBIInfo();
 	}
 
-	SLOGD(DEBUG_TAG_SMAP, "Current Time is: %d", GetWorldTotalMin() );
+	SLOGD("Current Time is: {}", GetWorldTotalMin());
 
 	AllTeamsLookForAll( TRUE );
 }
 
 #define RANDOM_HEAD_MINERS 4
-void HandleQuestCodeOnSectorEntry( INT16 sNewSectorX, INT16 sNewSectorY, INT8 bNewSectorZ )
+void HandleQuestCodeOnSectorEntry(const SGPSector& sNewSector)
 {
 	UINT8		ubRandomMiner[RANDOM_HEAD_MINERS] = { 106, 156, 157, 158 };
 	UINT8		ubMiner, ubMinersPlaced;
-	UINT8		ubMine;
 
 	if ( CheckFact( FACT_ALL_TERRORISTS_KILLED, 0 ) )
 	{
 		// end terrorist quest
-		EndQuest( QUEST_KILL_TERRORISTS, gMercProfiles[ CARMEN ].sSectorX, gMercProfiles[ CARMEN ].sSectorY );
+		EndQuest(QUEST_KILL_TERRORISTS, gMercProfiles[CARMEN].sSector);
 		// remove Carmen
-		gMercProfiles[ CARMEN ].sSectorX = 0;
-		gMercProfiles[ CARMEN ].sSectorY = 0;
-		gMercProfiles[ CARMEN ].bSectorZ = 0;
+		gMercProfiles[ CARMEN ].sSector = SGPSector();
 	}
 
-	UINT8 const sector = SECTOR(sNewSectorX, sNewSectorY);
+	UINT8 const sector = sNewSector.AsByte();
 	// are we in a mine sector, on the surface?
-	if (bNewSectorZ == 0)
+	if (sNewSector.z == 0)
 	{
 		INT8 const ubThisMine = GetMineIndexForSector(sector);
 		if (ubThisMine != -1 && !CheckFact(FACT_MINERS_PLACED, 0))
 		{
-			// SET HEAD MINER LOCATIONS
-			if (ubThisMine != MINE_SAN_MONA) // San Mona is abandoned
+			auto thisMine = GCM->getMine(ubThisMine);
+			// SET HEAD MINER LOCATIONS, unless mine is abandoned
+			if (!thisMine->isAbandoned())
 			{
 				ubMinersPlaced = 0;
 
-				if (ubThisMine != MINE_ALMA)
+				if (!thisMine->headMinerAssigned)
 				{
-					// Fred Morris is always in the first mine sector we enter, unless that's Alma (then he's randomized, too)
+					// Fred Morris is always in the first mine sector we enter, unless head miner here has been pre-determined (then he's randomized, too)
 					MERCPROFILESTRUCT& fred = GetProfile(FRED);
-					fred.sSectorX = sNewSectorX;
-					fred.sSectorY = sNewSectorY;
-					fred.bSectorZ = 0;
-					fred.bTown    = gMineLocation[ubThisMine].bAssociatedTown;
+					fred.sSector  = sNewSector;
+					fred.bTown    = thisMine->associatedTownId;
 
 					// mark miner as placed
 					ubRandomMiner[ 0 ] = 0;
@@ -812,9 +707,9 @@ void HandleQuestCodeOnSectorEntry( INT16 sNewSectorX, INT16 sNewSectorY, INT8 bN
 				}
 
 				// assign the remaining (3) miners randomly
-				for ( ubMine = 0; ubMine < MAX_NUMBER_OF_MINES; ubMine++ )
+				for (const MineModel* ubMine : GCM->getMines())
 				{
-					if ( ubMine == ubThisMine || ubMine == MINE_ALMA || ubMine == MINE_SAN_MONA )
+					if ( ubMine->mineId == ubThisMine || ubMine->headMinerAssigned || ubMine->isAbandoned() )
 					{
 						// Alma always has Matt as a miner, and we have assigned Fred to the current mine
 						// and San Mona is abandoned
@@ -828,11 +723,9 @@ void HandleQuestCodeOnSectorEntry( INT16 sNewSectorX, INT16 sNewSectorY, INT8 bN
 					while( ubRandomMiner[ ubMiner ] == 0 );
 
 					MERCPROFILESTRUCT& p      = GetProfile(ubRandomMiner[ubMiner]);
-					UINT8 const        sector = GetMineSector(ubMine);
-					p.sSectorX = SECTORX(sector);
-					p.sSectorY = SECTORY(sector);
-					p.bSectorZ = 0;
-					p.bTown = gMineLocation[ ubMine ].bAssociatedTown;
+					UINT8 const        sector = ubMine->entranceSector;
+					p.sSector = SGPSector(sector);
+					p.bTown = ubMine->associatedTownId;
 
 					// mark miner as placed
 					ubRandomMiner[ ubMiner ] = 0;
@@ -856,7 +749,7 @@ void HandleQuestCodeOnSectorEntry( INT16 sNewSectorX, INT16 sNewSectorY, INT8 bN
 		{
 			// robot is on our team and we have changed sectors, so we can
 			// replace the robot-under-construction in Madlab's sector
-			RemoveGraphicFromTempFile( gsRobotGridNo, SEVENTHISTRUCT1, gMercProfiles[MADLAB].sSectorX, gMercProfiles[MADLAB].sSectorY, gMercProfiles[MADLAB].bSectorZ );
+			RemoveGraphicFromTempFile( gsRobotGridNo, SEVENTHISTRUCT1, gMercProfiles[MADLAB].sSector);
 			SetFactTrue( FACT_ROBOT_RECRUITED_AND_MOVED );
 		}
 	}
@@ -874,7 +767,7 @@ void HandleQuestCodeOnSectorEntry( INT16 sNewSectorX, INT16 sNewSectorY, INT8 bN
 	if (gubQuest[QUEST_KINGPIN_MONEY] == QUESTINPROGRESS &&
 			CheckFact(FACT_KINGPIN_CAN_SEND_ASSASSINS, 0)    &&
 			GetTownIdForSector(sector) != BLANK_SECTOR       &&
-			Random(10 + GetNumberOfMilitiaInSector(sNewSectorX, sNewSectorY, bNewSectorZ)) < 3)
+			Random(10 + GetNumberOfMilitiaInSector(sNewSector)) < 3)
 	{
 		DecideOnAssassin();
 	}
@@ -891,10 +784,8 @@ void HandleQuestCodeOnSectorEntry( INT16 sNewSectorX, INT16 sNewSectorY, INT8 bN
 	if (sector == SEC_C6 && gubQuest[QUEST_RESCUE_MARIA] == QUESTDONE)
 	{
 		// make sure Maria and Angel are gone
-		gMercProfiles[ MARIA ].sSectorX = 0;
-		gMercProfiles[ MARIA ].sSectorY = 0;
-		gMercProfiles[ ANGEL ].sSectorX = 0;
-		gMercProfiles[ ANGEL ].sSectorY = 0;
+		gMercProfiles[ MARIA ].sSector = SGPSector();
+		gMercProfiles[ ANGEL ].sSector = SGPSector();
 	}
 
 	if (sector == SEC_D5)
@@ -917,21 +808,23 @@ void HandleQuestCodeOnSectorEntry( INT16 sNewSectorX, INT16 sNewSectorY, INT8 bN
 }
 
 
-static void HandleQuestCodeOnSectorExit(INT16 sOldSectorX, INT16 sOldSectorY, INT8 bOldSectorZ)
+static void HandleQuestCodeOnSectorExit(const SGPSector& oldSector)
 {
-	if ( sOldSectorX == KINGPIN_MONEY_SECTOR_X && sOldSectorY == KINGPIN_MONEY_SECTOR_Y && bOldSectorZ == KINGPIN_MONEY_SECTOR_Z )
+	SGPSector sector(KINGPIN_MONEY_SECTOR_X, KINGPIN_MONEY_SECTOR_Y, KINGPIN_MONEY_SECTOR_Z);
+	if (oldSector == sector)
 	{
 		CheckForKingpinsMoneyMissing( TRUE );
 	}
 
-	if ( sOldSectorX == 13 && sOldSectorY == MAP_ROW_H && bOldSectorZ == 0 && CheckFact( FACT_CONRAD_SHOULD_GO, 0 ) )
+	sector = SGPSector(13, MAP_ROW_H, 0);
+	if (oldSector == sector && CheckFact(FACT_CONRAD_SHOULD_GO, 0))
 	{
 		// remove Conrad from the map
-		gMercProfiles[ CONRAD ].sSectorX = 0;
-		gMercProfiles[ CONRAD ].sSectorY = 0;
+		gMercProfiles[ CONRAD ].sSector = SGPSector();
 	}
 
-	if ( sOldSectorX == HOSPITAL_SECTOR_X && sOldSectorY == HOSPITAL_SECTOR_Y && bOldSectorZ == HOSPITAL_SECTOR_Z )
+	sector = SGPSector(HOSPITAL_SECTOR_X, HOSPITAL_SECTOR_Y, HOSPITAL_SECTOR_Z);
+	if (oldSector == sector)
 	{
 		CheckForMissingHospitalSupplies();
 	}
@@ -950,7 +843,7 @@ static void SetupProfileInsertionDataForCivilians(void)
 }
 
 
-static void EnterSector(INT16 const x, INT16 const y, INT8 const z)
+static void EnterSector(const SGPSector& sector)
 {
 	PauseGame();
 	// Stop time for this frame
@@ -964,7 +857,7 @@ static void EnterSector(INT16 const x, INT16 const y, INT8 const z)
 	if (!(gTacticalStatus.uiFlags & LOADING_SAVED_GAME))
 	{
 		// Handle NPC stuff related to changing sectors
-		HandleQuestCodeOnSectorEntry(x, y, z);
+		HandleQuestCodeOnSectorEntry(sector);
 	}
 
 	BeginLoadScreen();
@@ -975,13 +868,12 @@ static void EnterSector(INT16 const x, INT16 const y, INT8 const z)
 
 	if (!AreInMeanwhile())
 	{
-		SetSectorFlag(x, y, z, SF_ALREADY_VISITED);
+		SetSectorFlag(sector, SF_ALREADY_VISITED);
 	}
 
 	CreateLoadingScreenProgressBar();
 
-	char filename[50];
-	GetMapFileName(x, y, z, filename, TRUE);
+	ST::string filename = GetMapFileName(sector, TRUE);
 	LoadWorld(filename);
 	LoadRadarScreenBitmap(filename);
 	// We have to add the helicopter after the sector is fully loaded
@@ -1049,9 +941,6 @@ void UpdateMercsInSector()
 	UINT8       pow_squad   = NO_CURRENT_SQUAD;
 	UINT8 const first_enemy = gTacticalStatus.Team[ENEMY_TEAM].bFirstID;
 	UINT8 const last_enemy  = gTacticalStatus.Team[CREATURE_TEAM].bLastID;
-	INT16 const sSectorX    = gWorldSectorX;
-	INT16 const sSectorY    = gWorldSectorY;
-	INT8  const bSectorZ    = gbWorldSectorZ;
 	for (INT32 i = 0; i != MAX_NUM_SOLDIERS; ++i)
 	{
 		if (gfRestoringEnemySoldiersFromTempFile &&
@@ -1067,9 +956,7 @@ void UpdateMercsInSector()
 		s.bInSector = FALSE;
 
 		if (!s.bActive)             continue;
-		if (s.sSectorX != sSectorX) continue;
-		if (s.sSectorY != sSectorY) continue;
-		if (s.bSectorZ != bSectorZ) continue;
+		if (s.sSector != gWorldSector) continue;
 		if (s.fBetweenSectors)      continue;
 
 		if (!(gTacticalStatus.uiFlags & LOADING_SAVED_GAME))
@@ -1092,15 +979,16 @@ void UpdateMercsInSector()
 			}
 		}
 
-		UpdateMercInSector(s, sSectorX, sSectorY, bSectorZ);
+		UpdateMercInSector(s, gWorldSector);
 
 		if (gTacticalStatus.uiFlags & LOADING_SAVED_GAME) continue;
 		if (s.bAssignment != ASSIGNMENT_POW)              continue;
 
+		static const SGPSector secI13(13, MAP_ROW_I);
 		if (pow_squad == NO_CURRENT_SQUAD)
 		{
 			// ATE: If we are in i13 - pop up message!
-			if (sSectorY == MAP_ROW_I && sSectorX == 13)
+			if (gWorldSector == secI13)
 			{
 				DoMessageBox(MSG_BOX_BASIC_STYLE, TacticalStr[POW_MERCS_ARE_HERE], GAME_SCREEN, MSG_BOX_FLAG_OK, NULL, NULL);
 			}
@@ -1113,7 +1001,7 @@ void UpdateMercsInSector()
 		}
 		else
 		{
-			if (sSectorY != MAP_ROW_I && sSectorX != 13)
+			if (gWorldSector != secI13)
 			{
 				AddCharacterToSquad(&s, pow_squad);
 			}
@@ -1122,7 +1010,7 @@ void UpdateMercsInSector()
 		// ATE: Call actions based on what POW we are on...
 		if (gubQuest[QUEST_HELD_IN_ALMA] == QUESTINPROGRESS)
 		{
-			EndQuest(QUEST_HELD_IN_ALMA, sSectorX, sSectorY);
+			EndQuest(QUEST_HELD_IN_ALMA, gWorldSector);
 			HandleNPCDoAction(0, NPC_ACTION_GRANT_EXPERIENCE_3, 0);
 		}
 	}
@@ -1134,11 +1022,7 @@ void UpdateMercsInSector()
 	}
 }
 
-
-static void GetLoadedSectorString(wchar_t* pString, size_t Length);
-
-
-void UpdateMercInSector(SOLDIERTYPE& s, INT16 const x, INT16 const y, INT8 const z)
+void UpdateMercInSector(SOLDIERTYPE& s, const SGPSector& sSector)
 {
 	// Determine entrance direction and get sweetspot
 	// Some checks here must be fleshed out
@@ -1164,6 +1048,7 @@ void UpdateMercInSector(SOLDIERTYPE& s, INT16 const x, INT16 const y, INT8 const
 MAPEDGEPOINT_SEARCH_FAILED:
 	// Use insertion direction from loaded map
 	GridNo gridno;
+	static const SGPSector startSector(gamepolicy(start_sector));
 	switch (s.ubStrategicInsertionCode)
 	{
 		case INSERTION_CODE_NORTH:  gridno = gMapInformation.sNorthGridNo;  goto check_entry;
@@ -1176,52 +1061,62 @@ check_entry:
 			{ /* Strategic insertion failed because it expected to find an entry
 				 * point. This is likely a missing part of the map or possible fault in
 				 * strategic movement costs, traversal logic, etc. */
-				wchar_t sector[10];
-				GetLoadedSectorString(sector, lengthof(sector));
+				ST::string sector = ST::null;
+				if (gfWorldLoaded)
+				{
+					if (gWorldSector.z == 0)
+					{
+						 sector = gWorldSector.AsShortString();
+					}
+					else
+					{
+						 sector = gWorldSector.AsLongString();
+					}
+				}
 
-				wchar_t const* entry;
+				ST::string entry;
 				if (gMapInformation.sNorthGridNo != -1)
 				{
-					entry  = L"north";
+					entry  = "north";
 					gridno = gMapInformation.sNorthGridNo;
 				}
 				else if (gMapInformation.sEastGridNo != -1)
 				{
-					entry  = L"east";
+					entry  = "east";
 					gridno = gMapInformation.sEastGridNo;
 				}
 				else if (gMapInformation.sSouthGridNo != -1)
 				{
-					entry  = L"south";
+					entry  = "south";
 					gridno = gMapInformation.sSouthGridNo;
 				}
 				else if (gMapInformation.sWestGridNo != -1)
 				{
-					entry  = L"west";
+					entry  = "west";
 					gridno = gMapInformation.sWestGridNo;
 				}
 				else if (gMapInformation.sCenterGridNo != -1)
 				{
-					entry  = L"center";
+					entry  = "center";
 					gridno = gMapInformation.sCenterGridNo;
 				}
 				else
 				{
-					SLOGD(DEBUG_TAG_SMAP, "Sector %ls has NO entrypoints -- using precise center of map for %ls.", sector, s.name);
+					SLOGD("Sector {} has NO entrypoints -- using precise center of map for {}.", sector, s.name);
 					goto place_in_center;
 				}
-				wchar_t const* no_entry = 0;
+				ST::string no_entry;
 				switch (s.ubStrategicInsertionCode)
 				{
-					case INSERTION_CODE_NORTH:  no_entry = L"north";  break;
-					case INSERTION_CODE_EAST:   no_entry = L"east";   break;
-					case INSERTION_CODE_SOUTH:  no_entry = L"south";  break;
-					case INSERTION_CODE_WEST:   no_entry = L"west";   break;
-					case INSERTION_CODE_CENTER: no_entry = L"center"; break;
+					case INSERTION_CODE_NORTH:  no_entry = "north";  break;
+					case INSERTION_CODE_EAST:   no_entry = "east";   break;
+					case INSERTION_CODE_SOUTH:  no_entry = "south";  break;
+					case INSERTION_CODE_WEST:   no_entry = "west";   break;
+					case INSERTION_CODE_CENTER: no_entry = "center"; break;
 				}
-				if (no_entry)
+				if (!no_entry.empty())
 				{
-					SLOGD(DEBUG_TAG_SMAP, "Sector %ls doesn't have a %ls entrypoint -- substituting %ls entrypoint for %ls.", sector, no_entry, entry, s.name);
+					SLOGD("Sector {} doesn't have a {} entrypoint -- substituting {} entrypoint for {}.", sector, no_entry, entry, s.name);
 				}
 			}
 			break;
@@ -1233,11 +1128,11 @@ check_entry:
 		case INSERTION_CODE_PRIMARY_EDGEINDEX:
 		{
 			gridno = SearchForClosestPrimaryMapEdgepoint(s.sPendingActionData2, (UINT8)s.usStrategicInsertionData);
-			SLOGD(DEBUG_TAG_SMAP, "%ls's primary insertion gridno is %d using %d as initial search gridno and %d insertion code.",
+			SLOGD("{}'s primary insertion gridno is {} using {} as initial search gridno and {} insertion code.",
 						s.name, gridno, s.sPendingActionData2, s.usStrategicInsertionData);
 			if (gridno == NOWHERE)
 			{
-				SLOGE(DEBUG_TAG_SMAP, "Main edgepoint search failed for %ls -- substituting entrypoint.", s.name);
+				SLOGE("Main edgepoint search failed for {} -- substituting entrypoint.", s.name);
 				s.ubStrategicInsertionCode = (UINT8)s.usStrategicInsertionData;
 				goto MAPEDGEPOINT_SEARCH_FAILED;
 			}
@@ -1247,11 +1142,11 @@ check_entry:
 		case INSERTION_CODE_SECONDARY_EDGEINDEX:
 		{
 			gridno = SearchForClosestSecondaryMapEdgepoint(s.sPendingActionData2, (UINT8)s.usStrategicInsertionData);
-			SLOGD(DEBUG_TAG_SMAP, "%ls's isolated insertion gridno is %d using %d as initial search gridno and %d insertion code.",
+			SLOGD("{}'s isolated insertion gridno is {} using {} as initial search gridno and {} insertion code.",
 						s.name, gridno, s.sPendingActionData2, s.usStrategicInsertionData);
 			if (gridno == NOWHERE)
 			{
-				SLOGE(DEBUG_TAG_SMAP, "Isolated edgepoint search failed for %ls -- substituting entrypoint.", s.name);
+				SLOGE("Isolated edgepoint search failed for {} -- substituting entrypoint.", s.name);
 				s.ubStrategicInsertionCode = (UINT8)s.usStrategicInsertionData;
 				goto MAPEDGEPOINT_SEARCH_FAILED;
 			}
@@ -1260,8 +1155,7 @@ check_entry:
 
 		case INSERTION_CODE_ARRIVING_GAME:
 			// Are we in the start sector?
-			if (SECTOR(x,             y)             == START_SECTOR && z              == 0 &&
-					SECTOR(gWorldSectorX, gWorldSectorY) == START_SECTOR && gbWorldSectorZ == 0)
+			if (sSector == startSector && gWorldSector == startSector)
 			{ // Try another location and walk into map
 				gridno = 4379;
 			}
@@ -1277,14 +1171,14 @@ check_entry:
 			return;
 
 		default:
-			SLOGD(DEBUG_TAG_SMAP, "Improper insertion code %d given to UpdateMercsInSector", s.ubStrategicInsertionCode);
+			SLOGD("Improper insertion code {} given to UpdateMercsInSector", s.ubStrategicInsertionCode);
 			goto place_in_center;
 	}
 
 	// If no insertion direction exists, this is bad!
 	if (gridno == -1)
 	{
-		SLOGW(DEBUG_TAG_SMAP, "Insertion gridno for direction %d not added to map sector %d %d", s.ubStrategicInsertionCode, x, y);
+		SLOGW("Insertion gridno for direction {} not added to map sector {}", s.ubStrategicInsertionCode, sSector);
 place_in_center:
 		gridno = WORLD_ROWS / 2 * WORLD_COLS + WORLD_COLS / 2;
 	}
@@ -1296,139 +1190,105 @@ place_in_center:
 
 static void InitializeStrategicMapSectorTownNames(void)
 {
-	StrategicMap[2+2*MAP_WORLD_X].bNameId= StrategicMap[2+1*MAP_WORLD_X].bNameId= CHITZENA;
-	StrategicMap[5+3*MAP_WORLD_X].bNameId=StrategicMap[6+3*MAP_WORLD_X].bNameId=StrategicMap[5+4*MAP_WORLD_X].bNameId = StrategicMap[4+4*MAP_WORLD_X].bNameId =SAN_MONA;
-	StrategicMap[9+1*MAP_WORLD_X].bNameId=StrategicMap[10+1*MAP_WORLD_X].bNameId=OMERTA;
-	StrategicMap[13+2*MAP_WORLD_X].bNameId=StrategicMap[13+3*MAP_WORLD_X].bNameId=StrategicMap[13+4*MAP_WORLD_X].bNameId=DRASSEN;
-	StrategicMap[1+7*MAP_WORLD_X].bNameId=StrategicMap[1+8*MAP_WORLD_X].bNameId=StrategicMap[2+7*MAP_WORLD_X].bNameId= StrategicMap[2+8*MAP_WORLD_X].bNameId = StrategicMap[3+8*MAP_WORLD_X].bNameId = GRUMM;
-	StrategicMap[6+9*MAP_WORLD_X].bNameId=ESTONI;
-	StrategicMap[9+10*MAP_WORLD_X].bNameId=TIXA;
-	StrategicMap[8+6*MAP_WORLD_X].bNameId=StrategicMap[9+6*MAP_WORLD_X].bNameId=StrategicMap[8+7*MAP_WORLD_X].bNameId=StrategicMap[9+7*MAP_WORLD_X].bNameId= StrategicMap[8+8*MAP_WORLD_X].bNameId = CAMBRIA;
-	StrategicMap[13+9*MAP_WORLD_X].bNameId=StrategicMap[14+9*MAP_WORLD_X].bNameId=StrategicMap[13+8*MAP_WORLD_X].bNameId=StrategicMap[14+8*MAP_WORLD_X].bNameId=ALMA;
-	StrategicMap[4+11*MAP_WORLD_X].bNameId=ORTA;
-	StrategicMap[11+12*MAP_WORLD_X].bNameId= 	StrategicMap[12+12*MAP_WORLD_X].bNameId = BALIME;
-	StrategicMap[3+14*MAP_WORLD_X].bNameId=StrategicMap[4+14*MAP_WORLD_X].bNameId=StrategicMap[5+14*MAP_WORLD_X].bNameId=StrategicMap[3+15*MAP_WORLD_X].bNameId=StrategicMap[4+15*MAP_WORLD_X].bNameId= StrategicMap[3+16*MAP_WORLD_X].bNameId = MEDUNA;
+	for (auto& element: GCM->getTowns())
+	{
+		auto town = element.second;
+		for (auto sector : town->sectorIDs)
+		{
+			StrategicMap[ SGPSector(sector).AsStrategicIndex() ].bNameId = town->townId;
+		}
+	}
 }
 
-
-void GetSectorIDString(INT16 const x, INT16 const y, INT8 const z, wchar_t* const buf, size_t const length, BOOLEAN const detailed)
+ST::string GetSectorLandTypeString(UINT8 const ubSectorID, UINT8 const ubSectorZ, bool const fDetailed)
 {
-	if (x <= 0 || y <= 0 || z < 0) /* Empty? */
+	// first consider map secrets and SAM sites
+	auto secret = GetMapSecretBySectorID(ubSectorID);
+	if (ubSectorZ == 0 && secret)
 	{
-		//swprintf(buf, L"%ls", pErrorStrings);
-		return;
+		UINT8 ubLandType = secret->getLandType(IsSecretFoundAt(ubSectorID));
+		if (ubLandType != TOWN) // we will handle town sectors separately
+		{
+			return (secret->isSAMSite && !fDetailed)
+					? GCM->getLandTypeString(SAM_SITE)
+					: GCM->getLandTypeString(ubLandType);
+		}
 	}
 
-	INT8    const  mine_index = GetIdOfMineForSector(x, y, z);
-	wchar_t const* add;
-	if (z != 0)
+	// special facilities
+	if (ubSectorZ > 0 || fDetailed)
 	{
-		UNDERGROUND_SECTORINFO const* const u = FindUnderGroundSector(x, y, z);
+		int16_t landType = GCM->getSectorLandType(ubSectorID, ubSectorZ);
+		if (landType >= 0)
+		{
+			return GCM->getLandTypeString(landType);
+		}
+	}
+
+	INT8 const town_name_id = StrategicMap[SGPSector(ubSectorID).AsStrategicIndex()].bNameId;
+	if (town_name_id != BLANK_SECTOR)
+	{	// show town name
+		return GCM->getTownName(town_name_id);
+	}
+
+	if (ubSectorZ > 0)
+	{	// any other underground sectors (not facility, not part of a mine) are creature lair
+		return GCM->getLandTypeString(CREATURE_LAIR);
+	}
+
+	// finally consider the sector traversibility
+	UINT8 ubTraversibility = SectorInfo[ubSectorID].ubTraversability[THROUGH_STRATEGIC_MOVE];
+	return GCM->getLandTypeString(ubTraversibility);
+}
+
+ST::string GetSectorIDString(const SGPSector& sector, BOOLEAN detailed)
+{
+	if (!sector.IsValid())
+	{
+		return ST::null;
+	}
+
+	if (sector.z != 0)
+	{
+		UNDERGROUND_SECTORINFO const* const u = FindUnderGroundSector(sector);
 		if (!u || (!(u->uiFlags & SF_ALREADY_VISITED) && !gfGettingNameFromSaveLoadScreen))
 		{ // Display nothing
-			buf[0] = L'\0';
-			return;
-		}
-
-		if (mine_index != -1)
-		{
-			add = pTownNames[GetTownAssociatedWithMine(mine_index)];
-		}
-		else switch (SECTOR(x, y))
-		{
-			case SEC_A10: add = pLandTypeStrings[REBEL_HIDEOUT]; break;
-			case SEC_J9:  add = pLandTypeStrings[TIXA_DUNGEON];  break;
-			case SEC_K4:  add = pLandTypeStrings[ORTA_BASEMENT]; break;
-			case SEC_O3:  add = pLandTypeStrings[TUNNEL];        break;
-			case SEC_P3:  add = pLandTypeStrings[SHELTER];       break;
-			default:      add = pLandTypeStrings[CREATURE_LAIR]; break;
+			return ST::null;
 		}
 	}
-	else
+
+	INT8    const  mine_index = GetIdOfMineForSector(sector);
+	ST::string add;
+	if (mine_index != -1)
 	{
-		UINT8 const sector_id = SECTOR(x, y);
-		switch (sector_id)
-		{
-			case SEC_B13:
-				if (!detailed) goto plain_sector;
-				add = pLandTypeStrings[DRASSEN_AIRPORT_SITE];
-				break;
-
-			case SEC_D2: // Chitzena SAM
-				add =
-					!fSamSiteFound[SAM_SITE_ONE] ? pLandTypeStrings[TROPICS]          :
-					detailed                     ? pLandTypeStrings[TROPICS_SAM_SITE] :
-					pLandTypeStrings[SAM_SITE];
-				break;
-
-			case SEC_D15: // Drassen SAM
-				add =
-					!fSamSiteFound[SAM_SITE_TWO] ? pLandTypeStrings[SPARSE]          :
-					detailed                     ? pLandTypeStrings[SPARSE_SAM_SITE] :
-					pLandTypeStrings[SAM_SITE];
-				break;
-
-			case SEC_F8:
-				if (!detailed) goto plain_sector;
-				add = pLandTypeStrings[CAMBRIA_HOSPITAL_SITE];
-				break;
-
-			case SEC_I8: // Cambria SAM
-				add =
-					!fSamSiteFound[SAM_SITE_THREE] ? pLandTypeStrings[SAND]          :
-					detailed                       ? pLandTypeStrings[SAND_SAM_SITE] :
-					pLandTypeStrings[SAM_SITE];
-				break;
-
-			case SEC_J9: // Tixa
-				add = fFoundTixa ? pTownNames[TIXA] : pLandTypeStrings[SAND];
-				break;
-
-			case SEC_K4: // Orta
-				add = fFoundOrta ? pTownNames[ORTA] : pLandTypeStrings[SWAMP];
-				break;
-
-			case SEC_N3:
-				if (!detailed) goto plain_sector;
-				add = pLandTypeStrings[MEDUNA_AIRPORT_SITE];
-				break;
-
-			case SEC_N4: // Meduna's SAM site
-				if (!fSamSiteFound[SAM_SITE_FOUR]) goto plain_sector;
-				add =
-					detailed ? pLandTypeStrings[MEDUNA_SAM_SITE] :
-					pLandTypeStrings[SAM_SITE];
-				break;
-
-			default: // All other towns that are known since beginning of the game.
-plain_sector:;
-				INT8 const town_name_id = StrategicMap[CALCULATE_STRATEGIC_INDEX(x, y)].bNameId;
-				add =
-					town_name_id != BLANK_SECTOR ? pTownNames[town_name_id] :
-					pLandTypeStrings[SectorInfo[sector_id].ubTraversability[THROUGH_STRATEGIC_MOVE]];
-				break;
+		add = GCM->getTownName(GetTownAssociatedWithMine(mine_index));
+		if (detailed && mine_index != -1)
+		{	// Append "Mine"
+			add += ST::format(" {}", pwMineStrings[0]);
 		}
 	}
 
-	size_t const n = swprintf(buf, length, L"%c%d: %ls", 'A' + y - 1, x, add);
-	if (detailed && mine_index != -1)
-	{ // Append "Mine"
-		swprintf(buf + n, length - n, L" %ls", pwMineStrings[0]);
+	if (add.empty())
+	{
+		UINT8 const sector_id = sector.AsByte();
+		add = GetSectorLandTypeString(sector_id, sector.z, detailed);
 	}
+
+	return ST::format("{c}{}: {}", 'A' + sector.y - 1, sector.x, add);
 }
 
 
 static void SetInsertionDataFromAdjacentMoveDirection(SOLDIERTYPE& s, UINT8 const tactical_direction, INT16 const additional_data)
 {
+	EXITGRID ExitGrid;
 	// Set insertion code
 	switch (tactical_direction)
 	{
 		case 255:
 			// We are using an exit grid, set insertion values
-			EXITGRID ExitGrid;
 			if (!GetExitGrid(additional_data, &ExitGrid))
 			{
-				SLOGE(DEBUG_TAG_ASSERTS, "No valid Exit grid can be found when one was expected: SetInsertionDataFromAdjacentMoveDirection.");
+				SLOGA("No valid Exit grid can be found when one was expected: SetInsertionDataFromAdjacentMoveDirection.");
 			}
 			s.ubStrategicInsertionCode        = INSERTION_CODE_GRIDNO;
 			s.usStrategicInsertionData        = ExitGrid.usGridNo;
@@ -1441,7 +1301,7 @@ static void SetInsertionDataFromAdjacentMoveDirection(SOLDIERTYPE& s, UINT8 cons
 		case WEST:  s.ubStrategicInsertionCode = INSERTION_CODE_EAST;  break;
 
 		default: // Wrong direction given
-			SLOGD(DEBUG_TAG_SMAP, "Improper insertion direction %d given to SetInsertionDataFromAdjacentMoveDirection", tactical_direction);
+			SLOGD("Improper insertion direction {} given to SetInsertionDataFromAdjacentMoveDirection", tactical_direction);
 			s.ubStrategicInsertionCode = INSERTION_CODE_WEST;
 			break;
 	}
@@ -1477,7 +1337,7 @@ static UINT8 GetInsertionDataFromAdjacentMoveDirection(UINT8 ubTacticalDirection
 			break;
 		default:
 			// Wrong direction given!
-			SLOGD(DEBUG_TAG_SMAP, "Improper insertion direction %d given to GetInsertionDataFromAdjacentMoveDirection", ubTacticalDirection);
+			SLOGD("Improper insertion direction {} given to GetInsertionDataFromAdjacentMoveDirection", ubTacticalDirection);
 			ubDirection = EAST_STRATEGIC_MOVE;
 	}
 
@@ -1515,7 +1375,7 @@ static UINT8 GetStrategicInsertionDataFromAdjacentMoveDirection(UINT8 ubTactical
 			break;
 		default:
 			// Wrong direction given!
-			SLOGD(DEBUG_TAG_SMAP, "Improper insertion direction %d given to GetStrategicInsertionDataFromAdjacentMoveDirection", ubTacticalDirection);
+			SLOGD("Improper insertion direction {} given to GetStrategicInsertionDataFromAdjacentMoveDirection", ubTacticalDirection);
 			ubDirection = EAST_STRATEGIC_MOVE;
 	}
 	return( ubDirection );
@@ -1579,23 +1439,23 @@ void JumpIntoAdjacentSector( UINT8 ubTacticalDirection, UINT8 ubJumpCode, INT16 
 	else
 	{
 		// OK, no jump code here given...
-		SLOGD(DEBUG_TAG_SMAP, "Improper jump code %d given to JumpIntoAdjacentSector", ubJumpCode);
+		SLOGD("Improper jump code {} given to JumpIntoAdjacentSector", ubJumpCode);
 	}
 
 	Assert( pValidSoldier );
 
 	//Now, determine the traversal time.
 	GROUP* const pGroup = GetGroup(pValidSoldier->ubGroupID);
-	AssertMsg( pGroup, String( "%ls is not in a valid group (pSoldier->ubGroupID is %d)",pValidSoldier->name, pValidSoldier->ubGroupID) );
+	AssertMsg(pGroup, ST::format("{} is not in a valid group(pSoldier->ubGroupID is {})", pValidSoldier->name, pValidSoldier->ubGroupID));
 
 	// If we are going through an exit grid, don't get traversal direction!
 	if ( ubTacticalDirection != 255 )
 	{
-		if( !gbWorldSectorZ )
+		if (!gWorldSector.z)
 		{
-			uiTraverseTime = GetSectorMvtTimeForGroup( (UINT8)SECTOR( pGroup->ubSectorX, pGroup->ubSectorY ), ubDirection, pGroup );
+			uiTraverseTime = GetSectorMvtTimeForGroup(pGroup->ubSector.AsByte(), ubDirection, pGroup);
 		}
-		else if( gbWorldSectorZ > 0 )
+		else if (gWorldSector.z > 0)
 		{ //We are attempting to traverse in an underground environment.  We need to use a complete different
 			//method.  When underground, all sectors are instantly adjacent.
 			uiTraverseTime = UndergroundTacticalTraversalTime( ubDirection );
@@ -1620,21 +1480,18 @@ void JumpIntoAdjacentSector( UINT8 ubTacticalDirection, UINT8 ubJumpCode, INT16 
 	// If normal direction, use it!
 	if ( ubTacticalDirection != 255 )
 	{
-		gsAdjacentSectorX				= (INT16)(gWorldSectorX + DirXIncrementer[ ubTacticalDirection ]);
-		gsAdjacentSectorY				= (INT16)(gWorldSectorY + DirYIncrementer[ ubTacticalDirection ]);
-		gbAdjacentSectorZ				= pValidSoldier->bSectorZ;
+		gsAdjacentSector = gWorldSector + SectorIncrementer[ubTacticalDirection];
+		gsAdjacentSector.z = pValidSoldier->sSector.z;
 	}
 	else
 	{
 		// Take directions from exit grid info!
 		if ( !GetExitGrid( sAdditionalData, &ExitGrid ) )
 		{
-			SLOGE(DEBUG_TAG_ASSERTS, "Told to use exit grid at %d but one does not exist", sAdditionalData);
+			SLOGA("Told to use exit grid at {} but one does not exist", sAdditionalData);
 		}
 
-		gsAdjacentSectorX				= ExitGrid.ubGotoSectorX;
-		gsAdjacentSectorY				= ExitGrid.ubGotoSectorY;
-		gbAdjacentSectorZ				= ExitGrid.ubGotoSectorZ;
+		gsAdjacentSector = ExitGrid.ubGotoSector;
 	}
 
 	// Give guy(s) orders to walk off sector...
@@ -1661,7 +1518,7 @@ void JumpIntoAdjacentSector( UINT8 ubTacticalDirection, UINT8 ubJumpCode, INT16 
 					}
 					else
 					{
-						SLOGE(DEBUG_TAG_ASSERTS, "Failed to get good exit location for adjacentmove");
+						SLOGA("Failed to get good exit location for adjacentmove");
 					}
 
 					EVENT_GetNewSoldierPath( curr->pSoldier, sGridNo, WALKING );
@@ -1680,7 +1537,7 @@ void JumpIntoAdjacentSector( UINT8 ubTacticalDirection, UINT8 ubJumpCode, INT16 
 					}
 					else
 					{
-						SLOGE(DEBUG_TAG_ASSERTS, "Failed to get good exit location for adjacentmove");
+						SLOGA("Failed to get good exit location for adjacentmove");
 					}
 
 					// Don't worry about walk off screen, just stay at gridno...
@@ -1758,7 +1615,7 @@ void HandleSoldierLeavingSectorByThemSelf( SOLDIERTYPE *pSoldier )
 	if( pSoldier->ubGroupID == 0 )
 	{
 		// create independant group
-		GROUP& g = *CreateNewPlayerGroupDepartingFromSector(pSoldier->sSectorX, pSoldier->sSectorY);
+		GROUP& g = *CreateNewPlayerGroupDepartingFromSector(pSoldier->sSector);
 		AddPlayerToGroup(g, *pSoldier);
 	}
 }
@@ -1784,7 +1641,7 @@ void AllMercsWalkedToExitGrid()
 			RemoveSoldierFromTacticalSector(s);
 		}
 
-		SetGroupSectorValue(gsAdjacentSectorX, gsAdjacentSectorY, gbAdjacentSectorZ, *gpAdjacentGroup);
+		SetGroupSectorValue(gsAdjacentSector, *gpAdjacentGroup);
 
 		SetDefaultSquadOnSectorEntry( TRUE );
 
@@ -1825,14 +1682,14 @@ void AllMercsWalkedToExitGrid()
 		{
 			SetInsertionDataFromAdjacentMoveDirection(*pPlayer->pSoldier, gubTacticalDirection, gsAdditionalData);
 		}
-		SetGroupSectorValue(gsAdjacentSectorX, gsAdjacentSectorY, gbAdjacentSectorZ, *gpAdjacentGroup);
+		SetGroupSectorValue(gsAdjacentSector, *gpAdjacentGroup);
 
 		gFadeOutDoneCallback = DoneFadeOutExitGridSector;
 		FadeOutGameScreen( );
 	}
-	if( !PlayerMercsInSector( (UINT8)gsAdjacentSectorX, (UINT8)gsAdjacentSectorY, (UINT8)gbAdjacentSectorZ ) )
+	if (!PlayerMercsInSector(gsAdjacentSector))
 	{
-		HandleLoyaltyImplicationsOfMercRetreat( RETREAT_TACTICAL_TRAVERSAL, gsAdjacentSectorX, gsAdjacentSectorY, gbAdjacentSectorZ );
+		HandleLoyaltyImplicationsOfMercRetreat(RETREAT_TACTICAL_TRAVERSAL, gsAdjacentSector);
 	}
 	if( gubAdjacentJumpCode == JUMP_ALL_NO_LOAD || gubAdjacentJumpCode == JUMP_SINGLE_NO_LOAD )
 	{
@@ -1855,7 +1712,7 @@ static void SetupTacticalTraversalInformation(void)
 		SetInsertionDataFromAdjacentMoveDirection(s, gubTacticalDirection, gsAdditionalData);
 
 		// pass flag that this is a tactical traversal, the path built MUST go in the traversed direction even if longer!
-		PlotPathForCharacter(s, gsAdjacentSectorX, gsAdjacentSectorY, true);
+		PlotPathForCharacter(s, gsAdjacentSector, true);
 
 		if( guiAdjacentTraverseTime <= 5 )
 		{
@@ -1905,14 +1762,14 @@ void AllMercsHaveWalkedOffSector( )
 {
 	BOOLEAN fEnemiesInLoadedSector = FALSE;
 
-	if( NumEnemiesInAnySector( gWorldSectorX, gWorldSectorY, gbWorldSectorZ ) )
+	if (NumEnemiesInAnySector(gWorldSector))
 	{
 		fEnemiesInLoadedSector = TRUE;
 	}
 
 	if (fEnemiesInLoadedSector)
 	{
-		HandleLoyaltyImplicationsOfMercRetreat( RETREAT_TACTICAL_TRAVERSAL, gWorldSectorX, gWorldSectorY, gbWorldSectorZ );
+		HandleLoyaltyImplicationsOfMercRetreat(RETREAT_TACTICAL_TRAVERSAL, gWorldSector);
 	}
 
 	//Setup strategic traversal information
@@ -1921,14 +1778,14 @@ void AllMercsHaveWalkedOffSector( )
 		gfTacticalTraversal = TRUE;
 		gpTacticalTraversalGroup = gpAdjacentGroup;
 
-		if( gbAdjacentSectorZ > 0 && guiAdjacentTraverseTime <= 5 )
+		if (gsAdjacentSector.z > 0 && guiAdjacentTraverseTime <= 5)
 		{	//Nasty strategic movement logic doesn't like underground sectors!
 			gfUndergroundTacticalTraversal = TRUE;
 		}
 	}
 	ClearMercPathsAndWaypointsForAllInGroup(*gpAdjacentGroup);
-	AddWaypointToPGroup( gpAdjacentGroup, (UINT8)gsAdjacentSectorX, (UINT8)gsAdjacentSectorY );
-	if( gbAdjacentSectorZ > 0 && guiAdjacentTraverseTime <= 5 )
+	AddWaypointToPGroup(gpAdjacentGroup, gsAdjacentSector);
+	if (gsAdjacentSector.z > 0 && guiAdjacentTraverseTime <= 5)
 	{	//Nasty strategic movement logic doesn't like underground sectors!
 		gfUndergroundTacticalTraversal = TRUE;
 	}
@@ -1954,7 +1811,7 @@ void AllMercsHaveWalkedOffSector( )
 			//of the tactical placement gui to get into better position.  Additionally, if there are any
 			//enemies in this sector that are part of a movement group, reset that movement group so that they
 			//are "in" the sector rather than 75% of the way to the next sector if that is the case.
-			ResetMovementForEnemyGroupsInLocation( (UINT8)gWorldSectorX, (UINT8)gWorldSectorY );
+			ResetMovementForEnemyGroupsInLocation();
 
 			if( guiAdjacentTraverseTime > 5 )
 			{
@@ -1965,13 +1822,13 @@ void AllMercsHaveWalkedOffSector( )
 		if( guiAdjacentTraverseTime <= 5 )
 		{
 			//Case 2:  Immediatly loading the next sector
-			if( !gbAdjacentSectorZ )
+			if (!gsAdjacentSector.z)
 			{
 				UINT32 uiWarpTime;
 				uiWarpTime = (GetWorldTotalMin() + 5) * 60 - GetWorldTotalSeconds();
 				WarpGameTime( uiWarpTime, WARPTIME_PROCESS_TARGET_TIME_FIRST );
 			}
-			else if( gbAdjacentSectorZ > 0 )
+			else if (gsAdjacentSector.z > 0)
 			{
 				UINT32 uiWarpTime;
 				uiWarpTime = (GetWorldTotalMin() + 1) * 60 - GetWorldTotalSeconds();
@@ -2000,7 +1857,7 @@ void AllMercsHaveWalkedOffSector( )
 
 static void DoneFadeOutExitGridSector(void)
 {
-	SetCurrentWorldSector( gsAdjacentSectorX, gsAdjacentSectorY, gbAdjacentSectorZ );
+	SetCurrentWorldSector(gsAdjacentSector);
 	if( gfTacticalTraversal && gpTacticalTraversalGroup && gpTacticalTraversalChosenSoldier )
 	{
 		if( gTacticalStatus.fEnemyInSector )
@@ -2021,7 +1878,7 @@ static INT16 PickGridNoToWalkIn(SOLDIERTYPE* pSoldier, UINT8 ubInsertionDirectio
 static void DoneFadeOutAdjacentSector(void)
 {
 	UINT8 ubDirection;
-	SetCurrentWorldSector( gsAdjacentSectorX, gsAdjacentSectorY, gbAdjacentSectorZ );
+	SetCurrentWorldSector(gsAdjacentSector);
 
 	ubDirection = GetStrategicInsertionDataFromAdjacentMoveDirection( gubTacticalDirection, gsAdditionalData );
 	if( gfTacticalTraversal && gpTacticalTraversalGroup && gpTacticalTraversalChosenSoldier )
@@ -2079,7 +1936,7 @@ static void DoneFadeOutAdjacentSector(void)
 			}
 			else
 			{
-				SLOGW(DEBUG_TAG_SMAP, "%ls's gridno is NOWHERE, and is attempting to walk into sector.", curr->pSoldier->name);
+				SLOGW("{}'s gridno is NOWHERE, and is attempting to walk into sector.", curr->pSoldier->name);
 			}
 		}
 		SetActionToDoOnceMercsGetToLocation(WAIT_FOR_MERCS_TO_WALKON_SCREEN, ubNum);
@@ -2190,7 +2047,6 @@ BOOLEAN OKForSectorExit( INT8 bExitDirection, UINT16 usAdditionalData, UINT32 *p
 	BOOLEAN     fOnlySelectedGuy = FALSE;
 	SOLDIERTYPE *pValidSoldier = NULL;
 	UINT8       ubReturnVal = FALSE;
-	UINT8       ubNumControllableMercs = 0;
 	UINT8       ubNumMercs = 0, ubNumEPCs = 0;
 	UINT8       ubPlayerControllableMercsInSquad = 0;
 
@@ -2202,12 +2058,12 @@ BOOLEAN OKForSectorExit( INT8 bExitDirection, UINT16 usAdditionalData, UINT32 *p
 	//Exception code for the two sectors in San Mona that are separated by a cliff.  We want to allow strategic
 	//traversal, but NOT tactical traversal.  The only way to tactically go from D4 to D5 (or viceversa) is to enter
 	//the cave entrance.
-	if( gWorldSectorX == 4 && gWorldSectorY == 4 && !gbWorldSectorZ && bExitDirection == EAST_STRATEGIC_MOVE )
+	if (gWorldSector.x == 4 && gWorldSector.y == 4 && !gWorldSector.z && bExitDirection == EAST_STRATEGIC_MOVE )
 	{
 		gfInvalidTraversal = TRUE;
 		return FALSE;
 	}
-	if( gWorldSectorX == 5 && gWorldSectorY == 4 && !gbWorldSectorZ && bExitDirection == WEST_STRATEGIC_MOVE )
+	if (gWorldSector.x == 5 && gWorldSector.y == 4 && !gWorldSector.z && bExitDirection == WEST_STRATEGIC_MOVE )
 	{
 		gfInvalidTraversal = TRUE;
 		return FALSE;
@@ -2229,8 +2085,6 @@ BOOLEAN OKForSectorExit( INT8 bExitDirection, UINT16 usAdditionalData, UINT32 *p
 			//not more than once.
 			pValidSoldier = pSoldier;
 
-			ubNumControllableMercs++;
-
 			//We need to keep track of the number of EPCs and mercs in this squad.  If we have
 			//only one merc and one or more EPCs, then we can't allow the merc to tactically traverse,
 			//if he is the only merc near enough to traverse.
@@ -2242,7 +2096,6 @@ BOOLEAN OKForSectorExit( INT8 bExitDirection, UINT16 usAdditionalData, UINT32 *p
 				if( AM_A_ROBOT( pSoldier ) && !CanRobotBeControlled( pSoldier ) )
 				{
 					gfRobotWithoutControllerAttemptingTraversal = TRUE;
-					ubNumControllableMercs--;
 					continue;
 				}
 			}
@@ -2266,13 +2119,13 @@ BOOLEAN OKForSectorExit( INT8 bExitDirection, UINT16 usAdditionalData, UINT32 *p
 				{
 					//Now, determine if this is a valid path.
 					pGroup = GetGroup( pValidSoldier->ubGroupID );
-					AssertMsg( pGroup, String( "%ls is not in a valid group (pSoldier->ubGroupID is %d)",pValidSoldier->name, pValidSoldier->ubGroupID) );
+					AssertMsg(pGroup, ST::format("{} is not in a valid group (pSoldier->ubGroupID is {})", pValidSoldier->name, pValidSoldier->ubGroupID));
 					UINT32 traverse_time = TRAVERSE_TIME_IMPOSSIBLE;
-					if( !gbWorldSectorZ )
+					if (!gWorldSector.z)
 					{
-						traverse_time = GetSectorMvtTimeForGroup((UINT8)SECTOR(pGroup->ubSectorX, pGroup->ubSectorY), bExitDirection, pGroup);
+						traverse_time = GetSectorMvtTimeForGroup(pGroup->ubSector.AsByte(), bExitDirection, pGroup);
 					}
-					else if( gbWorldSectorZ > 1 )
+					else if (gWorldSector.z > 1)
 					{ //We are attempting to traverse in an underground environment.  We need to use a complete different
 						//method.  When underground, all sectors are instantly adjacent.
 						traverse_time = UndergroundTacticalTraversalTime(bExitDirection);
@@ -2324,13 +2177,13 @@ BOOLEAN OKForSectorExit( INT8 bExitDirection, UINT16 usAdditionalData, UINT32 *p
 			GROUP *pGroup;
 			//Now, determine if this is a valid path.
 			pGroup = GetGroup( pValidSoldier->ubGroupID );
-			AssertMsg( pGroup, String( "%ls is not in a valid group (pSoldier->ubGroupID is %d)",pValidSoldier->name, pValidSoldier->ubGroupID) );
+			AssertMsg(pGroup, ST::format("{} is not in a valid group (pSoldier->ubGroupID is {})", pValidSoldier->name, pValidSoldier->ubGroupID));
 			UINT32 traverse_time = TRAVERSE_TIME_IMPOSSIBLE; // -XXX Wmaybe-uninitialized : valid default?
-			if( !gbWorldSectorZ )
+			if (!gWorldSector.z)
 			{
-				traverse_time = GetSectorMvtTimeForGroup((UINT8)SECTOR(pGroup->ubSectorX, pGroup->ubSectorY), bExitDirection, pGroup);
+				traverse_time = GetSectorMvtTimeForGroup(pGroup->ubSector.AsByte(), bExitDirection, pGroup);
 			}
-			else if( gbWorldSectorZ > 0 )
+			else if (gWorldSector.z > 0)
 			{ //We are attempting to traverse in an underground environment.  We need to use a complete different
 				//method.  When underground, all sectors are instantly adjacent.
 				traverse_time = UndergroundTacticalTraversalTime(bExitDirection);
@@ -2416,44 +2269,16 @@ void SetupNewStrategicGame()
 	gfBlitBattleSectorLocator = FALSE;
 
 	StrategicTurnsNewGame();
+
+	// Move the landing zone over to the start sector.
+	g_merc_arrive_sector = SGPSector(gamepolicy(start_sector));
 }
 
 
-// a -1 will be returned upon failure
-INT8 GetSAMIdFromSector( INT16 sSectorX, INT16 sSectorY, INT8 bSectorZ )
-{
-	INT8 bCounter = 0;
-	INT16 sSectorValue = 0;
-
-	// check if valid sector
-	if( bSectorZ != 0 )
-	{
-		return( -1 );
-	}
-
-	// get the sector value
-	sSectorValue = SECTOR( sSectorX, sSectorY );
-
-	// run through list of sam sites
-	for( bCounter = 0; bCounter < 4; bCounter++ )
-	{
-		if( pSamList[ bCounter ] == sSectorValue )
-		{
-			return( bCounter );
-		}
-	}
-
-
-	return( -1 );
-}
-
-
-bool CanGoToTacticalInSector(INT16 const x, INT16 const y, UINT8 const z)
+bool CanGoToTacticalInSector(const SGPSector& sector)
 {
 	// If not a valid sector
-	if (x < 1 || 16 < x) return false;
-	if (y < 1 || 16 < x) return false;
-	if (          3 < z) return false;
+	if (!sector.IsValid()) return false;
 
 	/* Look for all living, fighting mercs on player's team. Robot and EPCs
 	 * qualify! */
@@ -2469,89 +2294,34 @@ bool CanGoToTacticalInSector(INT16 const x, INT16 const y, UINT8 const z)
 		if (s.bAssignment == ASSIGNMENT_DEAD)  continue;
 		if (SoldierAboardAirborneHeli(s))      continue;
 		if (s.fBetweenSectors)                 continue;
-		if (s.sSectorX != x)                   continue;
-		if (s.sSectorY != y)                   continue;
-		if (s.bSectorZ != z)                   continue;
+		if (s.sSector != sector)               continue;
 		return true;
 	}
 
 	return false;
 }
 
-
-INT32 GetNumberOfSAMSitesUnderPlayerControl()
+static void HandleAirspaceControlUpdated()
 {
-	INT32 n = 0;
-	FOR_EACH(INT16 const, i, pSamList)
-	{
-		if (!StrategicMap[SECTOR_INFO_TO_STRATEGIC_INDEX(*i)].fEnemyControlled) ++n;
-	}
-	return n;
-}
-
-
-void UpdateAirspaceControl( void )
-{
-	INT32 iCounterA = 0, iCounterB = 0;
-	UINT8 ubControllingSAM;
-	StrategicMapElement *pSAMStrategicMap = NULL;
-	BOOLEAN fEnemyControlsAir;
-
-
-	for( iCounterA = 1; iCounterA < ( INT32 )( MAP_WORLD_X - 1 ); iCounterA++ )
-	{
-		for( iCounterB = 1; iCounterB < ( INT32 )( MAP_WORLD_Y - 1 ); iCounterB++ )
-		{
-			// IMPORTANT: B and A are reverse here, since the table is stored transposed
-			ubControllingSAM = ubSAMControlledSectors[ iCounterB ][ iCounterA ];
-
-			if ( ( ubControllingSAM >= 1 ) && ( ubControllingSAM <= NUMBER_OF_SAMS ) )
-			{
-				pSAMStrategicMap = &( StrategicMap[ SECTOR_INFO_TO_STRATEGIC_INDEX( pSamList[ ubControllingSAM - 1 ] ) ] );
-
-				// if the enemies own the controlling SAM site, and it's in working condition
-				if( ( pSAMStrategicMap->fEnemyControlled ) && ( pSAMStrategicMap->bSAMCondition >= MIN_CONDITION_FOR_SAM_SITE_TO_WORK ) )
-				{
-					fEnemyControlsAir = TRUE;
-				}
-				else
-				{
-					fEnemyControlsAir = FALSE;
-				}
-			}
-			else
-			{
-				// no controlling SAM site
-				fEnemyControlsAir = FALSE;
-			}
-
-			StrategicMap[ CALCULATE_STRATEGIC_INDEX( iCounterA, iCounterB ) ].fEnemyAirControlled = fEnemyControlsAir;
-		}
-	}
-
-
 	// check if currently selected arrival sector still has secure airspace
 
 	// if it's not enemy air controlled
-	if (StrategicMap[SECTOR_INFO_TO_STRATEGIC_INDEX(g_merc_arrive_sector)].fEnemyAirControlled)
+	if (StrategicMap[g_merc_arrive_sector.AsStrategicIndex()].fEnemyAirControlled)
 	{
-		// NOPE!
-		wchar_t sMsgString[ 256 ], sMsgSubString1[ 64 ], sMsgSubString2[ 64 ];
-
 		// get the name of the old sector
-		GetSectorIDString(SECTORX(g_merc_arrive_sector), SECTORY(g_merc_arrive_sector), 0, sMsgSubString1, lengthof(sMsgSubString1), FALSE);
+		ST::string sMsgSubString1 = GetSectorIDString(g_merc_arrive_sector, FALSE);
 
 		// Move the landing zone over to the start sector.
-		g_merc_arrive_sector = START_SECTOR;
+		g_merc_arrive_sector = SGPSector(gamepolicy(start_sector));
 
 		// get the name of the new sector
-		GetSectorIDString(SECTORX(g_merc_arrive_sector), SECTORY(g_merc_arrive_sector), 0, sMsgSubString2, lengthof(sMsgSubString2), FALSE);
+		ST::string sMsgSubString2 = GetSectorIDString(g_merc_arrive_sector, FALSE);
 
 		// now build the string
-		swprintf( sMsgString, lengthof(sMsgString), pBullseyeStrings[ 4 ], sMsgSubString1, sMsgSubString2 );
+		ST::string sMsgString = st_format_printf(pBullseyeStrings[ 4 ], sMsgSubString1, sMsgSubString2);
 
 		// confirm the change with overlay message
-		DoScreenIndependantMessageBox( sMsgString, MSG_BOX_FLAG_OK, NULL );
+		DoScreenIndependantMessageBox(sMsgString, MSG_BOX_FLAG_OK, NULL);
 
 		// update position of bullseye
 		fMapPanelDirty = TRUE;
@@ -2562,29 +2332,8 @@ void UpdateAirspaceControl( void )
 
 
 	// ARM: airspace control now affects refueling site availability, so update that too with every change!
-	UpdateRefuelSiteAvailability( );
+	UpdateRefuelSiteAvailability();
 }
-
-
-bool IsThereAFunctionalSAMSiteInSector(INT16 const x, INT16 const y, INT8 const z)
-{
-	return
-		IsThisSectorASAMSector(x, y, z) &&
-		StrategicMap[CALCULATE_STRATEGIC_INDEX(x, y)].bSAMCondition >= MIN_CONDITION_FOR_SAM_SITE_TO_WORK;
-}
-
-
-bool IsThisSectorASAMSector(INT16 const x, INT16 const y, INT8 const z)
-{
-	if (z != 0) return false;
-
-	FOR_EACH(INT16 const, i, pSamList)
-	{
-		if (*i == SECTOR(x, y)) return true;
-	}
-	return false;
-}
-
 
 void SaveStrategicInfoToSavedFile(HWFILE const f)
 {
@@ -2601,10 +2350,11 @@ void SaveStrategicInfoToSavedFile(HWFILE const f)
 	}
 
 	// Skip the SAM controlled sector information
-	FileSeek(f, MAP_WORLD_X * MAP_WORLD_Y, FILE_SEEK_FROM_CURRENT);
+	f->seek(MAP_WORLD_X * MAP_WORLD_Y, FILE_SEEK_FROM_CURRENT);
 
-	// Save fFoundOrta
-	FileWrite(f, &fFoundOrta, sizeof(BOOLEAN));
+	// Save the state of the 2nd map secret (fFoundOrta)
+	BOOLEAN fFound = GetMapSecretStateForSave(1);
+	f->write(&fFound, sizeof(BOOLEAN));
 }
 
 
@@ -2623,10 +2373,12 @@ void LoadStrategicInfoFromSavedFile(HWFILE const f)
 	}
 
 	// Skip the SAM controlled sector information
-	FileSeek(f, MAP_WORLD_X * MAP_WORLD_Y, FILE_SEEK_FROM_CURRENT);
+	f->seek(MAP_WORLD_X * MAP_WORLD_Y, FILE_SEEK_FROM_CURRENT);
 
-	// Load fFoundOrta
-	FileRead(f, &fFoundOrta, sizeof(BOOLEAN));
+	// Load state of the 2nd map secret (fFoundOrta)
+	BOOLEAN fFound;
+	f->read(&fFound, sizeof(BOOLEAN));
+	SetMapSecretStateFromSave(1, fFound);
 }
 
 
@@ -3313,29 +3065,6 @@ static INT16 PickGridNoToWalkIn(SOLDIERTYPE* pSoldier, UINT8 ubInsertionDirectio
 	return( NOWHERE );
 }
 
-
-//NEW!
-//Calculates the name of the sector based on the loaded sector values.
-//Examples:		A9
-//						A10_B1
-//						J9_B2_A ( >= BETAVERSION ) else J9_B2 (release equivalent)
-static void GetLoadedSectorString(wchar_t* const pString, const size_t Length)
-{
-	if (!gfWorldLoaded)
-	{
-		swprintf(pString, Length, L"");
-	}
-	else if (gbWorldSectorZ == 0)
-	{
-		swprintf(pString, Length, L"%c%d", gWorldSectorY + 'A' - 1, gWorldSectorX);
-	}
-	else
-	{
-		swprintf(pString, Length, L"%c%d_b%d", gWorldSectorY + 'A' - 1, gWorldSectorX, gbWorldSectorZ);
-	}
-}
-
-
 void HandleSlayDailyEvent( void )
 {
 	SOLDIERTYPE* const pSoldier = FindSoldierByProfileIDOnPlayerTeam(SLAY);
@@ -3362,9 +3091,9 @@ void HandleSlayDailyEvent( void )
 }
 
 
-bool IsSectorDesert(INT16 const x, INT16 const y)
+bool IsSectorDesert(const SGPSector& sector)
 {
-	return SectorInfo[SECTOR(x, y)].ubTraversability[THROUGH_STRATEGIC_MOVE] == SAND;
+	return SectorInfo[sector.AsByte()].ubTraversability[THROUGH_STRATEGIC_MOVE] == SAND;
 }
 
 
@@ -3382,7 +3111,7 @@ static void HandleDefiniteUnloadingOfWorld(UINT8 const ubUnloadCode)
 	RemoveAllActiveTimedBombs();
 
 	// handle any quest stuff here so world items can be affected
-	HandleQuestCodeOnSectorExit( gWorldSectorX, gWorldSectorY, gbWorldSectorZ );
+	HandleQuestCodeOnSectorExit(gWorldSector);
 
 	//if we arent loading a saved game
 	if( !(gTacticalStatus.uiFlags & LOADING_SAVED_GAME ) )
@@ -3433,9 +3162,7 @@ BOOLEAN HandlePotentialBringUpAutoresolveToFinishBattle( )
 		SOLDIERTYPE const& creature = GetMan(i);
 		if (creature.bActive &&
 				creature.bLife != 0 &&
-				creature.sSectorX == gWorldSectorX &&
-				creature.sSectorY == gWorldSectorY &&
-				creature.bSectorZ == gbWorldSectorZ)
+				creature.sSector == gWorldSector)
 		{ //We have enemies, now look for militia!
 			for( i = gTacticalStatus.Team[ MILITIA_TEAM ].bFirstID; i <= gTacticalStatus.Team[ MILITIA_TEAM ].bLastID; i++ )
 			{
@@ -3443,17 +3170,13 @@ BOOLEAN HandlePotentialBringUpAutoresolveToFinishBattle( )
 				if (milita.bActive &&
 						milita.bLife != 0 &&
 						milita.bSide    == OUR_TEAM &&
-						milita.sSectorX == gWorldSectorX &&
-						milita.sSectorY == gWorldSectorY &&
-						milita.bSectorZ == gbWorldSectorZ)
+						milita.sSector == gWorldSector)
 				{ //We have militia and enemies and no mercs!  Let's finish this battle in autoresolve.
 					gfEnteringMapScreen = TRUE;
 					gfEnteringMapScreenToEnterPreBattleInterface = TRUE;
 					gfAutomaticallyStartAutoResolve = TRUE;
 					gfUsePersistantPBI = FALSE;
-					gubPBSectorX = (UINT8)gWorldSectorX;
-					gubPBSectorY = (UINT8)gWorldSectorY;
-					gubPBSectorZ = (UINT8)gbWorldSectorZ;
+					gubPBSector = gWorldSector;
 					gfBlitBattleSectorLocator = TRUE;
 					gfTransferTacticalOppositionToAutoResolve = TRUE;
 					if( gubEnemyEncounterCode != CREATURE_ATTACK_CODE )
@@ -3478,24 +3201,23 @@ BOOLEAN HandlePotentialBringUpAutoresolveToFinishBattle( )
 BOOLEAN CheckAndHandleUnloadingOfCurrentWorld()
 try
 {
-	INT16 sBattleSectorX, sBattleSectorY, sBattleSectorZ;
-
 	//Don't bother checking this if we don't have a world loaded.
 	if( !gfWorldLoaded )
 	{
 		return FALSE;
 	}
 
-	if (DidGameJustStart() && SECTOR(gWorldSectorX, gWorldSectorY) == START_SECTOR && gbWorldSectorZ == 0)
+	if (DidGameJustStart() && gWorldSector.AsByte() == gamepolicy(start_sector) && gWorldSector.z == 0)
 	{
 		return FALSE;
 	}
 
-	GetCurrentBattleSectorXYZ( &sBattleSectorX, &sBattleSectorY, &sBattleSectorZ );
+	SGPSector sBattleSector;
+	GetCurrentBattleSectorXYZ(sBattleSector);
 
 	if( guiCurrentScreen == AUTORESOLVE_SCREEN )
 	{ //The user has decided to let the game autoresolve the current battle.
-		if( gWorldSectorX == sBattleSectorX && gWorldSectorY == sBattleSectorY && gbWorldSectorZ == sBattleSectorZ )
+		if (gWorldSector == sBattleSector)
 		{
 			FOR_EACH_IN_TEAM(i, OUR_TEAM)
 			{ //If we have a live and valid soldier
@@ -3504,9 +3226,7 @@ try
 				if (s.fBetweenSectors)            continue;
 				if (IsMechanical(s))              continue;
 				if (AM_AN_EPC(&s))                continue;
-				if (s.sSectorX != gWorldSectorX)  continue;
-				if (s.sSectorY != gWorldSectorY)  continue;
-				if (s.bSectorZ != gbWorldSectorZ) continue;
+				if (s.sSector != gWorldSector)    continue;
 				RemoveSoldierFromGridNo(s);
 				InitSoldierOppList(s);
 			}
@@ -3520,9 +3240,7 @@ try
 					!s->fBetweenSectors &&
 					!IsMechanical(*s) &&
 					!AM_AN_EPC(s) &&
-					s->sSectorX == gWorldSectorX &&
-					s->sSectorY == gWorldSectorY &&
-					s->bSectorZ == gbWorldSectorZ)
+					s->sSector == gWorldSector)
 			{
 				return FALSE;
 			}
@@ -3569,7 +3287,7 @@ try
 
 	if( guiCurrentScreen == AUTORESOLVE_SCREEN )
 	{
-		if( gWorldSectorX == sBattleSectorX && gWorldSectorY == sBattleSectorY && gbWorldSectorZ == sBattleSectorZ )
+		if (gWorldSector == sBattleSector)
 		{
 			/* Yes, this is and looks like a hack.  The conditions of this if
 			 * statement doesn't work inside TrashWorld() or more specifically,
@@ -3706,6 +3424,7 @@ static void HandlePotentialMoraleHitForSkimmingSectors(GROUP* pGroup)
 
 UINT GetWorldSector()
 {
-	if (gWorldSectorX == 0 || gWorldSectorY == 0) return NO_SECTOR;
-	return SECTOR(gWorldSectorX, gWorldSectorY);
+	if (!gWorldSector.IsValid()) return NO_SECTOR;
+	return gWorldSector.AsByte();
 }
+

@@ -1,7 +1,10 @@
 #ifndef _MAP_SCREEN_INTERFACE_MAP_H
 #define _MAP_SCREEN_INTERFACE_MAP_H
 
-#include "JA2Types.h"
+#include "Types.h"
+#include "UILayout.h"
+struct SOLDIERTYPE;
+struct VEHICLETYPE;
 
 
 void InitMapScreenInterfaceMap();
@@ -12,25 +15,25 @@ void DrawMapIndexBigMap( BOOLEAN fSelectedCursorIsYellow );
 
 void DrawMap(void);
 
-void GetScreenXYFromMapXY( INT16 sMapX, INT16 sMapY, INT16 *psX, INT16 *psY );
+void GetScreenXYFromMapXY(const SGPSector& sMap, INT16 *psX, INT16 *psY);
 
 void InitializePalettesForMap(void);
 void ShutDownPalettesForMap( void );
 
 // plot path for helicopter
-void PlotPathForHelicopter( INT16 sX, INT16 sY );
+void PlotPathForHelicopter(const SGPSector& sector);
 
 // the temp path, where the helicopter could go
-void PlotATemporaryPathForHelicopter( INT16 sX, INT16 sY );
+void PlotATemporaryPathForHelicopter(const SGPSector& sector);
 
 // show arrows for this char
 void DisplayPathArrows(UINT16 usCharNum, HVOBJECT hMapHandle);
 
 // build path for character
-void PlotPathForCharacter(SOLDIERTYPE&, INT16 x, INT16 y, bool tactical_traversal);
+void PlotPathForCharacter(SOLDIERTYPE&, const SGPSector& sector, bool tactical_traversal);
 
 // build temp path for character
-void PlotATemporaryPathForCharacter(const SOLDIERTYPE* s, INT16 sX, INT16 sY);
+void PlotATemporaryPathForCharacter(const SOLDIERTYPE* s, const SGPSector& sector);
 
 
 // display current/temp paths
@@ -41,24 +44,24 @@ void DisplayHelicopterTempPath( void );
 
 
 // clear path after this sector
-UINT32 ClearPathAfterThisSectorForCharacter( SOLDIERTYPE *pCharacter, INT16 sX, INT16 sY );
+UINT32 ClearPathAfterThisSectorForCharacter(SOLDIERTYPE *pCharacter, const SGPSector& sMap);
 
 // cancel path : clear the path completely and gives player feedback message that the route was canceled
 void CancelPathForCharacter( SOLDIERTYPE *pCharacter );
 void CancelPathForVehicle(VEHICLETYPE&, BOOLEAN fAlreadyReversed);
 
 // check if we have waited long enought o update temp path
-void DisplayThePotentialPathForHelicopter(INT16 sMapX, INT16 sMapY );
+void DisplayThePotentialPathForHelicopter(const SGPSector& sector);
 
 // clear out helicopter list after this sector
-UINT32 ClearPathAfterThisSectorForHelicopter( INT16 sX, INT16 sY );
+UINT32 ClearPathAfterThisSectorForHelicopter(const SGPSector& sMap);
 
 
 // check to see if sector is highlightable
-bool IsTheCursorAllowedToHighLightThisSector(INT16 x, INT16 y);
+bool IsTheCursorAllowedToHighLightThisSector(const SGPSector& sMap);
 
 // restore background for map grids
-void RestoreBackgroundForMapGrid( INT16 sMapX, INT16 sMapY );
+void RestoreBackgroundForMapGrid(const SGPSector& sMap);
 
 // clip blits to map view region
 void ClipBlitsToMapViewRegion( void );
@@ -78,15 +81,14 @@ void DisplayDistancesForHelicopter( void );
 void DisplayPositionOfHelicopter( void );
 
 // check for click
-BOOLEAN CheckForClickOverHelicopterIcon( INT16 sX, INT16 sY );
+BOOLEAN CheckForClickOverHelicopterIcon(const SGPSector& sMap);
 
 void LoadMapScreenInterfaceMapGraphics();
 void DeleteMapScreenInterfaceMapGraphics();
 
 
 // grab the total number of militia in sector
-INT32 GetNumberOfMilitiaInSector( INT16 sSectorX, INT16 sSectorY, INT8 bSectorZ );
-
+INT32 GetNumberOfMilitiaInSector(const SGPSector& sector);
 
 // create destroy
 void CreateDestroyMilitiaPopUPRegions( void );
@@ -97,15 +99,13 @@ void DrawMilitiaPopUpBox();
 
 //Returns true if the player knows how many enemies are in the sector if that number is greater than 0.
 //Returns false for all other cases.
-UINT32 WhatPlayerKnowsAboutEnemiesInSector( INT16 sSectorX, INT16 sSectorY );
+UINT32 WhatPlayerKnowsAboutEnemiesInSector(const SGPSector& sSector);
 
 //There is a special case flag used when players encounter enemies in a sector, then retreat.  The number of enemies
 //will display on mapscreen until time is compressed.  When time is compressed, the flag is cleared, and
 //a question mark is displayed to reflect that the player no longer knows.  This is the function that clears that
 //flag.
 void ClearAnySectorsFlashingNumberOfEnemies(void);
-
-void InitMapSecrets();
 
 
 enum {
@@ -127,21 +127,12 @@ enum {
 #define MAP_GRID_Y		18
 
 
-// scroll bounds
-#define EAST_ZOOM_BOUND		(STD_SCREEN_X + 378)
-#define WEST_ZOOM_BOUND		(STD_SCREEN_X + 42)
-#define SOUTH_ZOOM_BOUND	(STD_SCREEN_Y + 324)
-#define NORTH_ZOOM_BOUND	(STD_SCREEN_Y + 36)
-
 // map view region
 #define MAP_VIEW_START_X	(STD_SCREEN_X + 270)
 #define MAP_VIEW_START_Y	(STD_SCREEN_Y + 10)
 #define MAP_VIEW_WIDTH		336
 #define MAP_VIEW_HEIGHT		298
 
-// zoomed in grid sizes
-#define MAP_GRID_ZOOM_X		MAP_GRID_X*2
-#define MAP_GRID_ZOOM_Y		MAP_GRID_Y*2
 
 // number of units wide
 #define WORLD_MAP_X		18
@@ -149,14 +140,9 @@ enum {
 // dirty regions for the map
 #define DMAP_GRID_X		( MAP_GRID_X + 1 )
 #define DMAP_GRID_Y		( MAP_GRID_Y + 1 )
-#define DMAP_GRID_ZOOM_X	( MAP_GRID_ZOOM_X+1)
-#define DMAP_GRID_ZOOM_Y	( MAP_GRID_ZOOM_Y+1)
 
 
-// Orta position on the map
-#define ORTA_SECTOR_X		4
-#define ORTA_SECTOR_Y		11
-
+// Tixa position on the map
 #define TIXA_SECTOR_X		9
 #define TIXA_SECTOR_Y		10
 
@@ -165,18 +151,13 @@ enum {
 #define MIN_WAIT_TIME_FOR_TEMP_PATH 200
 
 
-// zoom UL coords
-extern INT32 iZoomX;
-extern INT32 iZoomY;
-
 // the number of militia on the cursor
 extern INT16 sGreensOnCursor;
 extern INT16 sRegularsOnCursor;
 extern INT16 sElitesOnCursor;
 
 // highlighted sectors
-extern INT16 gsHighlightSectorX;
-extern INT16 gsHighlightSectorY;
+extern SGPSector gsHighlightSector;
 
 // the viewable map bound region
 extern SGPRect MapScreenRect;
@@ -200,13 +181,10 @@ extern BOOLEAN  fTempPathAlreadyDrawn;
 extern INT16 sSelectedMilitiaTown;
 
 // the selected sectors
-extern UINT16	sSelMapX;
-extern UINT16	sSelMapY;
+extern SGPSector sSelMap;
 
-
-extern BOOLEAN fFoundTixa;
 
 void    CreateDestroyMilitiaSectorButtons(void);
-BOOLEAN CanRedistributeMilitiaInSector(INT16 sClickedSectorX, INT16 sClickedSectorY, INT8 bClickedTownId);
+BOOLEAN CanRedistributeMilitiaInSector(INT8 bClickedTownId);
 
 #endif

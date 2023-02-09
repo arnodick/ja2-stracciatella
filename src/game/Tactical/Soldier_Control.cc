@@ -1,100 +1,96 @@
-#include <stdexcept>
-
-#include "Directories.h"
-#include "Font_Control.h"
-#include "HImage.h"
-#include "Handle_Items.h"
-#include "MapScreen.h"
-#include "Overhead.h"
-#include "Soldier_Find.h"
-#include "Structure.h"
-#include "TileDef.h"
-#include "Timer_Control.h"
-#include "VObject.h"
-#include "WCheck.h"
-#include "Render_Fun.h"
-#include "Debug.h"
-#include "MemMan.h"
-#include "Overhead_Types.h"
 #include "Soldier_Control.h"
-#include "Animation_Cache.h"
-#include "Animation_Data.h"
-#include "Animation_Control.h"
-#include <math.h>
-#include "PathAI.h"
-#include "Random.h"
-#include "WorldMan.h"
-#include "Isometric_Utils.h"
-#include "Render_Dirty.h"
-#include "RenderWorld.h"
-#include "Points.h"
-#include "Sound_Control.h"
-#include "Weapons.h"
-#include "Handle_UI.h"
-#include "Soldier_Ani.h"
-#include "Event_Pump.h"
-#include "OppList.h"
 #include "AI.h"
-#include "Interface.h"
-#include "Lighting.h"
-#include "Faces.h"
-#include "Soldier_Profile.h"
-#include "Campaign.h"
-#include "Soldier_Macros.h"
-#include "English.h"
-#include "Squads.h"
-#include "Structure_Wrap.h"
-#include "Items.h"
-#include "SoundMan.h"
-#include "Utilities.h"
-#include "Strategic.h"
-#include "Soldier_Tile.h"
-#include "Smell.h"
-#include "Keys.h"
-#include "Dialogue_Control.h"
-#include "Soldier_Functions.h"
-#include "RT_Time_Defines.h"
-#include "Exit_Grids.h"
-#include "Quests.h"
-#include "Message.h"
-#include "NPC.h"
-#include "SkillCheck.h"
-#include "Handle_Doors.h"
-#include "Interface_Dialogue.h"
-#include "SmokeEffects.h"
-#include "GameSettings.h"
-#include "Tile_Animation.h"
-#include "ShopKeeper_Interface.h"
+#include "Animation_Cache.h"
+#include "Animation_Control.h"
+#include "Animation_Data.h"
 #include "Arms_Dealer_Init.h"
-#include "Vehicles.h"
-#include "Rotting_Corpses.h"
-#include "StrategicMap.h"
-#include "Morale.h"
-#include "Meanwhile.h"
-#include "Drugs_And_Alcohol.h"
 #include "Boxing.h"
-#include "Overhead_Map.h"
-#include "Map_Information.h"
-#include "Game_Clock.h"
-#include "Explosion_Control.h"
-#include "Text.h"
-#include "Strategic_Merc_Handler.h"
+#include "Campaign.h"
 #include "Campaign_Types.h"
-#include "Strategic_Status.h"
 #include "Civ_Quotes.h"
-#include "JAScreens.h"
-#include "ScreenIDs.h"
-#include "FileMan.h"
-
 #include "ContentManager.h"
+#include "Debug.h"
+#include "Dialogue_Control.h"
+#include "Directories.h"
+#include "Drugs_And_Alcohol.h"
+#include "Event_Pump.h"
+#include "Explosion_Control.h"
+#include "Faces.h"
+#include "FileMan.h"
+#include "Font_Control.h"
 #include "GameInstance.h"
+#include "GameSettings.h"
+#include "Game_Clock.h"
+#include "HImage.h"
+#include "Handle_Doors.h"
+#include "Handle_Items.h"
+#include "Handle_UI.h"
+#include "Interface.h"
+#include "Interface_Dialogue.h"
+#include "Isometric_Utils.h"
+#include "Items.h"
+#include "JAScreens.h"
+#include "Keys.h"
+#include "Lighting.h"
+#include "Logger.h"
+#include "MapScreen.h"
+#include "Map_Information.h"
+#include "Meanwhile.h"
+#include "MercProfile.h"
+#include "Message.h"
+#include "Morale.h"
+#include "NPC.h"
+#include "OppList.h"
+#include "Overhead.h"
+#include "Overhead_Map.h"
+#include "Overhead_Types.h"
+#include "PathAI.h"
+#include "Points.h"
+#include "Quests.h"
+#include "RT_Time_Defines.h"
+#include "Random.h"
+#include "RenderWorld.h"
+#include "Render_Dirty.h"
+#include "Render_Fun.h"
+#include "Rotting_Corpses.h"
+#include "ScreenIDs.h"
+#include "SkillCheck.h"
+#include "Smell.h"
+#include "SmokeEffects.h"
 #include "Soldier.h"
+#include "Soldier_Ani.h"
+#include "Soldier_Find.h"
+#include "Soldier_Functions.h"
+#include "Soldier_Macros.h"
+#include "Soldier_Profile.h"
+#include "Soldier_Tile.h"
+#include "SoundMan.h"
+#include "Sound_Control.h"
+#include "Squads.h"
+#include "Strategic.h"
+#include "StrategicMap.h"
+#include "Strategic_Merc_Handler.h"
+#include "Strategic_Status.h"
+#include "Structure.h"
+#include "Structure_Wrap.h"
+#include "Text.h"
+#include "TileDef.h"
+#include "Tile_Animation.h"
+#include "Timer_Control.h"
+#include "Utilities.h"
+#include "VObject.h"
+#include "Vehicles.h"
+#include "WCheck.h"
 #include "WeaponModels.h"
-#include "slog/slog.h"
+#include "Weapons.h"
+#include "WorldMan.h"
+#include "enums.h"
+#include <array>
+#include <cmath>
+#include <stdexcept>
+#include <string_theory/string>
 
 #define PALETTEFILENAME			BINARYDATADIR "/ja2pal.dat"
-
-#define LOW_MORALE_BATTLE_SND_THREASHOLD	35
 
 
 #define TURNING_FROM_PRONE_OFF			0
@@ -119,6 +115,7 @@ enum
 	EX_DIRECTION_IRRELEVANT
 };
 
+static void SetSoldierPersonalLightLevel(SOLDIERTYPE*);
 
 static UINT8 Dir2ExtDir(const UINT8 dir)
 {
@@ -138,7 +135,7 @@ struct BATTLESNDS_STRUCT
 	UINT8   ubRandomVal;
 	BOOLEAN fBadGuy;
 	BOOLEAN fDontAllowTwoInRow;
-	BOOLEAN fStopDialogue;
+	INT8    stopDialogue;
 };
 
 
@@ -175,20 +172,6 @@ UINT8	bHealthStrRanges[] =
 	101
 };
 
-
-static const INT16 gsTerrainTypeSpeedModifiers[] =
-{
-	5, // Flat ground
-	5, // Floor
-	5, // Paved road
-	5, // Dirt road
-	10, // LOW GRASS
-	15, // HIGH GRASS
-	20, // TRAIN TRACKS
-	20, // LOW WATER
-	25, // MID WATER
-	30 // DEEP WATER
-};
 
 
 struct PaletteSubRangeType
@@ -267,7 +250,7 @@ static void HandleCrowShadowNewGridNo(SOLDIERTYPE& s)
 	if (s.usAnimState != CROW_FLY) return;
 
 	ANITILE_PARAMS a;
-	memset(&a, 0, sizeof(a));
+	a = ANITILE_PARAMS{};
 	a.sGridNo        = s.sGridNo;
 	a.ubLevelID      = ANI_SHADOW_LEVEL;
 	a.sDelay         = s.sAniDelay;
@@ -416,7 +399,7 @@ INT8 CalcActionPoints(const SOLDIERTYPE* const pSold)
 	if ( pSold->ubProfile != NO_PROFILE )
 	{
 		if ((gMercProfiles[ pSold->ubProfile ].bPersonalityTrait == CLAUSTROPHOBIC) &&
-			(gbWorldSectorZ > 0))
+			gWorldSector.z > 0)
 		{
 			ubPoints = (ubPoints * AP_CLAUSTROPHOBE) / 10;
 		}
@@ -465,7 +448,7 @@ void CalcNewActionPoints( SOLDIERTYPE *pSoldier )
 	// Don't max out if we are drugged....
 	if ( !GetDrugEffect( pSoldier, DRUG_TYPE_ADRENALINE ) )
 	{
-		pSoldier->bActionPoints = __min( pSoldier->bActionPoints, gubMaxActionPoints[ pSoldier->ubBodyType ] );
+		pSoldier->bActionPoints = std::min(int(pSoldier->bActionPoints), int(gubMaxActionPoints[pSoldier->ubBodyType]));
 	}
 
 	pSoldier->bInitialActionPoints	= pSoldier->bActionPoints;
@@ -591,7 +574,7 @@ try
 	s.uiTimeSameBattleSndDone   = 0;
 	// ATE: Reset every time.....
 	s.fSoldierWasMoving         = TRUE;
-	s.iTuringSoundID            = NO_SAMPLE;
+	s.uiTuringSoundID           = NO_SAMPLE;
 	s.uiTimeSinceLastBleedGrunt = 0;
 
 	if (s.ubBodyType == QUEENMONSTER)
@@ -602,11 +585,7 @@ try
 	// ANYTHING AFTER HERE CAN FAIL
 	if (IsOnOurTeam(s))
 	{
-		s.pKeyRing = MALLOCNZ(KEY_ON_RING, NUM_KEYS);
-		for (UINT32 i = 0; i < NUM_KEYS; ++i)
-		{
-			s.pKeyRing[i].ubKeyID = INVALID_KEY_NUMBER;
-		}
+		s.pKeyRing = new KEY_ON_RING[NUM_KEYS]{};
 	}
 	else
 	{
@@ -614,7 +593,7 @@ try
 	}
 
 	// Create frame cache
-	InitAnimationCache(s.ubID, &s.AnimCache);
+	s.AnimCache.init(s.ubID);
 
 	UINT16 ani_state = s.usAnimState;
 	if (!(gTacticalStatus.uiFlags & LOADING_SAVED_GAME))
@@ -670,7 +649,7 @@ void DeleteSoldier(SOLDIERTYPE& s)
 
 	if (s.pKeyRing)
 	{
-		MemFree(s.pKeyRing);
+		delete[] s.pKeyRing;
 		s.pKeyRing = 0;
 	}
 
@@ -679,20 +658,20 @@ void DeleteSoldier(SOLDIERTYPE& s)
 	FOR_EACH(UINT16*, i, s.pShades)
 	{
 		if (*i == NULL) continue;
-		MemFree(*i);
+		delete[] *i;
 		*i = NULL;
 	}
 
 	if (s.effect_shade)
 	{
-		MemFree(s.effect_shade);
+		delete[] s.effect_shade;
 		s.effect_shade = 0;
 	}
 
 	FOR_EACH(UINT16*, i, s.pGlowShades)
 	{
 		if (*i == NULL) continue;
-		MemFree(*i);
+		delete[] *i;
 		*i = NULL;
 	}
 
@@ -702,8 +681,7 @@ void DeleteSoldier(SOLDIERTYPE& s)
 	}
 
 	// Free any animations we may have locked...
-	UnLoadCachedAnimationSurfaces(s.ubID, &s.AnimCache);
-	DeleteAnimationCache(s.ubID, &s.AnimCache);
+	s.AnimCache.free();
 
 	DeleteSoldierLight(&s);
 	UnMarkMovementReserved(s);
@@ -724,7 +702,7 @@ static BOOLEAN CreateSoldierLight(SOLDIERTYPE* pSoldier)
 	if (pSoldier->light == NULL)
 	{
 		// ATE: Check for goggles in headpos....
-		char const* light_file = IsWearingHeadGear(*pSoldier, UVGOGGLES)    ? "Light4" :
+		ST::string light_file = IsWearingHeadGear(*pSoldier, UVGOGGLES) ? "Light4" :
 						IsWearingHeadGear(*pSoldier, NIGHTGOGGLES) ? "Light3" :
 						"Light2";
 
@@ -732,7 +710,7 @@ static BOOLEAN CreateSoldierLight(SOLDIERTYPE* pSoldier)
 		pSoldier->light = l;
 		if (l == NULL)
 		{
-			SLOGD(DEBUG_TAG_SOLDIER, "Soldier: Failed loading light");
+			SLOGD("Soldier: Failed loading light");
 			return FALSE;
 		}
 
@@ -855,8 +833,8 @@ static void CheckForFreeupFromHit(SOLDIERTYPE* pSoldier, UINT32 uiOldAnimFlags, 
 	if ( usOldAniState != usNewState && ( uiOldAnimFlags & ANIM_HITSTART ) && !( uiNewAnimFlags & ANIM_HITFINISH ) && !( uiNewAnimFlags & ANIM_IGNOREHITFINISH ) && !(pSoldier->uiStatusFlags & SOLDIER_TURNINGFROMHIT ) )
 	{
 		// Release attacker
-		SLOGD(DEBUG_TAG_SOLDIER, "Releasesoldierattacker, normal hit animation ended\n\
-			NEW: %hs ( %d ) OLD: %hs ( %d )",
+		SLOGD("Releasesoldierattacker, normal hit animation ended\n\
+			NEW: {} ( {} ) OLD: {} ( {} )",
 			gAnimControl[usNewState].zAnimStr, usNewState,
 			gAnimControl[usOldAniState].zAnimStr, pSoldier->usOldAniState);
 		ReleaseSoldiersAttacker( pSoldier );
@@ -880,8 +858,7 @@ static void CheckForFreeupFromHit(SOLDIERTYPE* pSoldier, UINT32 uiOldAnimFlags, 
 		|| pSoldier->bLife != 0))
 	{
 		// Release attacker
-		SLOGD(DEBUG_TAG_SOLDIER,
-			"Releasesoldierattacker, animation of kill on the ground ended");
+		SLOGD("Releasesoldierattacker, animation of kill on the ground ended");
 		ReleaseSoldiersAttacker( pSoldier );
 
 		//FREEUP GETTING HIT FLAG
@@ -919,8 +896,6 @@ void EVENT_InitNewSoldierAnim(SOLDIERTYPE* const pSoldier, UINT16 usNewState, UI
 	BOOLEAN fTryingToRestart = FALSE;
 
 	CHECKV(usNewState < NUMANIMATIONSTATES);
-
-	SoldierSP soldier = GetSoldier(pSoldier);
 
 	///////////////////////////////////////////////////////////////////////
 	//			DO SOME CHECKS ON OUR NEW ANIMATION!
@@ -1271,7 +1246,7 @@ void EVENT_InitNewSoldierAnim(SOLDIERTYPE* const pSoldier, UINT16 usNewState, UI
 			{
 				if ( usNewState != SWATTING  )
 				{
-					SLOGD(DEBUG_TAG_SOLDIER, "Handling New gridNo for %d: Old %hs, New %hs",
+					SLOGD("Handling New gridNo for {}: Old {}, New {}",
 						pSoldier->ubID, gAnimControl[pSoldier->usAnimState].zAnimStr,
 						gAnimControl[usNewState].zAnimStr);
 
@@ -1713,7 +1688,7 @@ void EVENT_InitNewSoldierAnim(SOLDIERTYPE* const pSoldier, UINT16 usNewState, UI
 					GetMan(pSoldier->uiPendingActionData4).uiStatusFlags &= ~SOLDIER_ENGAGEDINACTION;
 					break;
 			}
-			soldier->removePendingAction();
+			Soldier{pSoldier}.removePendingAction();
 		}
 		else
 		{
@@ -2023,6 +1998,11 @@ static void SetSoldierGridNo(SOLDIERTYPE& s, GridNo new_grid_no, BOOLEAN const f
 			n->ubMaxLights         = other.ubMaxLights;
 			n->ubNaturalShadeLevel = other.ubNaturalShadeLevel;
 		}
+		else    //The player DOESNT want the mercs to cast the fake lights
+		{
+			//Only light the soldier
+			SetSoldierPersonalLightLevel(&s);
+		}
 
 		HandleAnimationProfile(s, s.usAnimState, FALSE);
 		HandleCrowShadowNewGridNo(s);
@@ -2130,6 +2110,15 @@ static void SetSoldierGridNo(SOLDIERTYPE& s, GridNo new_grid_no, BOOLEAN const f
 
 	// Adjust speed based on terrain, etc
 	SetSoldierAniSpeed(&s);
+
+	if (s.bTeam == ENEMY_TEAM &&
+		(!gpWorldLevelData[s.sGridNo].pMercHead ||
+	     !gpWorldLevelData[s.sGridNo].pMercHead->pStructureData))
+	{
+		// Debug help for issue #1681: set a break point here and check who
+		// is calling this function without calling InternalIsValidStance first.
+		SLOGW("SetSoldierGridNo: ID {} ({}) has no structure", s.ubID, s.name);
+	}
 }
 
 
@@ -2150,7 +2139,7 @@ void EVENT_FireSoldierWeapon( SOLDIERTYPE *pSoldier, INT16 sTargetGridNo )
 	//if (gTacticalStatus.uiFlags & INCOMBAT)
 	//{
 		gTacticalStatus.ubAttackBusyCount++;
-		SLOGD(DEBUG_TAG_SOLDIER, "Starting attack, attack count now %d",
+		SLOGD("Starting attack, attack count now {}",
 			gTacticalStatus.ubAttackBusyCount);
 	//}
 
@@ -2167,7 +2156,7 @@ void EVENT_FireSoldierWeapon( SOLDIERTYPE *pSoldier, INT16 sTargetGridNo )
 		{
 			// Set the TOTAL number of bullets to be fired
 			// Can't shoot more bullets than we have in our magazine!
-			pSoldier->bBulletsLeft = __min( GCM->getWeapon(pSoldier->inv[ pSoldier->ubAttackingHand].usItem)->ubShotsPerBurst, pSoldier->inv[ pSoldier->ubAttackingHand ].ubGunShotsLeft );
+			pSoldier->bBulletsLeft = std::min(GCM->getWeapon(pSoldier->inv[ pSoldier->ubAttackingHand].usItem)->ubShotsPerBurst, pSoldier->inv[ pSoldier->ubAttackingHand ].ubGunShotsLeft);
 		}
 		else if ( IsValidSecondHandShot( pSoldier ) )
 		{
@@ -2183,7 +2172,7 @@ void EVENT_FireSoldierWeapon( SOLDIERTYPE *pSoldier, INT16 sTargetGridNo )
 			pSoldier->bBulletsLeft *= NUM_BUCKSHOT_PELLETS;
 		}
 	}
-	SLOGD(DEBUG_TAG_SOLDIER, "Starting attack, bullets left %d", pSoldier->bBulletsLeft);
+	SLOGD("Starting attack, bullets left {}", pSoldier->bBulletsLeft);
 
 	// Change to fire animation
 	SoldierReadyWeapon(pSoldier, sTargetGridNo, FALSE);
@@ -2250,9 +2239,6 @@ void EVENT_FireSoldierWeapon( SOLDIERTYPE *pSoldier, INT16 sTargetGridNo )
 		}
 	}
 }
-
-//gAnimControl[ pSoldier->usAnimState ].ubEndHeight
-//					ChangeSoldierState( pSoldier, SHOOT_RIFLE_STAND, 0 , FALSE );
 
 
 static UINT16 SelectFireAnimation(SOLDIERTYPE* pSoldier, UINT8 ubHeight)
@@ -2331,7 +2317,7 @@ static UINT16 SelectFireAnimation(SOLDIERTYPE* pSoldier, UINT8 ubHeight)
 			{
 				// Increment the number of people busy doing stuff because of an attack
 				//gTacticalStatus.ubAttackBusyCount++;
-				//SLOGD(DEBUG_TAG_SOLDIER, "Starting attack with 2 guns, attack count now %d", gTacticalStatus.ubAttackBusyCount);
+				//SLOGD("Starting attack with 2 guns, attack count now {}", gTacticalStatus.ubAttackBusyCount);
 
 				return( SHOOT_DUAL_STAND );
 			}
@@ -2412,7 +2398,7 @@ static UINT16 SelectFireAnimation(SOLDIERTYPE* pSoldier, UINT8 ubHeight)
 			{
 				// Increment the number of people busy doing stuff because of an attack
 				//gTacticalStatus.ubAttackBusyCount++;
-				//SLOGD(DEBUG_TAG_SOLDIER, "Starting attack with 2 guns, attack count now %d", gTacticalStatus.ubAttackBusyCount);
+				//SLOGD("Starting attack with 2 guns, attack count now {}", gTacticalStatus.ubAttackBusyCount);
 
 				return( SHOOT_DUAL_CROUCH );
 			}
@@ -2430,7 +2416,7 @@ static UINT16 SelectFireAnimation(SOLDIERTYPE* pSoldier, UINT8 ubHeight)
 			}
 
 		default:
-			AssertMsg( FALSE, String( "SelectFireAnimation: ERROR - Invalid height %d", ubHeight ) );
+			AssertMsg(FALSE, ST::format("SelectFireAnimation: ERROR - Invalid height {}", ubHeight));
 			break;
 	}
 
@@ -2453,7 +2439,7 @@ UINT16 GetMoveStateBasedOnStance(const SOLDIERTYPE* const s, const UINT8 ubStanc
 		case ANIM_CROUCH: return SWATTING;
 
 		default:
-			AssertMsg(FALSE, String("GetMoveStateBasedOnStance: ERROR - Invalid height %d",
+			AssertMsg(FALSE, ST::format("GetMoveStateBasedOnStance: ERROR - Invalid height {}",
 					ubStanceHeight));
 			return 0;
 	}
@@ -2673,8 +2659,7 @@ void EVENT_SoldierGotHit(SOLDIERTYPE* pSoldier, const UINT16 usWeaponIndex, INT1
 		case SHOOT_MORTAR:
 		case THROW_ITEM:
 		case LOB_ITEM:
-			SLOGD(DEBUG_TAG_SOLDIER,
-				"Freeing up attacker - ATTACK ANIMATION %hs ENDED BY HIT ANIMATION, Now %d",
+			SLOGD("Freeing up attacker - ATTACK ANIMATION {} ENDED BY HIT ANIMATION, Now {}",
 				gAnimControl[pSoldier->usAnimState].zAnimStr, gTacticalStatus.ubAttackBusyCount);
 			ReduceAttackBusyCount(pSoldier, FALSE);
 			break;
@@ -2696,8 +2681,7 @@ void EVENT_SoldierGotHit(SOLDIERTYPE* pSoldier, const UINT16 usWeaponIndex, INT1
 	{
 		// Increment the number of people busy doing stuff because of an attack (busy doing hit anim!)
 		gTacticalStatus.ubAttackBusyCount++;
-		SLOGD(DEBUG_TAG_SOLDIER, "Person got hit, attack count now %d",
-			gTacticalStatus.ubAttackBusyCount);
+		SLOGD("Person got hit, attack count now {}", gTacticalStatus.ubAttackBusyCount);
 	}
 
 	// ATE; Save hit location info...( for later anim determination stuff )
@@ -2710,14 +2694,12 @@ void EVENT_SoldierGotHit(SOLDIERTYPE* pSoldier, const UINT16 usWeaponIndex, INT1
 		{
 			if (att->bTeam == OUR_TEAM)
 			{
-				HandleMoraleEvent(att, MORALE_DID_LOTS_OF_DAMAGE,
-							att->sSectorX, att->sSectorY, att->bSectorZ);
+				HandleMoraleEvent(att, MORALE_DID_LOTS_OF_DAMAGE, att->sSector);
 			}
 		}
 		if (pSoldier->bTeam == OUR_TEAM)
 		{
-			HandleMoraleEvent(pSoldier, MORALE_TOOK_LOTS_OF_DAMAGE,
-						pSoldier->sSectorX, pSoldier->sSectorY, pSoldier->bSectorZ);
+			HandleMoraleEvent(pSoldier, MORALE_TOOK_LOTS_OF_DAMAGE, pSoldier->sSector);
 		}
 	}
 
@@ -2800,7 +2782,7 @@ void EVENT_SoldierGotHit(SOLDIERTYPE* pSoldier, const UINT16 usWeaponIndex, INT1
 	}
 	else
 	{
-		SLOGW(DEBUG_TAG_SOLDIER, "Soldier Control: Weapon class not handled in SoldierGotHit( ) %d",
+		SLOGW("Soldier Control: Weapon class not handled in SoldierGotHit( ) {}",
 			usWeaponIndex);
 	}
 
@@ -2826,7 +2808,7 @@ void EVENT_SoldierGotHit(SOLDIERTYPE* pSoldier, const UINT16 usWeaponIndex, INT1
 		{
 			pSoldier = pNewSoldier;
 		}
-		SLOGD(DEBUG_TAG_SOLDIER, "Tried to free up attacker, attack count now %d",
+		SLOGD("Tried to free up attacker, attack count now {}",
 			gTacticalStatus.ubAttackBusyCount);
 	}
 
@@ -2933,8 +2915,7 @@ void EVENT_SoldierGotHit(SOLDIERTYPE* pSoldier, const UINT16 usWeaponIndex, INT1
 			case FALLOFF_FORWARD_STOP:       state = FALLOFF_FORWARD_TWITCHNB;   break;
 
 			default:
-				SLOGD(DEBUG_TAG_SOLDIER, "Death state %d has no death hit",
-					pSoldier->usAnimState);
+				SLOGD("Death state {} has no death hit", pSoldier->usAnimState);
 				return;
 		}
 		ChangeSoldierState(pSoldier, state, 0, FALSE);
@@ -3232,7 +3213,7 @@ static void SoldierGotHitGunFire(SOLDIERTYPE* const pSoldier, const UINT16 bDire
 					if ( gAnimControl[ pSoldier->usAnimState ].ubEndHeight == ANIM_STAND && !MercInWater( pSoldier ) )
 					{
 						fFallenOver = TRUE;
-						ScreenMsg(FONT_MCOLOR_LTYELLOW, MSG_INTERFACE, gzLateLocalizedString[STR_LATE_20], pSoldier->name);
+						ScreenMsg(FONT_MCOLOR_LTYELLOW, MSG_INTERFACE, st_format_printf(gzLateLocalizedString[STR_LATE_20], pSoldier->name));
 					}
 				}
 			}
@@ -3242,7 +3223,7 @@ static void SoldierGotHitGunFire(SOLDIERTYPE* const pSoldier, const UINT16 bDire
 	// IF HERE AND GUY IS DEAD, RETURN!
 	if ( pSoldier->uiStatusFlags & SOLDIER_DEAD )
 	{
-		SLOGD(DEBUG_TAG_SOLDIER, "Releasesoldierattacker, Dead soldier hit");
+		SLOGD("Releasesoldierattacker, Dead soldier hit");
 		ReleaseSoldiersAttacker( pSoldier );
 		return;
 	}
@@ -3441,7 +3422,7 @@ BOOLEAN EVENT_InternalGetNewSoldierPath( SOLDIERTYPE *pSoldier, UINT16 sDestGrid
 	UINT16 usMoveAnimState = usMovementAnim;
 	INT16 sMercGridNo;
 	UINT8 ubPathingData[MAX_PATH_LIST_SIZE];
-	UINT8 ubPathingMaxDirection;
+	//UINT8 ubPathingMaxDirection;
 	BOOLEAN fAdvancePath = TRUE;
 	UINT8 fFlags = 0;
 
@@ -3522,7 +3503,7 @@ BOOLEAN EVENT_InternalGetNewSoldierPath( SOLDIERTYPE *pSoldier, UINT16 sDestGrid
 			if ( fAdvancePath )
 			{
 				memcpy( ubPathingData, pSoldier->ubPathingData, sizeof( ubPathingData ) );
-				ubPathingMaxDirection = (UINT8)ubPathingData[ MAX_PATH_LIST_SIZE -1 ];
+				//ubPathingMaxDirection = (UINT8)ubPathingData[ MAX_PATH_LIST_SIZE -1 ];
 				memcpy( &(pSoldier->ubPathingData[1]), ubPathingData, sizeof( ubPathingData ) - sizeof( ubPathingData[0] ) );
 
 				// If we have reach the max, go back one sFinalDest....
@@ -3573,7 +3554,7 @@ BOOLEAN EVENT_InternalGetNewSoldierPath( SOLDIERTYPE *pSoldier, UINT16 sDestGrid
 	if ( fContinue )
 	{
 		// Debug messages
-		SLOGD(DEBUG_TAG_SOLDIER, "Soldier %d: Get new path", pSoldier->ubID);
+		SLOGD("Soldier {}: Get new path", pSoldier->ubID);
 
 		// Set final destination
 		pSoldier->sFinalDestination = sDestGridNo;
@@ -3796,13 +3777,12 @@ static INT8 MultiTiledTurnDirection(SOLDIERTYPE* pSoldier, INT8 bStartDirection,
 	INT8 bTurningIncrement;
 	INT8 bCurrentDirection;
 	INT8 bLoop;
-	UINT16 usStructureID, usAnimSurface;
 	BOOLEAN fOk = FALSE;
 
 	// start by trying to turn in quickest direction
-	bTurningIncrement = (INT8) QuickestDirection( bStartDirection, bDesiredDirection );
+	bTurningIncrement = QuickestDirection( bStartDirection, bDesiredDirection );
 
-	usAnimSurface = DetermineSoldierAnimationSurface( pSoldier, pSoldier->usUIMovementMode );
+	UINT16 const usAnimSurface = DetermineSoldierAnimationSurface(pSoldier, pSoldier->usUIMovementMode);
 
 	const STRUCTURE_FILE_REF* const pStructureFileRef = GetAnimationStructureRef(pSoldier, usAnimSurface, pSoldier->usUIMovementMode);
 	if ( !pStructureFileRef )
@@ -3812,14 +3792,7 @@ static INT8 MultiTiledTurnDirection(SOLDIERTYPE* pSoldier, INT8 bStartDirection,
 	}
 
 	// ATE: Only if we have a levelnode...
-	if ( pSoldier->pLevelNode != NULL && pSoldier->pLevelNode->pStructureData != NULL )
-	{
-		usStructureID = pSoldier->pLevelNode->pStructureData->usStructureID;
-	}
-	else
-	{
-		usStructureID = INVALID_STRUCTURE_ID;
-	}
+	UINT16 const usStructureID = GetStructureID(pSoldier);
 
 	bLoop = 0;
 	bCurrentDirection = bStartDirection;
@@ -3960,7 +3933,7 @@ static void EVENT_InternalSetSoldierDesiredDirection(SOLDIERTYPE* const pSoldier
 	if ( pSoldier->uiStatusFlags & SOLDIER_VEHICLE )
 	{
 		const UINT8 hires_desired_dir = Dir2ExtDir(pSoldier->bDesiredDirection);
-		pSoldier->bTurningIncrement = ExtQuickestDirection(pSoldier->ubHiResDirection, hires_desired_dir);
+		pSoldier->bTurningIncrement = QuickestDirection(pSoldier->ubHiResDirection, hires_desired_dir, 16);
 	}
 	else
 	{
@@ -3970,7 +3943,7 @@ static void EVENT_InternalSetSoldierDesiredDirection(SOLDIERTYPE* const pSoldier
 		}
 		else
 		{
-			pSoldier->bTurningIncrement = (INT8) QuickestDirection( pSoldier->bDirection, pSoldier->bDesiredDirection );
+			pSoldier->bTurningIncrement = QuickestDirection( pSoldier->bDirection, pSoldier->bDesiredDirection );
 		}
 	}
 
@@ -4129,15 +4102,15 @@ void EVENT_BeginMercTurn(SOLDIERTYPE& s)
 				case FEAR_OF_INSECTS:
 					if (MercSeesCreature(s))
 					{
-						HandleMoraleEvent(&s, MORALE_INSECT_PHOBIC_SEES_CREATURE, s.sSectorX, s.sSectorY, s.bSectorZ);
+						HandleMoraleEvent(&s, MORALE_INSECT_PHOBIC_SEES_CREATURE, s.sSector);
 						goto say_personality_quote;
 					}
 					break;
 
 				case CLAUSTROPHOBIC:
-					if (gbWorldSectorZ > 0 && Random(6 - gbWorldSectorZ) == 0)
+					if (gWorldSector.z > 0 && Random(6 - gWorldSector.z) == 0)
 					{
-						HandleMoraleEvent(&s, MORALE_CLAUSTROPHOBE_UNDERGROUND, s.sSectorX, s.sSectorY, s.bSectorZ);
+						HandleMoraleEvent(&s, MORALE_CLAUSTROPHOBE_UNDERGROUND, s.sSector);
 						goto say_personality_quote;
 					}
 					break;
@@ -4147,7 +4120,7 @@ void EVENT_BeginMercTurn(SOLDIERTYPE& s)
 					{
 						if (s.bMorale < 50)
 						{
-							HandleMoraleEvent(&s, MORALE_NERVOUS_ALONE, s.sSectorX, s.sSectorY, s.bSectorZ);
+							HandleMoraleEvent(&s, MORALE_NERVOUS_ALONE, s.sSector);
 							goto say_personality_quote;
 						}
 					}
@@ -4236,8 +4209,7 @@ BOOLEAN ConvertAniCodeToAniFrame(SOLDIERTYPE* const s, UINT16 ani_frame)
 		if (ani_frame >= as.hVideoObject->SubregionCount())
 		{
 			// Debug msg here....
-			SLOGW(DEBUG_TAG_SOLDIER,
-				"Wrong Number of frames per number of objects: %d vs %d, %hs",
+			SLOGW("Wrong Number of frames per number of objects: {} vs {}, {}",
 				as.uiNumFramesPerDir, as.hVideoObject->SubregionCount(),
 				gAnimControl[s->usAnimState].zAnimStr);
 			ani_frame = 0;
@@ -4341,10 +4313,10 @@ void TurnSoldier( SOLDIERTYPE *pSoldier)
 	{
 		if ( pSoldier->ubBodyType == TANK_NW || pSoldier->ubBodyType == TANK_NE )
 		{
-			if ( pSoldier->iTuringSoundID != NO_SAMPLE )
+			if ( pSoldier->uiTuringSoundID != NO_SAMPLE )
 			{
-				SoundStop( pSoldier->iTuringSoundID );
-				pSoldier->iTuringSoundID = NO_SAMPLE;
+				SoundStop( pSoldier->uiTuringSoundID );
+				pSoldier->uiTuringSoundID = NO_SAMPLE;
 
 				PlaySoldierJA2Sample(pSoldier, TURRET_STOP, HIGHVOLUME, 1, TRUE);
 			}
@@ -4417,7 +4389,7 @@ void TurnSoldier( SOLDIERTYPE *pSoldier)
 				pSoldier->uiStatusFlags &= (~SOLDIER_TURNINGFROMHIT );
 
 				// Release attacker
-				SLOGD(DEBUG_TAG_SOLDIER, "Releasesoldierattacker, turning from hit animation ended");
+				SLOGD("Releasesoldierattacker, turning from hit animation ended");
 				ReleaseSoldiersAttacker( pSoldier );
 
 				//FREEUP GETTING HIT FLAG
@@ -4456,9 +4428,9 @@ void TurnSoldier( SOLDIERTYPE *pSoldier)
 
 		if ( pSoldier->ubBodyType == TANK_NW || pSoldier->ubBodyType == TANK_NE )
 		{
-			if ( pSoldier->iTuringSoundID == NO_SAMPLE )
+			if ( pSoldier->uiTuringSoundID == NO_SAMPLE )
 			{
-			pSoldier->iTuringSoundID = PlaySoldierJA2Sample(pSoldier, TURRET_MOVE, HIGHVOLUME, 100, TRUE);
+			pSoldier->uiTuringSoundID = PlaySoldierJA2Sample(pSoldier, TURRET_MOVE, HIGHVOLUME, 100, TRUE);
 			}
 		}
 
@@ -4682,7 +4654,7 @@ void CreateSoldierPalettes(SOLDIERTYPE& s)
 	}
 
 	SGPPaletteEntry tmp_pal[256];
-	memset(tmp_pal, 0, sizeof(*tmp_pal) * 256);
+	std::fill_n(tmp_pal, 256, SGPPaletteEntry{});
 
 	SGPPaletteEntry const*       pal;
 	char            const* const substitution = GetBodyTypePaletteSubstitution(&s, s.ubBodyType);
@@ -4718,14 +4690,14 @@ void CreateSoldierPalettes(SOLDIERTYPE& s)
 	{
 		if (s.pShades[i])
 		{
-			MemFree(s.pShades[i]);
+			delete[] s.pShades[i];
 			s.pShades[i] = 0;
 		}
 	}
 
 	if (s.effect_shade)
 	{
-		MemFree(s.effect_shade);
+		delete[] s.effect_shade;
 		s.effect_shade = 0;
 	}
 
@@ -4733,7 +4705,7 @@ void CreateSoldierPalettes(SOLDIERTYPE& s)
 	{
 		if (s.pGlowShades[i])
 		{
-			MemFree(s.pGlowShades[i]);
+			delete[] s.pGlowShades[i];
 			s.pGlowShades[i] = 0;
 		}
 	}
@@ -4800,7 +4772,6 @@ static void AdjustAniSpeed(SOLDIERTYPE* pSoldier)
 static void CalculateSoldierAniSpeed(SOLDIERTYPE* pSoldier, SOLDIERTYPE* pStatsSoldier)
 {
 	UINT32 uiTerrainDelay;
-	UINT32 uiSpeed = 0;
 
 	INT8 bBreathDef, bLifeDef, bAgilDef;
 	INT8 bAdditional = 0;
@@ -4892,9 +4863,22 @@ static void CalculateSoldierAniSpeed(SOLDIERTYPE* pSoldier, SOLDIERTYPE* pStatsS
 	// figure out movement speed (terrspeed)
 	if ( gAnimControl[ pSoldier->usAnimState ].uiFlags & ANIM_MOVING )
 	{
-		uiSpeed = gsTerrainTypeSpeedModifiers[ pStatsSoldier->bOverTerrainType ];
+		static std::array<uint8_t, NUM_TERRAIN_TYPES> const terrainTypeSpeedModifiers
+		{
+			5, // Nothing,
+			5, // Flat ground
+			5, // Floor
+			5, // Paved road
+			5, // Dirt road
+			10, // LOW GRASS
+			15, // HIGH GRASS
+			20, // TRAIN TRACKS
+			20, // LOW WATER
+			25, // MID WATER
+			30 // DEEP WATER
+		};
 
-		uiTerrainDelay = uiSpeed;
+		uiTerrainDelay = terrainTypeSpeedModifiers[pStatsSoldier->bOverTerrainType];
 	}
 	else
 	{
@@ -4995,58 +4979,60 @@ void LoadPaletteData()
 	AutoSGPFile hFile(GCM->openGameResForReading(PALETTEFILENAME));
 
 	// Read # of types
-	FileRead(hFile, &guiNumPaletteSubRanges, sizeof(guiNumPaletteSubRanges));
+	hFile->read(&guiNumPaletteSubRanges, sizeof(guiNumPaletteSubRanges));
 
 	// Malloc!
-	gpPaletteSubRanges          = MALLOCN(PaletteSubRangeType, guiNumPaletteSubRanges);
-	gubpNumReplacementsPerRange = MALLOCN(UINT8,               guiNumPaletteSubRanges);
+	gpPaletteSubRanges          = new PaletteSubRangeType[guiNumPaletteSubRanges]{};
+	gubpNumReplacementsPerRange = new UINT8[guiNumPaletteSubRanges]{};
 
 	// Read # of types for each!
 	for ( cnt = 0; cnt < guiNumPaletteSubRanges; cnt++ )
 	{
-		FileRead(hFile, &gubpNumReplacementsPerRange[cnt], sizeof(UINT8));
+		hFile->read(&gubpNumReplacementsPerRange[cnt], sizeof(UINT8));
 	}
 
 	// Loop for each one, read in data
 	for ( cnt = 0; cnt < guiNumPaletteSubRanges; cnt++ )
 	{
-		FileRead(hFile, &gpPaletteSubRanges[cnt].ubStart, sizeof(UINT8));
-		FileRead(hFile, &gpPaletteSubRanges[cnt].ubEnd,   sizeof(UINT8));
+		hFile->read(&gpPaletteSubRanges[cnt].ubStart, sizeof(UINT8));
+		hFile->read(&gpPaletteSubRanges[cnt].ubEnd,   sizeof(UINT8));
 	}
 
 
 	// Read # of palettes
-	FileRead(hFile, &guiNumReplacements, sizeof(guiNumReplacements));
+	hFile->read(&guiNumReplacements, sizeof(guiNumReplacements));
 
 	// Malloc!
-	gpPalRep = MALLOCN(PaletteReplacementType, guiNumReplacements);
+	gpPalRep = new PaletteReplacementType[guiNumReplacements]{};
 
 	// Read!
 	for ( cnt = 0; cnt < guiNumReplacements; cnt++ )
 	{
 		// type
-		FileRead(hFile, &gpPalRep[cnt].ubType, sizeof(gpPalRep[cnt].ubType));
+		hFile->read(&gpPalRep[cnt].ubType, sizeof(gpPalRep[cnt].ubType));
 
-		FileRead(hFile, &gpPalRep[cnt].ID, sizeof(gpPalRep[cnt].ID));
+		ST::char_buffer buf{PaletteRepID_LENGTH, '\0'};
+		hFile->read(buf.data(), buf.size() * sizeof(char));
+		gpPalRep[cnt].ID = ST::string(buf.c_str(), ST_AUTO_SIZE, ST::substitute_invalid);
 
 		// # entries
-		FileRead(hFile, &gpPalRep[cnt].ubPaletteSize, sizeof(gpPalRep[cnt].ubPaletteSize));
+		hFile->read(&gpPalRep[cnt].ubPaletteSize, sizeof(gpPalRep[cnt].ubPaletteSize));
 
-		SGPPaletteEntry* const Pal = MALLOCN(SGPPaletteEntry, gpPalRep[cnt].ubPaletteSize);
+		SGPPaletteEntry* const Pal = new SGPPaletteEntry[gpPalRep[cnt].ubPaletteSize]{};
 		gpPalRep[cnt].rgb = Pal;
 
 		for( cnt2 = 0; cnt2 < gpPalRep[ cnt ].ubPaletteSize; cnt2++ )
 		{
-			FileRead(hFile, &Pal[cnt2].r, sizeof(Pal[cnt2].r));
-			FileRead(hFile, &Pal[cnt2].g, sizeof(Pal[cnt2].g));
-			FileRead(hFile, &Pal[cnt2].b, sizeof(Pal[cnt2].b));
+			hFile->read(&Pal[cnt2].r, sizeof(Pal[cnt2].r));
+			hFile->read(&Pal[cnt2].g, sizeof(Pal[cnt2].g));
+			hFile->read(&Pal[cnt2].b, sizeof(Pal[cnt2].b));
 		}
 
 	}
 }
 
 
-void SetPaletteReplacement(SGPPaletteEntry* const p8BPPPalette, PaletteRepID aPalRep)
+void SetPaletteReplacement(SGPPaletteEntry* p8BPPPalette, const ST::string& aPalRep)
 {
 	UINT32 cnt2;
 	UINT8  ubType;
@@ -5070,37 +5056,37 @@ void DeletePaletteData()
 	// Free!
 	if ( gpPaletteSubRanges != NULL )
 	{
-		MemFree( gpPaletteSubRanges );
+		delete[] gpPaletteSubRanges;
 		gpPaletteSubRanges = NULL;
 	}
 
 	if ( gubpNumReplacementsPerRange != NULL )
 	{
-		MemFree( gubpNumReplacementsPerRange );
+		delete[] gubpNumReplacementsPerRange;
 		gubpNumReplacementsPerRange = NULL;
 	}
 
 
 	for ( cnt = 0; cnt < guiNumReplacements; cnt++ )
 	{
-		if (gpPalRep[cnt].rgb != NULL) MemFree(gpPalRep[cnt].rgb);
+		if (gpPalRep[cnt].rgb != NULL) delete[] gpPalRep[cnt].rgb;
 	}
 
 	// Free
 	if ( gpPalRep != NULL )
 	{
-		MemFree( gpPalRep );
+		delete[] gpPalRep;
 		gpPalRep = NULL;
 	}
 }
 
 
-UINT8 GetPaletteRepIndexFromID(const PaletteRepID pal_rep)
+UINT8 GetPaletteRepIndexFromID(const ST::string& pal_rep)
 {
 	// Check if type exists
 	for (UINT32 i = 0; i < guiNumReplacements; ++i)
 	{
-		if (strcmp(pal_rep, gpPalRep[i].ID) == 0) return i;
+		if (pal_rep.compare(gpPalRep[i].ID) == 0) return i;
 	}
 
 	throw std::logic_error("Invalid Palette Replacement ID given");
@@ -5142,8 +5128,7 @@ static UINT16 GetNewSoldierStateFromNewStance(SOLDIERTYPE* pSoldier, UINT8 ubDes
 		default:
 
 			// Cannot get here unless ub desired stance is bogus
-			SLOGD(DEBUG_TAG_SOLDIER,
-				"GetNewSoldierStateFromNewStance bogus ubDesiredStance value %d",
+			SLOGD("GetNewSoldierStateFromNewStance bogus ubDesiredStance value {}",
 				ubDesiredStance);
 			usNewState = pSoldier->usAnimState;
 	}
@@ -5440,7 +5425,7 @@ static void HandleTakeDamageDeath(SOLDIERTYPE* pSoldier, UINT8 bOldLife, UINT8 u
 	{
 		if ( pSoldier->bLife >= OKLIFE )
 		{
-			SLOGD(DEBUG_TAG_SOLDIER, "Freeing up attacker from electricity damage");
+			SLOGD("Freeing up attacker from electricity damage");
 			ReleaseSoldiersAttacker( pSoldier );
 		}
 	}
@@ -5468,8 +5453,8 @@ UINT8 SoldierTakeDamage(SOLDIERTYPE* const pSoldier, INT16 sLifeDeduct, INT16 sB
 	{
 		case ENEMY_TEAM:
 			// if we're in the wilderness this always counts
-			if (StrategicMap[CALCULATE_STRATEGIC_INDEX(gWorldSectorX, gWorldSectorY)].fEnemyControlled ||
-				SectorInfo[SECTOR(gWorldSectorX, gWorldSectorY)].ubTraversability[THROUGH_STRATEGIC_MOVE] != TOWN)
+			if (StrategicMap[gWorldSector.AsStrategicIndex()].fEnemyControlled ||
+				SectorInfo[gWorldSector.AsByte()].ubTraversability[THROUGH_STRATEGIC_MOVE] != TOWN)
 			{
 				// update current day of activity!
 				UpdateLastDayOfPlayerActivity( (UINT16) GetWorldDay() );
@@ -5548,7 +5533,7 @@ UINT8 SoldierTakeDamage(SOLDIERTYPE* const pSoldier, INT16 sLifeDeduct, INT16 sB
 
 	if ( CREATURE_OR_BLOODCAT( pSoldier ) )
 	{
-		INT16 sReductionFactor = 0;
+		int sReductionFactor = 0;
 
 		if ( pSoldier->ubBodyType == BLOODCAT )
 		{
@@ -5602,7 +5587,7 @@ UINT8 SoldierTakeDamage(SOLDIERTYPE* const pSoldier, INT16 sLifeDeduct, INT16 sB
 		if ( pSoldier->ubBodyType == QUEENMONSTER )
 		{
 			// in fact, reduce breath loss by MORE!
-			sReductionFactor = __min( sReductionFactor, 8 );
+			sReductionFactor = std::min(sReductionFactor, 8);
 			sReductionFactor *= 2;
 		}
 		else
@@ -5739,7 +5724,7 @@ UINT8 SoldierTakeDamage(SOLDIERTYPE* const pSoldier, INT16 sLifeDeduct, INT16 sB
 		INT16 sTestOne, sTestTwo, sChanceToDrop;
 
 		sTestOne = EffectiveStrength( pSoldier );
-		sTestTwo = ( 2 * ( __max( sLifeDeduct, ( sBreathLoss / 100 ) ) ) );
+		sTestTwo = 2 * std::max(int(sLifeDeduct), sBreathLoss / 100);
 
 		const SOLDIERTYPE* const attacker = pSoldier->attacker;
 		if (attacker != NULL && attacker->ubBodyType == BLOODCAT)
@@ -5749,15 +5734,14 @@ UINT8 SoldierTakeDamage(SOLDIERTYPE* const pSoldier, INT16 sLifeDeduct, INT16 sB
 		}
 
 		// If damage > effective strength....
-		sChanceToDrop = ( __max( 0, ( sTestTwo - sTestOne ) ) );
+		sChanceToDrop = ( std::max(0, ( sTestTwo - sTestOne ) ));
 
 		// ATE: Increase odds of NOT dropping an UNDROPPABLE OBJECT
 		if ( ( pSoldier->inv[ HANDPOS ].fFlags & OBJECT_UNDROPPABLE ) )
 		{
 			sChanceToDrop -= 30;
 		}
-		SLOGD(DEBUG_TAG_SOLDIER,
-			"Chance To Drop Weapon: str: %d Dam: %d Chance: %d",
+		SLOGD("Chance To Drop Weapon: str: {} Dam: {} Chance: {}",
 			sTestOne, sTestTwo, sChanceToDrop );
 
 		if ( Random( 100 ) < (UINT16) sChanceToDrop )
@@ -5861,7 +5845,7 @@ UINT8 SoldierTakeDamage(SOLDIERTYPE* const pSoldier, INT16 sLifeDeduct, INT16 sB
 	}
 
 	if (attacker != NULL && attacker->bTeam == OUR_TEAM && pSoldier->ubProfile != NO_PROFILE &&
-		pSoldier->ubProfile >= FIRST_RPC)
+		MercProfile(pSoldier->ubProfile).isNPCorRPC())
 	{
 		gMercProfiles[pSoldier->ubProfile].ubMiscFlags |= PROFILE_MISC_FLAG_WOUNDEDBYPLAYER;
 		if (pSoldier->ubProfile == PACOS)
@@ -5885,8 +5869,10 @@ UINT8 SoldierTakeDamage(SOLDIERTYPE* const pSoldier, INT16 sLifeDeduct, INT16 sB
 }
 
 
-BOOLEAN InternalDoMercBattleSound(SOLDIERTYPE* s, BattleSound battle_snd_id, INT8 const bSpecialCode)
+BOOLEAN InternalDoMercBattleSound(SOLDIERTYPE* s, BattleSound battle_snd_id, bool const lowerVolume)
 {
+	constexpr INT8 LOW_MORALE_BATTLE_SND_THRESHOLD = 35;
+
 	CHECKF (battle_snd_id < NUM_MERC_BATTLE_SOUNDS);
 
 	if (s->uiStatusFlags & SOLDIER_VEHICLE)
@@ -5969,11 +5955,11 @@ BOOLEAN InternalDoMercBattleSound(SOLDIERTYPE* s, BattleSound battle_snd_id, INT
 	return TRUE;
 
 no_sub:
-	BATTLESNDS_STRUCT const* battle_snd = &gBattleSndsData[battle_snd_id];
+	auto const& battle_snd = gBattleSndsData[battle_snd_id];
 
 	// Check if this is the same one we just played and we are below the min delay
 	if (s->bOldBattleSnd == battle_snd_id &&
-		battle_snd->fDontAllowTwoInRow &&
+		battle_snd.fDontAllowTwoInRow &&
 		GetJA2Clock() - s->uiTimeSameBattleSndDone < MIN_SUBSEQUENT_SNDS_DELAY)
 	{
 		return TRUE;
@@ -5983,7 +5969,7 @@ no_sub:
 	if (SoundIsPlaying(s->uiBattleSoundID))
 	{
 		// If this is not crucial, skip it
-		if (battle_snd->fStopDialogue != 1) return TRUE;
+		if (battle_snd.stopDialogue != 1) return TRUE;
 
 		// Stop playing original
 		SoundStop(s->uiBattleSoundID);
@@ -5992,7 +5978,7 @@ no_sub:
 	// If we are talking now....
 	if (IsMercSayingDialogue(s->ubProfile))
 	{
-		switch (battle_snd->fStopDialogue)
+		switch (battle_snd.stopDialogue)
 		{
 			case 1: DialogueAdvanceSpeech(); break; // Stop dialogue
 			case 2: return TRUE;                    // Skip battle snd
@@ -6003,18 +5989,6 @@ no_sub:
 	s->bOldBattleSnd           = battle_snd_id;
 	s->uiTimeSameBattleSndDone = GetJA2Clock();
 
-	// Adjust based on morale...
-	if (s->bMorale < LOW_MORALE_BATTLE_SND_THREASHOLD)
-	{
-		switch (battle_snd_id)
-		{
-			case BATTLE_SOUND_OK1:   battle_snd_id = BATTLE_SOUND_LOWMARALE_OK1;   break;
-			case BATTLE_SOUND_ATTN1: battle_snd_id = BATTLE_SOUND_LOWMARALE_ATTN1; break;
-			default:
-				break;
-		}
-	}
-
 	//if the sound to be played is a confirmation, check to see if we are to play it
 	if (battle_snd_id == BATTLE_SOUND_OK1 &&
 		gGameSettings.fOptions[TOPTION_MUTE_CONFIRMATIONS])
@@ -6022,37 +5996,44 @@ no_sub:
 		return TRUE;
 	}
 
-	// Randomize between sounds, if appropriate
-	if (battle_snd->ubRandomVal != 0)
+	// Adjust based on morale...
+	if (s->bMorale < LOW_MORALE_BATTLE_SND_THRESHOLD)
 	{
-		battle_snd_id = static_cast<BattleSound>(battle_snd_id + Random(battle_snd->ubRandomVal));
-		battle_snd    = &gBattleSndsData[battle_snd_id];
+		switch (battle_snd_id)
+		{
+			case BATTLE_SOUND_OK1:   battle_snd_id = BATTLE_SOUND_LOWMORALE_OK1;   break;
+			case BATTLE_SOUND_ATTN1: battle_snd_id = BATTLE_SOUND_LOWMORALE_ATTN1; break;
+			default:
+				break;
+		}
 	}
 
-	char basename[16];
+	// Randomize between sounds, if applicable (Random(0) returns 0).
+	battle_snd_id = static_cast<BattleSound>(battle_snd_id + Random(battle_snd.ubRandomVal));
+	auto const& adjusted_battle_snd = gBattleSndsData[battle_snd_id];
+
+	ST::string basename;
 	if (s->ubProfile != NO_PROFILE)
 	{
-		sprintf(basename, "%03d", s->ubProfile);
+		basename = ST::format("{03d}", s->ubProfile);
 	}
 	else
 	{
 		// Check if we can play this!
-		if (!battle_snd->fBadGuy) return FALSE;
+		if (!adjusted_battle_snd.fBadGuy) return FALSE;
 
 		char const* const prefix = s->ubBodyType == HATKIDCIV ||
 						s->ubBodyType == KIDCIV ? "kid" : "bad";
-		sprintf(basename, "%s%d", prefix, s->ubBattleSoundID);
+		basename = ST::format("{}{d}", prefix, s->ubBattleSoundID);
 	}
 
-	SGPFILENAME filename;
-	sprintf(filename, BATTLESNDSDIR "/%s_%s.wav", basename, battle_snd->zName);
-
+	ST::string filename = ST::format(BATTLESNDSDIR "/{}_{}.wav", basename, adjusted_battle_snd.zName);
 	if (!GCM->doesGameResExists(filename))
 	{
 		if (battle_snd_id == BATTLE_SOUND_DIE1)
 		{
 			// The "die" sound filenames differs between profiles and languages
-			sprintf(filename, BATTLESNDSDIR "/%s_dying.wav", basename);
+			filename = ST::format(BATTLESNDSDIR "/{}_dying.wav", basename);
 			if (GCM->doesGameResExists(filename)) goto file_exists;
 		}
 
@@ -6060,13 +6041,13 @@ no_sub:
 
 		// Generic replacement voices
 		char const prefix = s->ubBodyType == REGFEMALE ? 'f' : 'm';
-		sprintf(filename, BATTLESNDSDIR "/%c_%s.wav", prefix, battle_snd->zName);
+		filename = ST::format(BATTLESNDSDIR "/{c}_{}.wav", prefix, adjusted_battle_snd.zName);
 	}
 file_exists:;
 
 	// ATE: Reduce volume for OK sounds...
 	// (Only for all-moves or multi-selection cases)
-	UINT32 const base_volume = bSpecialCode == BATTLE_SND_LOWER_VOLUME ? MIDVOLUME : HIGHVOLUME;
+	UINT32 const base_volume = lowerVolume == BATTLE_SND_LOWER_VOLUME ? MIDVOLUME : HIGHVOLUME;
 	UINT32       volume      = CalculateSpeechVolume(base_volume);
 
 	// If we are an enemy.....reduce due to volume
@@ -6076,7 +6057,7 @@ file_exists:;
 	}
 
 	UINT32 const pan       = SoundDir(s->sGridNo);
-	UINT32 const uiSoundID = SoundPlay(filename, volume, pan, 1, NULL, NULL);
+	UINT32 const uiSoundID = SoundPlay(filename.c_str(), volume, pan, 1, NULL, NULL);
 	if (uiSoundID == SOUND_ERROR) return FALSE;
 	s->uiBattleSoundID = uiSoundID;
 
@@ -6126,7 +6107,7 @@ void MakeCharacterDialogueEventDoBattleSound(SOLDIERTYPE& s, BattleSound const s
 BOOLEAN DoMercBattleSound(SOLDIERTYPE* const s, BattleSound const battle_snd_id)
 {
 	// We WANT to play some RIGHT AWAY or merc is not saying anything right now
-	if (gBattleSndsData[battle_snd_id].fStopDialogue == 1 ||
+	if (gBattleSndsData[battle_snd_id].stopDialogue == 1 ||
 		s->ubProfile == NO_PROFILE ||
 		InOverheadMap() ||
 		!IsMercSayingDialogue(s->ubProfile))
@@ -6375,90 +6356,29 @@ INT16 GetDirectionToGridNoFromGridNo( INT16 sGridNoDest, INT16 sGridNoSrc )
 }
 
 
-#if 0
-UINT8  atan8( INT16 x1, INT16 y1, INT16 x2, INT16 y2 )
-{
-	static int trig[8] = { 2, 3, 4, 5, 6, 7, 8, 1 };
-	// returned values are N=1, NE=2, E=3, SE=4, S=5, SW=6, W=7, NW=8
-	double dx=(x2-x1);
-	double dy=(y2-y1);
-	double a;
-	int i,k;
-	if (dx==0)
-		dx=0.00390625; // 1/256th
-#define PISLICES (8)
-	a=(atan2(dy,dx) + PI/PISLICES)/(PI/(PISLICES/2));
-	i=(int)a;
-	if (a>0)
-		k=i; else
-	if (a<0)
-		k=i+(PISLICES-1); else
-		k=0;
-	return(trig[k]);
-}
-#endif
-
-//#if 0
+// Returns the direction (in enum WorldDirections terms) from point 1 to point 2.
 UINT8 atan8( INT16 sXPos, INT16 sYPos, INT16 sXPos2, INT16 sYPos2 )
 {
-	DOUBLE test_x = sXPos2 - sXPos;
-	DOUBLE test_y = sYPos2 - sYPos;
-	UINT8  mFacing = WEST;
-	DOUBLE angle;
+	const double x = sXPos2 - sXPos;
 
-	if ( test_x == 0 )
+	// Negate y because in screen coordinates smaller y values are to the north
+	// but in the coordinate systen used by atan2 larger values are to the "north".
+	const double y = -(sYPos2 - sYPos);
+
+	// The result of atan2(0, 0) is implementation dependant, ensure we always
+	// return the same result for this case.
+	if (x == 0.0 && y == 0.0) return EAST;
+
+	double theta = std::atan2(y, x);  // theta now ∈ [-π, +π] = [-180°, 180°]
+	if (theta < 0) theta += 2 * M_PI; // theta now ∈ [0, +2π] = [0°, 360°]
+
+	const int directionIndex = static_cast<int>((8 * theta + M_PI) / (2 * M_PI)) % 8;
+	static const UINT8 directionTable[8]
 	{
-		test_x = 0.04;
-	}
+		EAST, NORTHEAST, NORTH, NORTHWEST, WEST, SOUTHWEST, SOUTH, SOUTHEAST
+	};
 
-	angle = atan2( test_x, test_y );
-
-	do
-	{
-		if ( angle >=-PI*.375 && angle <= -PI*.125 )
-		{
-			mFacing = SOUTHWEST;
-			break;
-		}
-
-		if ( angle <= PI*.375 && angle >= PI*.125 )
-		{
-			mFacing = SOUTHEAST;
-			break;
-		}
-
-		if ( angle >=PI*.623 && angle <= PI*.875 )
-		{
-			mFacing = NORTHEAST;
-			break;
-		}
-
-		if ( angle <=-PI*.623 && angle >= -PI*.875 )
-		{
-			mFacing = NORTHWEST;
-			break;
-		}
-
-		if ( angle >-PI*0.125 && angle < PI*0.125 )
-		{
-			mFacing = SOUTH;
-		}
-		if ( angle > PI*0.375 && angle < PI*0.623 )
-		{
-			mFacing = EAST;
-		}
-		if ( ( angle > PI*0.875 && angle <= PI ) || ( angle > -PI && angle < -PI*0.875 ) )
-		{
-			mFacing = NORTH;
-		}
-		if ( angle > -PI*0.623 && angle < -PI*0.375 )
-		{
-			mFacing = WEST;
-		}
-
-	} while( FALSE );
-
-	return( mFacing );
+	return directionTable[directionIndex];
 }
 
 
@@ -6491,8 +6411,7 @@ void SendSoldierSetDesiredDirectionEvent(const SOLDIERTYPE* pSoldier, UINT16 usD
 	SSetDesiredDirection.usDesiredDirection = usDesiredDirection;
 	SSetDesiredDirection.uiUniqueId = pSoldier -> uiUniqueSoldierIdValue;
 
-	AddGameEvent( S_SETDESIREDDIRECTION, 0, &SSetDesiredDirection );
-
+	AddGameEvent(SSetDesiredDirection, 0);
 }
 
 
@@ -6505,13 +6424,13 @@ void SendGetNewSoldierPathEvent(SOLDIERTYPE* const pSoldier, UINT16 const sDestG
 	SGetNewPath.usMovementAnim = pSoldier->usUIMovementMode;
 	SGetNewPath.uiUniqueId = pSoldier -> uiUniqueSoldierIdValue;
 
-	AddGameEvent( S_GETNEWPATH, 0, &SGetNewPath );
+	AddGameEvent(SGetNewPath, 0);
 }
 
 
 void SendBeginFireWeaponEvent( SOLDIERTYPE *pSoldier, INT16 sTargetGridNo )
 {
-	EV_S_BEGINFIREWEAPON		SBeginFireWeapon;
+	EV_S_BEGINFIREWEAPON SBeginFireWeapon;
 
 	SBeginFireWeapon.usSoldierID = pSoldier->ubID;
 	SBeginFireWeapon.sTargetGridNo = sTargetGridNo;
@@ -6519,8 +6438,7 @@ void SendBeginFireWeaponEvent( SOLDIERTYPE *pSoldier, INT16 sTargetGridNo )
 	SBeginFireWeapon.bTargetCubeLevel = pSoldier->bTargetCubeLevel;
 	SBeginFireWeapon.uiUniqueId = pSoldier -> uiUniqueSoldierIdValue;
 
-	AddGameEvent( S_BEGINFIREWEAPON, 0, &SBeginFireWeapon );
-
+	AddGameEvent(SBeginFireWeapon, 0);
 }
 
 // This function just encapolates the check for turnbased and having an attacker in the first place
@@ -6551,8 +6469,8 @@ void ReleaseSoldiersAttacker( SOLDIERTYPE *pSoldier )
 
 			for ( cnt = 0; cnt < ubNumToFree; cnt++ )
 			{
-				SLOGD(DEBUG_TAG_SOLDIER, "Freeing up attacker of %d (attacker is %d)\n\
-					releasesoldierattacker num to free is %d",
+				SLOGD("Freeing up attacker of {} (attacker is {})\n\
+					releasesoldierattacker num to free is {}",
 					pSoldier->ubID, SOLDIER2ID(pSoldier->attacker), ubNumToFree);
 				ReduceAttackBusyCount(pSoldier->attacker, FALSE);
 			}
@@ -6664,7 +6582,8 @@ void EVENT_SoldierBeginGiveItem( SOLDIERTYPE *pSoldier )
 	{
 		UnSetEngagedInConvFromPCAction( pSoldier );
 
-		MemFree( pSoldier->pTempObject );
+		delete pSoldier->pTempObject;
+		pSoldier->pTempObject = nullptr;
 	}
 }
 
@@ -6678,7 +6597,7 @@ void EVENT_SoldierBeginBladeAttack( SOLDIERTYPE *pSoldier, INT16 sGridNo, UINT8 
 	//if (gTacticalStatus.uiFlags & INCOMBAT)
 	//{
 		gTacticalStatus.ubAttackBusyCount++;
-		SLOGD(DEBUG_TAG_SOLDIER, "Begin blade attack: ATB  %d", gTacticalStatus.ubAttackBusyCount);
+		SLOGD("Begin blade attack: ATB  {}", gTacticalStatus.ubAttackBusyCount);
 
 	//}
 
@@ -6830,7 +6749,7 @@ void EVENT_SoldierBeginPunchAttack( SOLDIERTYPE *pSoldier, INT16 sGridNo, UINT8 
 	//if (gTacticalStatus.uiFlags & INCOMBAT)
 	//{
 		gTacticalStatus.ubAttackBusyCount++;
-		SLOGD(DEBUG_TAG_SOLDIER, "Begin HTH attack: ATB  %d", gTacticalStatus.ubAttackBusyCount);
+		SLOGD("Begin HTH attack: ATB  {}", gTacticalStatus.ubAttackBusyCount);
 
 	//}
 
@@ -6942,7 +6861,7 @@ void EVENT_SoldierBeginKnifeThrowAttack( SOLDIERTYPE *pSoldier, INT16 sGridNo, U
 		gTacticalStatus.ubAttackBusyCount++;
 	//}
 	pSoldier->bBulletsLeft = 1;
-	SLOGD(DEBUG_TAG_SOLDIER, "Starting knifethrow attack, bullets left %d", pSoldier->bBulletsLeft);
+	SLOGD("Starting knifethrow attack, bullets left {}", pSoldier->bBulletsLeft);
 
 	EVENT_InitNewSoldierAnim( pSoldier, THROW_KNIFE, 0 , FALSE );
 
@@ -7010,7 +6929,7 @@ void EVENT_SoldierBeginFirstAid( SOLDIERTYPE *pSoldier, INT16 sGridNo, UINT8 ubD
 		// OK, check if we should play quote...
 		if ( pTSoldier->bTeam != OUR_TEAM )
 		{
-			if ( pTSoldier->ubProfile != NO_PROFILE && pTSoldier->ubProfile >= FIRST_RPC && !RPC_RECRUITED( pTSoldier ) )
+			if (pTSoldier->ubProfile != NO_PROFILE && MercProfile(pTSoldier->ubProfile).isNPCorRPC() && !RPC_RECRUITED(pTSoldier))
 			{
 				fRefused = PCDoesFirstAidOnNPC( pTSoldier->ubProfile );
 			}
@@ -7367,25 +7286,40 @@ void GivingSoldierCancelServices( SOLDIERTYPE *pSoldier )
 
 void HaultSoldierFromSighting( SOLDIERTYPE *pSoldier, BOOLEAN fFromSightingEnemy )
 {
-	SoldierSP soldier = GetSoldier(pSoldier);
-
 	// If we are a 'specialmove... ignore...
 	if ( ( gAnimControl[ pSoldier->usAnimState ].uiFlags & ANIM_SPECIALMOVE ) )
 	{
 		return;
 	}
 
+	// Whether or not we are about to throw an object
+	bool fIsThrowing = (pSoldier->pTempObject != NULL);
+
+	// Below are the animations for attacks which do not involve an object.
+	// We use fTurningToShoot and pTempObject to check for other attacks.
+	bool fIsAttacking = pSoldier->usPendingAnimation == THROW_KNIFE ||
+			 pSoldier->usPendingAnimation == SLICE ||
+			 pSoldier->usPendingAnimation == STAB ||
+			 pSoldier->usPendingAnimation == CROUCH_STAB ||
+			 pSoldier->usPendingAnimation == PUNCH ||
+			 pSoldier->usPendingAnimation == PUNCH_LOW ||
+			 pSoldier->usPendingAnimation == CROWBAR_ATTACK;
+
 	// OK, check if we were going to throw something, and give it back if so!
-	if ( pSoldier->pTempObject != NULL && fFromSightingEnemy )
+	if (fIsThrowing && fFromSightingEnemy)
 	{
 		// Place it back into inv....
 		AutoPlaceObject( pSoldier, pSoldier->pTempObject, FALSE );
-		MemFree( pSoldier->pTempObject );
+		delete pSoldier->pTempObject;
 		pSoldier->pTempObject        = NULL;
 		pSoldier->usPendingAnimation = NO_PENDING_ANIMATION;
+	}
 
+	// Here, we need to handle the situation when we're in the middle of an attack animation we see somebody
+	if ((fIsThrowing && fFromSightingEnemy) || fIsAttacking)
+	{
 		// Decrement attack counter...
-		SLOGD(DEBUG_TAG_SOLDIER, "Reducing attacker busy count..., ending throw because saw something");
+		SLOGD("Reducing attacker busy count..., ending attack ({}) because saw something", Internals::getAnimationName(pSoldier->usPendingAnimation));
 		ReduceAttackBusyCount(pSoldier, FALSE);
 
 		// ATE: Goto stationary stance......
@@ -7417,16 +7351,17 @@ void HaultSoldierFromSighting( SOLDIERTYPE *pSoldier, BOOLEAN fFromSightingEnemy
 			// after turn is done - so set flag here to tell it not to...
 			pSoldier->fDontUnsetLastTargetFromTurn = TRUE;
 
-			SLOGD(DEBUG_TAG_SOLDIER, "Reducing attacker busy count..., ending fire because saw something");
+			SLOGD("Reducing attacker busy count..., ending fire because saw something");
 			ReduceAttackBusyCount(pSoldier, FALSE);
 		}
 
 		// OK, if we are stopped at our destination, cancel pending action...
 		if ( fFromSightingEnemy )
 		{
-			if ( soldier->hasPendingAction() && pSoldier->sGridNo == pSoldier->sFinalDestination )
+			Soldier soldier{pSoldier};
+			if (soldier.hasPendingAction() && pSoldier->sGridNo == pSoldier->sFinalDestination)
 			{
-				soldier->removePendingAction();
+				soldier.removePendingAction();
 			}
 
 			// Stop pending animation....
@@ -7440,7 +7375,7 @@ void HaultSoldierFromSighting( SOLDIERTYPE *pSoldier, BOOLEAN fFromSightingEnemy
 	}
 
 	// Unset UI!
-	if ( fFromSightingEnemy || ( pSoldier->pTempObject == NULL && !pSoldier->fTurningToShoot ) )
+	if ( fFromSightingEnemy || ( !fIsThrowing && !pSoldier->fTurningToShoot ) )
 	{
 		UnSetUIBusy(pSoldier);
 	}
@@ -7460,11 +7395,9 @@ void EVENT_StopMerc(SOLDIERTYPE* const s)
 // Halt event is used to stop a merc - networking should check / adjust to gridno?
 void EVENT_StopMerc(SOLDIERTYPE* const s, GridNo const grid_no, INT8 const direction)
 {
-	SoldierSP soldier = GetSoldier(s);
-
 	if (!s->fDelayedMovement)
 	{
-		soldier->removePendingAnimation();
+		Soldier{s}.removePendingAnimation();
 	}
 
 	s->bEndDoorOpenCode          = 0;
@@ -7490,7 +7423,7 @@ void EVENT_StopMerc(SOLDIERTYPE* const s, GridNo const grid_no, INT8 const direc
 	{
 		s->fTurningToShoot = FALSE;
 		// Release attacker
-		SLOGD(DEBUG_TAG_SOLDIER, "Reducing attacker busy count..., ending fire because saw something");
+		SLOGD("Reducing attacker busy count..., ending fire because saw something");
 		ReduceAttackBusyCount(s, FALSE);
 	}
 
@@ -7547,8 +7480,8 @@ void ReLoadSoldierAnimationDueToHandItemChange(SOLDIERTYPE* const s, UINT16 cons
 				EVENT_InitNewSoldierAnim(s, RAISE_RIFLE, 0, FALSE);
 				break;
 			}
-			/* FALLTHROUGH */
 		}
+			// fallthrough
 
 		case ANIM_CROUCH:
 		case ANIM_PRONE:
@@ -7562,12 +7495,12 @@ static UINT16* CreateEnemyGlow16BPPPalette(const SGPPaletteEntry* pPalette, UINT
 {
 	Assert(pPalette != NULL);
 
-	UINT16* const p16BPPPalette = MALLOCN(UINT16, 256);
+	UINT16* const p16BPPPalette = new UINT16[256]{};
 
 	for (UINT32 cnt = 0; cnt < 256; cnt++)
 	{
-		UINT8 r = __max(rscale, pPalette[cnt].r);
-		UINT8 g = __max(gscale, pPalette[cnt].g);
+		UINT8 r = std::max(rscale, static_cast<UINT32>(pPalette[cnt].r));
+		UINT8 g = std::max(gscale, static_cast<UINT32>(pPalette[cnt].g));
 		UINT8 b = pPalette[cnt].b;
 		p16BPPPalette[cnt] = Get16BPPColor(FROMRGB(r, g, b));
 	}
@@ -7579,7 +7512,7 @@ static UINT16* CreateEnemyGreyGlow16BPPPalette(const SGPPaletteEntry* pPalette, 
 {
 	Assert(pPalette != NULL);
 
-	UINT16* const p16BPPPalette = MALLOCN(UINT16, 256);
+	UINT16* const p16BPPPalette = new UINT16[256]{};
 
 	for (UINT32 cnt = 0; cnt < 256; cnt++)
 	{
@@ -7588,12 +7521,12 @@ static UINT16* CreateEnemyGreyGlow16BPPPalette(const SGPPaletteEntry* pPalette, 
 		UINT32 gmod = 100 * lumin / 256;
 		UINT32 bmod = 100 * lumin / 256;
 
-		rmod = __max(rscale, rmod);
-		gmod = __max(gscale, gmod);
+		rmod = std::max(rscale, rmod);
+		gmod = std::max(gscale, gmod);
 
-		UINT8 r = __min(rmod, 255);
-		UINT8 g = __min(gmod, 255);
-		UINT8 b = __min(bmod, 255);
+		UINT8 r = std::min(rmod, 255U);
+		UINT8 g = std::min(gmod, 255U);
+		UINT8 b = std::min(bmod, 255U);
 		p16BPPPalette[cnt] = Get16BPPColor(FROMRGB(r, g, b));
 	}
 	return p16BPPPalette;
@@ -7689,7 +7622,6 @@ bool CheckForBreathCollapse(SOLDIERTYPE& s)
 
 BOOLEAN InternalIsValidStance(const SOLDIERTYPE* pSoldier, INT8 bDirection, INT8 bNewStance)
 {
-	UINT16 usOKToAddStructID=0;
 	UINT16 usAnimSurface=0;
 	UINT16 usAnimState;
 
@@ -7737,16 +7669,6 @@ BOOLEAN InternalIsValidStance(const SOLDIERTYPE* pSoldier, INT8 bDirection, INT8
 		}
 	}
 
-	// Check if we can do this....
-	if ( pSoldier->pLevelNode && pSoldier->pLevelNode->pStructureData != NULL )
-	{
-		usOKToAddStructID = pSoldier->pLevelNode->pStructureData->usStructureID;
-	}
-	else
-	{
-		usOKToAddStructID = INVALID_STRUCTURE_ID;
-	}
-
 	switch( bNewStance )
 	{
 		case ANIM_STAND:
@@ -7769,8 +7691,7 @@ BOOLEAN InternalIsValidStance(const SOLDIERTYPE* pSoldier, INT8 bDirection, INT8
 
 			// Something gone funny here....
 			usAnimState = pSoldier->usAnimState;
-			SLOGW(DEBUG_TAG_SOLDIER, "Wrong desired stance given: %d, %d.",
-				bNewStance, pSoldier->usAnimState );
+			SLOGW("Wrong desired stance given: {}, {}.", bNewStance, pSoldier->usAnimState);
 	}
 
 	usAnimSurface = DetermineSoldierAnimationSurface( pSoldier,  usAnimState );
@@ -7779,6 +7700,9 @@ BOOLEAN InternalIsValidStance(const SOLDIERTYPE* pSoldier, INT8 bDirection, INT8
 	const STRUCTURE_FILE_REF* const pStructureFileRef = GetAnimationStructureRef(pSoldier, usAnimSurface, usAnimState);
 	if ( pStructureFileRef != NULL )
 	{
+		// Check if we can do this....
+		UINT16 const usOKToAddStructID = GetStructureID(pSoldier);
+
 		// Can we add structure data for this stance...?
 		if (!OkayToAddStructureToWorld(pSoldier->sGridNo, pSoldier->bLevel, &pStructureFileRef->pDBStructureRef[OneCDirection(bDirection)], usOKToAddStructID))
 		{
@@ -7851,6 +7775,17 @@ static ETRLEObject const& GetActualSoldierAnimDims(SOLDIERTYPE const* const s)
 	// vary thusly. However, for the uses of this function, we should be able to
 	// use just the first frame...
 	return vo->SubregionProperties(s->usAniFrame);
+}
+
+
+UINT16 GetStructureID(SOLDIERTYPE const * const pSoldier)
+{
+	if (pSoldier->pLevelNode && pSoldier->pLevelNode->pStructureData)
+	{
+		return pSoldier->pLevelNode->pStructureData->usStructureID;
+	}
+
+	return INVALID_STRUCTURE_ID;
 }
 
 
@@ -8102,7 +8037,8 @@ void SoldierCollapse( SOLDIERTYPE *pSoldier )
 
 	if (pSoldier->uiStatusFlags & SOLDIER_ENEMY)
 	{
-		if (!gTacticalStatus.bPanicTriggerIsAlarm && gTacticalStatus.the_chosen_one == pSoldier)
+		INT8 bPanicTrigger = ClosestPanicTrigger(pSoldier);
+		if (bPanicTrigger != -1 && !gTacticalStatus.bPanicTriggerIsAlarm[bPanicTrigger] && gTacticalStatus.the_chosen_one == pSoldier)
 		{
 			// replace this guy as the chosen one!
 			gTacticalStatus.the_chosen_one = NULL;
@@ -8111,7 +8047,7 @@ void SoldierCollapse( SOLDIERTYPE *pSoldier )
 
 		if ((gTacticalStatus.uiFlags & INCOMBAT) && (pSoldier->uiStatusFlags & SOLDIER_UNDERAICONTROL))
 		{
-			SLOGD(DEBUG_TAG_AI, "Ending turn for %d because of error from HandleItem", pSoldier->ubID);
+			SLOGD("Ending turn for {} because of error from HandleItem", pSoldier->ubID);
 			EndAIGuysTurn(*pSoldier);
 		}
 	}
@@ -8367,8 +8303,8 @@ void EVENT_SoldierBeginRepair(SOLDIERTYPE& s, GridNo const gridno, UINT8 const d
 
 	switch (repair_item) // Set mercs's assignment to repair
 	{
-		case 2: /* Vehicle */ SetSoldierAssignmentRepair(s, FALSE, FALSE, tgt->ubID); break;
-		case 3: /* SAM     */ SetSoldierAssignmentRepair(s, TRUE,  FALSE, -1);        break;
+		case 2: /* Vehicle */ SetSoldierAssignmentRepair(s, FALSE, tgt->ubID); break;
+		default:              throw std::runtime_error(ST::string("unknown repair assignment: {}", repair_item).to_std_string());
 	}
 }
 
@@ -8396,15 +8332,12 @@ void EVENT_SoldierBeginRefuel( SOLDIERTYPE *pSoldier, INT16 sGridNo, UINT8 ubDir
 
 void EVENT_SoldierBeginTakeBlood( SOLDIERTYPE *pSoldier, INT16 sGridNo, UINT8 ubDirection )
 {
-	ROTTING_CORPSE *pCorpse;
-
-
 	// See if these is a corpse here....
-	pCorpse = GetCorpseAtGridNo( sGridNo , pSoldier->bLevel );
+	ROTTING_CORPSE const * const pCorpse = GetCorpseAtGridNo(sGridNo , pSoldier->bLevel);
 
 	if ( pCorpse != NULL )
 	{
-		pSoldier->uiPendingActionData4 = CORPSE2ID(pCorpse);
+		pSoldier->uiPendingActionData4 = pCorpse->ID();
 
 		// CHANGE DIRECTION AND GOTO ANIMATION NOW
 		EVENT_SetSoldierDesiredDirection( pSoldier, ubDirection );
@@ -8495,13 +8428,12 @@ void EVENT_SoldierBeginReloadRobot( SOLDIERTYPE *pSoldier, INT16 sGridNo, UINT8 
 static void ChangeToFlybackAnimation(SOLDIERTYPE* pSoldier, INT8 bDirection)
 {
 	UINT16 usNewGridNo;
-	SoldierSP soldier = GetSoldier(pSoldier);
 
 	// Get dest gridno, convert to center coords
 	usNewGridNo = NewGridNo(pSoldier->sGridNo, DirectionInc(OppositeDirection(bDirection)));
 	usNewGridNo = NewGridNo(usNewGridNo,       DirectionInc(OppositeDirection(bDirection)));
 
-	soldier->removePendingAction();
+	Soldier{pSoldier}.removePendingAction();
 
 	// Set path....
 	pSoldier->ubPathDataSize = 0;
@@ -8520,13 +8452,12 @@ static void ChangeToFlybackAnimation(SOLDIERTYPE* pSoldier, INT8 bDirection)
 void ChangeToFallbackAnimation( SOLDIERTYPE *pSoldier, INT8 bDirection )
 {
 	UINT16 usNewGridNo;
-	SoldierSP soldier = GetSoldier(pSoldier);
 
 	// Get dest gridno, convert to center coords
 	usNewGridNo = NewGridNo(pSoldier->sGridNo, DirectionInc(OppositeDirection(bDirection)));
 	//usNewGridNo = NewGridNo( (UINT16)usNewGridNo, (UINT16)(-1 * DirectionInc( bDirection ) ) );
 
-	soldier->removePendingAction();
+	Soldier{pSoldier}.removePendingAction();
 
 	// Set path....
 	pSoldier->ubPathDataSize = 0;
@@ -8546,7 +8477,7 @@ void SetSoldierCowerState( SOLDIERTYPE *pSoldier, BOOLEAN fOn )
 	// Robot's don't cower!
 	if ( pSoldier->ubBodyType == ROBOTNOWEAPON )
 	{
-		SLOGW(DEBUG_TAG_SOLDIER, "Robot was told to cower!");
+		SLOGW("Robot was told to cower!");
 		return;
 	}
 
@@ -8581,8 +8512,6 @@ void MercStealFromMerc(SOLDIERTYPE* const pSoldier, const SOLDIERTYPE* const pTa
 	INT16 sActionGridNo, sGridNo, sAdjustedGridNo;
 	UINT8	ubDirection;
 
-	SoldierSP soldier = GetSoldier(pSoldier);
-
 	// OK, find an adjacent gridno....
 	sGridNo = pTarget->sGridNo;
 
@@ -8590,9 +8519,8 @@ void MercStealFromMerc(SOLDIERTYPE* const pSoldier, const SOLDIERTYPE* const pTa
 	sActionGridNo =  FindAdjacentGridEx( pSoldier, sGridNo, &ubDirection, &sAdjustedGridNo, TRUE, FALSE );
 	if ( sActionGridNo != -1 )
 	{
-		soldier->setPendingAction(MERC_STEAL);
-		pSoldier->sPendingActionData2  = pTarget->sGridNo;
-		pSoldier->bPendingActionData3  = ubDirection;
+		Soldier{pSoldier}.setPendingAction(MERC_STEAL, pTarget->sGridNo, ubDirection);
+		pSoldier->bTargetLevel = pTarget->bLevel;
 
 		// CHECK IF WE ARE AT THIS GRIDNO NOW
 		if ( pSoldier->sGridNo != sActionGridNo )
@@ -8610,7 +8538,7 @@ void MercStealFromMerc(SOLDIERTYPE* const pSoldier, const SOLDIERTYPE* const pTa
 		gTacticalStatus.ubAttackBusyCount++;
 		// reset attacking item (hand)
 		pSoldier->usAttackingWeapon = 0;
-		SLOGD(DEBUG_TAG_SOLDIER, "Starting STEAL attack, attack count now %d",
+		SLOGD("Starting STEAL attack, attack count now {}",
 			gTacticalStatus.ubAttackBusyCount);
 
 		SetUIBusy(pSoldier);
@@ -8775,9 +8703,7 @@ BOOLEAN ControllingRobot(const SOLDIERTYPE* s)
 
 	// Are we in the same sector....?
 	// ARM: CHANGED TO WORK IN MAPSCREEN, DON'T USE WorldSector HERE
-	if (pRobot->sSectorX == s->sSectorX &&
-		pRobot->sSectorY == s->sSectorY &&
-		pRobot->bSectorZ == s->bSectorZ)
+	if (pRobot->sSector == s->sSector)
 	{
 		// they have to be either both in sector, or both on the road
 		if (pRobot->fBetweenSectors == s->fBetweenSectors)
@@ -8860,8 +8786,6 @@ static void HandleSoldierTakeDamageFeedback(SOLDIERTYPE* const s)
 
 void HandleSystemNewAISituation(SOLDIERTYPE* const pSoldier)
 {
-	SoldierSP soldier = GetSoldier(pSoldier);
-
 	// Are we an AI guy?
 	if ( gTacticalStatus.ubCurrentTeam != OUR_TEAM && pSoldier->bTeam != OUR_TEAM )
 	{
@@ -8871,7 +8795,7 @@ void HandleSystemNewAISituation(SOLDIERTYPE* const pSoldier)
 			pSoldier->usPendingAnimation = NO_PENDING_ANIMATION;
 			pSoldier->fTurningFromPronePosition = FALSE;
 			pSoldier->ubPendingDirection = NO_PENDING_DIRECTION;
-			soldier->removePendingAction();
+			Soldier{pSoldier}.removePendingAction();
 			pSoldier->bEndDoorOpenCode = 0;
 
 			// if this guy isn't under direct AI control, WHO GIVES A FLYING FLICK?
@@ -8885,8 +8809,7 @@ void HandleSystemNewAISituation(SOLDIERTYPE* const pSoldier)
 					// things that can happen - 1 of them is that sLastTarget will get unset
 					// after turn is done - so set flag here to tell it not to...
 					pSoldier->fDontUnsetLastTargetFromTurn = TRUE;
-					SLOGD(DEBUG_TAG_SOLDIER,
-						"Reducing attacker busy count..., ending fire because saw something: DONE IN SYSTEM NEW SITUATION");
+					SLOGD("Reducing attacker busy count..., ending fire because saw something: DONE IN SYSTEM NEW SITUATION");
 						ReduceAttackBusyCount(pSoldier, FALSE);
 				}
 
@@ -8894,13 +8817,12 @@ void HandleSystemNewAISituation(SOLDIERTYPE* const pSoldier)
 				{
 					// Place it back into inv....
 					AutoPlaceObject( pSoldier, pSoldier->pTempObject, FALSE );
-					MemFree( pSoldier->pTempObject );
+					delete pSoldier->pTempObject;
 					pSoldier->pTempObject        = NULL;
 					pSoldier->usPendingAnimation = NO_PENDING_ANIMATION;
 
 					// Decrement attack counter...
-					SLOGD(DEBUG_TAG_SOLDIER,
-						"Reducing attacker busy count..., ending throw because saw something: DONE IN SYSTEM NEW SITUATION");
+					SLOGD("Reducing attacker busy count..., ending throw because saw something: DONE IN SYSTEM NEW SITUATION");
 						ReduceAttackBusyCount(pSoldier, FALSE);
 				}
 			}
@@ -9044,9 +8966,6 @@ void HandlePlayerTogglingLightEffects( BOOLEAN fToggleValue )
 }
 
 
-static void SetSoldierPersonalLightLevel(SOLDIERTYPE*);
-
-
 static void EnableDisableSoldierLightEffects(BOOLEAN const enable_lights)
 {
 	FOR_EACH_IN_TEAM(s, OUR_TEAM)
@@ -9090,8 +9009,111 @@ static void SetSoldierPersonalLightLevel(SOLDIERTYPE* const s)
 
 TEST(SoldierControl, asserts)
 {
-	EXPECT_EQ(lengthof(gubMaxActionPoints), TOTALBODYTYPES);
-	EXPECT_EQ(sizeof(KEY_ON_RING), 2);
+	EXPECT_EQ(lengthof(gubMaxActionPoints), static_cast<size_t>(TOTALBODYTYPES));
+	EXPECT_EQ(sizeof(KEY_ON_RING), 2u);
+}
+
+UINT8 oldatan8( INT16 sXPos, INT16 sYPos, INT16 sXPos2, INT16 sYPos2 )
+{
+	DOUBLE  test_x =  sXPos2 - sXPos;
+	DOUBLE  test_y =  sYPos2 - sYPos;
+	UINT8	  mFacing = WEST;
+	DOUBLE angle;
+
+	if ( test_x == 0 )
+	{
+		test_x = 0.04;
+	}
+
+	angle = atan2( test_x, test_y );
+
+	do
+	{
+		if ( angle >=-PI*.375 && angle <= -PI*.125 )
+		{
+			mFacing = SOUTHWEST;
+			break;
+		}
+
+		if ( angle <= PI*.375 && angle >= PI*.125 )
+		{
+			mFacing = SOUTHEAST;
+			break;
+		}
+
+		if ( angle >=PI*.623 && angle <= PI*.875 )
+		{
+			mFacing = NORTHEAST;
+			break;
+		}
+
+		if ( angle <=-PI*.623 && angle >= -PI*.875 )
+		{
+			mFacing = NORTHWEST;
+			break;
+		}
+
+		if ( angle >-PI*0.125 && angle < PI*0.125 )
+		{
+			mFacing = SOUTH;
+		}
+		if ( angle > PI*0.375 && angle < PI*0.623 )
+		{
+			mFacing = EAST;
+		}
+		if ( ( angle > PI*0.875 && angle <= PI ) || ( angle > -PI && angle < -PI*0.875 ) )
+		{
+			mFacing = NORTH;
+		}
+		if ( angle > -PI*0.623 && angle < -PI*0.375 )
+		{
+			mFacing = WEST;
+		}
+
+	} while( FALSE );
+
+	return( mFacing );
+}
+
+TEST(SoldierControl, atan8)
+{
+	struct {
+		INT16 x2, y2;
+		UINT8 expectedResult;
+	} TestTable[]
+	{
+		{ 50, 0, EAST },
+		{ 50, 50, SOUTHEAST },
+		{ 0, 50, SOUTH },
+		{ -50, 50, SOUTHWEST },
+		{ -50, 0, WEST },
+		{ -50, -50, NORTHWEST },
+		{ 0, -50, NORTH },
+		{ 50, -50, NORTHEAST},
+	};
+
+	for (auto t : TestTable)
+	{
+		EXPECT_EQ(atan8(0, 0, t.x2, t.y2), t.expectedResult);
+		// Shifting both points equally must not make a difference
+		EXPECT_EQ(atan8(5000, 5000, 5000 + t.x2, 5000 + t.y2), t.expectedResult);
+		EXPECT_EQ(atan8(-5000, -5000, -5000 + t.x2, -5000 + t.y2), t.expectedResult);
+	}
+
+	// Calling atan8 with point 1 and point 2 must always return the opposite direction
+	for (INT16 x1 = -500; x1 < 500; x1 += 11)
+		for (INT16 y1 = -500; y1 < 500; y1 += 3)
+			EXPECT_EQ(std::abs((int)atan8(0, 0, x1, y1) - (int)atan8(x1, y1, 0, 0)), 4);
+
+	// Verify that both versions produce the same result when the points are identical
+	EXPECT_EQ(atan8(10, 10, 10, 10), oldatan8(10, 10, 10, 10));
+
+	// Old and new must produce the same result for these values
+	for (INT16 x1 = -500; x1 < 500; x1++)
+		EXPECT_EQ(atan8(10, 10, x1, 5), oldatan8(10, 10, x1, 5));
+
+	// This is one point where the old and new versions differ
+	EXPECT_NE(atan8(0, 0, 500, -205), oldatan8(0, 0, 500, -205));
 }
 
 #endif

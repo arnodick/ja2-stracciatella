@@ -21,6 +21,9 @@
 #include "Cursor_Modes.h"
 #include "English.h"
 #include "UILayout.h"
+#include "Random.h"
+
+#include <string_theory/format>
 
 
 BOOLEAN gfShowTerrainTileButtons;
@@ -118,7 +121,7 @@ void RenderTerrainTileButtons()
 
 			if( fUseTerrainWeights )
 			{
-				mprintf( usX+2, usY+2, L"%d", ubTerrainTileButtonWeight[ x ] );
+				MPrint( usX+2, usY+2, ST::format("{}", ubTerrainTileButtonWeight[ x ]) );
 			}
 		}
 	}
@@ -126,9 +129,9 @@ void RenderTerrainTileButtons()
 
 //This callback is used for each of the terrain tile buttons.  The userData[0] field
 //contains the terrain button's index value.
-void TerrainTileButtonRegionCallback(MOUSE_REGION *reg,INT32 reason)
+void TerrainTileButtonRegionCallback(MOUSE_REGION *reg, UINT32 reason)
 {
-	if(reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if(reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		gfRenderTaskbar = TRUE;
 		TerrainTileSelected = MSYS_GetRegionUserData(reg,0);
@@ -187,7 +190,7 @@ void ChooseWeightedTerrainTile()
 	{ //Not in the weighted mode.  CurrentPaste will already contain the selected tile.
 		return;
 	}
-	sRandomNum = rand() % usTotalWeight;
+	sRandomNum = Random(usTotalWeight);
 	for( x = 0; x < NUM_TERRAIN_TILE_REGIONS; x++ )
 	{
 		usWeight = ubTerrainTileButtonWeight[ x ];

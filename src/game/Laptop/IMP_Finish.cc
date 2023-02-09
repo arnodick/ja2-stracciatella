@@ -21,6 +21,11 @@
 #include "ScreenIDs.h"
 #include "VSurface.h"
 #include "Font_Control.h"
+#include "GameInstance.h"
+#include "GamePolicy.h"
+#include "ContentManager.h"
+
+#include <string_theory/string>
 
 
 // min time btween frames of animation
@@ -38,8 +43,8 @@ SGPVObject* guiCHARACTERPORTRAIT;
 extern INT32 iCurrentVoices;
 
 
-extern void BtnIMPMainPageVoiceCallback(GUI_BUTTON* btn, INT32 reason);
-extern void BtnIMPMainPagePortraitCallback(GUI_BUTTON* btn, INT32 reason);
+extern void BtnIMPMainPageVoiceCallback(GUI_BUTTON* btn, UINT32 reason);
+extern void BtnIMPMainPagePortraitCallback(GUI_BUTTON* btn, UINT32 reason);
 
 
 static void CreateIMPFinishButtons(void);
@@ -98,7 +103,7 @@ void HandleIMPFinish( void )
 }
 
 
-static void MakeButton(UINT idx, const char* img_file, const wchar_t* text, INT16 x, INT16 y, GUI_CALLBACK click)
+static void MakeButton(UINT idx, const char* img_file, const ST::string& text, INT16 x, INT16 y, GUI_CALLBACK click)
 {
 	BUTTON_PICS* const img = LoadButtonImage(img_file, 0, 1);
 	giIMPFinishButtonImage[idx] = img;
@@ -110,10 +115,10 @@ static void MakeButton(UINT idx, const char* img_file, const wchar_t* text, INT1
 }
 
 
-static void BtnIMPFinishAttributesCallback(GUI_BUTTON* btn, INT32 reason);
-static void BtnIMPFinishDoneCallback(GUI_BUTTON* btn, INT32 reason);
-static void BtnIMPFinishPersonalityCallback(GUI_BUTTON* btn, INT32 reason);
-static void BtnIMPFinishStartOverCallback(GUI_BUTTON* btn, INT32 reason);
+static void BtnIMPFinishAttributesCallback(GUI_BUTTON* btn, UINT32 reason);
+static void BtnIMPFinishDoneCallback(GUI_BUTTON* btn, UINT32 reason);
+static void BtnIMPFinishPersonalityCallback(GUI_BUTTON* btn, UINT32 reason);
+static void BtnIMPFinishStartOverCallback(GUI_BUTTON* btn, UINT32 reason);
 
 
 static void CreateIMPFinishButtons(void)
@@ -129,7 +134,8 @@ static void CreateIMPFinishButtons(void)
 	MakeButton(1, LAPTOPDIR "/button_2.sti", pImpButtonText[6], dx + 136, dy + 114, BtnIMPFinishDoneCallback);
 
 	// the personality button
-	MakeButton(2, LAPTOPDIR "/button_8.sti", pImpButtonText[2], dx +  13, dy + 245, BtnIMPFinishPersonalityCallback);
+	ST::string btnText = gamepolicy(imp_pick_skills_directly) ? pImpButtonText[26] : pImpButtonText[2];
+	MakeButton(2, LAPTOPDIR "/button_8.sti", btnText, dx +  13, dy + 245, BtnIMPFinishPersonalityCallback);
 	giIMPFinishButton[2]->SpecifyIcon(guiANALYSE, 0, 33, 23, FALSE);
 
 	// the attribs button
@@ -141,8 +147,7 @@ static void CreateIMPFinishButtons(void)
 	giIMPFinishButton[4]->SpecifyIcon(guiCHARACTERPORTRAIT, 0, 33, 23, FALSE);
 
 	// the voice button
-	wchar_t sString[128];
-	swprintf(sString, lengthof(sString), pImpButtonText[5], iCurrentVoices + 1);
+	ST::string sString = st_format_printf(pImpButtonText[5], iCurrentVoices + 1);
 	MakeButton(5, LAPTOPDIR "/button_8.sti", sString, dx + 373, dy + 245, BtnIMPMainPageVoiceCallback);
 	giIMPFinishButton[5]->SpecifyIcon(guiSMALLSILHOUETTE, 0, 33, 23, FALSE);
 }
@@ -181,19 +186,19 @@ static void DeleteIMPFinishButtons(void)
 static void FinishMessageBoxCallBack(MessageBoxReturnValue);
 
 
-static void BtnIMPFinishStartOverCallback(GUI_BUTTON *btn, INT32 reason)
+static void BtnIMPFinishStartOverCallback(GUI_BUTTON *btn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		DoLapTopMessageBox(MSG_BOX_IMP_STYLE, pImpPopUpStrings[1], LAPTOP_SCREEN, MSG_BOX_FLAG_YESNO, FinishMessageBoxCallBack);
 	}
 }
 
 
-static void BtnIMPFinishDoneCallback(GUI_BUTTON *btn, INT32 reason)
+static void BtnIMPFinishDoneCallback(GUI_BUTTON *btn, UINT32 reason)
 {
 	// btn callback for Main Page Begin Profiling
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		iCurrentImpPage = IMP_CONFIRM;
 		CreateACharacterFromPlayerEnteredStats();
@@ -205,7 +210,7 @@ static void BtnIMPFinishDoneCallback(GUI_BUTTON *btn, INT32 reason)
 }
 
 
-static void BtnIMPFinishPersonalityCallback(GUI_BUTTON *btn, INT32 reason)
+static void BtnIMPFinishPersonalityCallback(GUI_BUTTON *btn, UINT32 reason)
 {
 	// btn callback for Main Page Begin Profiling
 	static BOOLEAN fAnimateFlag = FALSE;
@@ -214,18 +219,27 @@ static void BtnIMPFinishPersonalityCallback(GUI_BUTTON *btn, INT32 reason)
 
 	INT32 iDifference = 0;
 
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_DWN)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_DWN)
 	{
 		uiBaseTime = GetJA2Clock();
 		btn->SpecifyText(pImpButtonText[23]);
 		fAnimateFlag = TRUE;
 	}
-	else if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	else if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		fButtonPendingFlag = TRUE;
 		uiBaseTime = 0;
 		fAnimateFlag = FALSE;
-		btn->SpecifyText(pImpButtonText[2]);
+
+		if (gamepolicy(imp_pick_skills_directly))
+		{
+			iCurrentImpPage = IMP_SKILLTRAITS;
+			btn->SpecifyText(pImpButtonText[26]);
+		}
+		else
+		{
+			btn->SpecifyText(pImpButtonText[2]);
+		}
 	}
 
 	// get amount of time between callbacks
@@ -243,7 +257,7 @@ static void BtnIMPFinishPersonalityCallback(GUI_BUTTON *btn, INT32 reason)
 }
 
 
-static void BtnIMPFinishAttributesCallback(GUI_BUTTON *btn, INT32 reason)
+static void BtnIMPFinishAttributesCallback(GUI_BUTTON *btn, UINT32 reason)
 {
 	// btn callback for Main Page Begin Profiling
 
@@ -254,23 +268,24 @@ static void BtnIMPFinishAttributesCallback(GUI_BUTTON *btn, INT32 reason)
 		return;
 	}
 
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		iCurrentImpPage = IMP_ATTRIBUTE_PAGE;
 		fButtonPendingFlag = TRUE;
-		giIMPFinishButton[2]->SpecifyText(pImpButtonText[2]);
+
+		auto btnText = gamepolicy(imp_pick_skills_directly) ? pImpButtonText[26] : pImpButtonText[2];
+		giIMPFinishButton[2]->SpecifyText(btnText);
 	}
 }
 
 
 static void RenderCharFullName(void)
 {
-	wchar_t sString[ 64 ];
 	INT16 sX, sY;
 
 	// render the characters full name
 	SetFontAttributes(FONT14ARIAL, FONT_WHITE);
-	swprintf(sString, lengthof(sString), pIMPFinishStrings, pFullName);
+	ST::string sString = st_format_printf(pIMPFinishStrings, pFullName);
 	FindFontCenterCoordinates(LAPTOP_SCREEN_UL_X, 0, LAPTOP_SCREEN_LR_X - LAPTOP_SCREEN_UL_X, 0 , sString , FONT14ARIAL, &sX, &sY);
 	MPrint(sX, STD_SCREEN_Y + LAPTOP_SCREEN_WEB_DELTA_Y + 33, sString);
 }

@@ -1,8 +1,7 @@
 #ifndef BUFFER_H
 #define BUFFER_H
 
-#include "MemMan.h"
-
+#include <cstddef>
 
 namespace SGP
 {
@@ -11,11 +10,11 @@ namespace SGP
 		public:
 			explicit Buffer(T* const buf = 0) : buf_(buf) {}
 
-			explicit Buffer(size_t const n) : buf_(MALLOCN(T, n)) {}
+			explicit Buffer(size_t const n) : buf_(new T[n]{}) {}
 
-			~Buffer() { if (buf_) MemFree(buf_); }
+			~Buffer() { if (buf_) delete[] buf_; }
 
-			Buffer& Allocate(size_t const n) { return *this = MALLOCN(T, n); }
+			Buffer& Allocate(size_t const n) { return *this = new T[n]{}; }
 
 			T* Release()
 			{
@@ -26,7 +25,7 @@ namespace SGP
 
 			Buffer& operator =(T* const buf)
 			{
-				if (buf_) MemFree(buf_);
+				if (buf_) delete[] buf_;
 				buf_ = buf;
 				return *this;
 			}

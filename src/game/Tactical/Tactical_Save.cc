@@ -5,7 +5,6 @@
 #include "MapScreen.h"
 #include "Soldier_Init_List.h"
 #include "Types.h"
-#include "MemMan.h"
 #include "Message.h"
 #include "Item_Types.h"
 #include "Items.h"
@@ -53,33 +52,33 @@
 
 #include "ContentManager.h"
 #include "GameInstance.h"
-#include "slog/slog.h"
+#include "Logger.h"
+
+#include <vector>
 
 static BOOLEAN gfWasInMeanwhile = FALSE;
 
+static const SectorFlags sectorFlagBits[] = { SF_ITEM_TEMP_FILE_EXISTS, SF_ROTTING_CORPSE_TEMP_FILE_EXISTS,
+	SF_MAP_MODIFICATIONS_TEMP_FILE_EXISTS, SF_DOOR_TABLE_TEMP_FILES_EXISTS,
+	SF_REVEALED_STATUS_TEMP_FILE_EXISTS, SF_DOOR_STATUS_TEMP_FILE_EXISTS,
+	SF_ENEMY_PRESERVED_TEMP_FILE_EXISTS, SF_CIV_PRESERVED_TEMP_FILE_EXISTS,
+	SF_SMOKE_EFFECTS_TEMP_FILE_EXISTS, SF_LIGHTING_EFFECTS_TEMP_FILE_EXISTS };
 
-static void AddTempFileToSavedGame(HWFILE const f, UINT32 const flags, SectorFlags const type, INT16 const x, INT16 const y, INT8 const z)
+static void AddTempFileToSavedGame(HWFILE const f, UINT32 const flags, SectorFlags const type, const SGPSector& sMap)
 {
 	if (!(flags & type)) return;
 
-	char map_name[128];
-	GetMapTempFileName(type, map_name, x, y, z);
+	ST::string const map_name = GetMapTempFileName(type, sMap);
 	SaveFilesToSavedGame(map_name, f);
 }
 
 
-static void AddTempFilesToSavedGame(HWFILE const f, UINT32 const flags, INT16 const x, INT16 const y, INT8 const z)
+static void AddTempFilesToSavedGame(HWFILE const f, UINT32 const flags, const SGPSector& sMap)
 {
-	AddTempFileToSavedGame(f, flags, SF_ITEM_TEMP_FILE_EXISTS,              x, y, z);
-	AddTempFileToSavedGame(f, flags, SF_ROTTING_CORPSE_TEMP_FILE_EXISTS,    x, y, z);
-	AddTempFileToSavedGame(f, flags, SF_MAP_MODIFICATIONS_TEMP_FILE_EXISTS, x, y, z);
-	AddTempFileToSavedGame(f, flags, SF_DOOR_TABLE_TEMP_FILES_EXISTS,       x, y, z);
-	AddTempFileToSavedGame(f, flags, SF_REVEALED_STATUS_TEMP_FILE_EXISTS,   x, y, z);
-	AddTempFileToSavedGame(f, flags, SF_DOOR_STATUS_TEMP_FILE_EXISTS,       x, y, z);
-	AddTempFileToSavedGame(f, flags, SF_ENEMY_PRESERVED_TEMP_FILE_EXISTS,   x, y, z);
-	AddTempFileToSavedGame(f, flags, SF_CIV_PRESERVED_TEMP_FILE_EXISTS,     x, y, z);
-	AddTempFileToSavedGame(f, flags, SF_SMOKE_EFFECTS_TEMP_FILE_EXISTS,     x, y, z);
-	AddTempFileToSavedGame(f, flags, SF_LIGHTING_EFFECTS_TEMP_FILE_EXISTS,  x, y, z);
+	for (auto bit : sectorFlagBits)
+	{
+		AddTempFileToSavedGame(f, flags, bit, sMap);
+	}
 }
 
 
@@ -89,64 +88,53 @@ void SaveMapTempFilesToSavedGameFile(HWFILE const f)
 	//Loop though all the array elements to see if there is a data file to be saved
 
 	//First look through the above ground sectors
-	for (INT16 y = 1; y <= 16; ++y)
+	SGPSector sSector;
+	for (sSector.y = 1; sSector.y <= 16; ++sSector.y)
 	{
-		for (INT16 x = 1; x <= 16; ++x)
+		for (sSector.x = 1; sSector.x <= 16; ++sSector.x)
 		{
-			UINT32 const flags = SectorInfo[SECTOR(x, y)].uiFlags;
-			AddTempFilesToSavedGame(f, flags, x, y, 0);
+			UINT32 const flags = SectorInfo[sSector.AsByte()].uiFlags;
+			AddTempFilesToSavedGame(f, flags, sSector);
 		}
 	}
 
 	//then look throught all the underground sectors
 	for (UNDERGROUND_SECTORINFO const* u = gpUndergroundSectorInfoHead; u; u = u->next)
 	{
-		INT16  const x     = u->ubSectorX;
-		INT16  const y     = u->ubSectorY;
-		INT8   const z     = u->ubSectorZ;
 		UINT32 const flags = u->uiFlags;
-		AddTempFilesToSavedGame(f, flags, x, y, z);
+		AddTempFilesToSavedGame(f, flags, u->ubSector);
 	}
 }
 
 
-static void RetrieveTempFileFromSavedGame(HWFILE const f, UINT32 const flags, SectorFlags const type, INT16 const x, INT16 const y, INT8 const z)
+static void RetrieveTempFileFromSavedGame(HWFILE const f, UINT32 const flags, SectorFlags const type, const SGPSector& sector)
 {
 	if (!(flags & type)) return;
 
-	char map_name[128];
-	GetMapTempFileName(type, map_name, x, y, z);
+	ST::string const map_name = GetMapTempFileName(type, sector);
 	LoadFilesFromSavedGame(map_name, f);
 }
 
 
-static void SynchronizeItemTempFileVisbleItemsToSectorInfoVisbleItems(INT16 sMapX, INT16 sMapY, INT8 bMapZ, bool check_consistency);
+static void SynchronizeItemTempFileVisbleItemsToSectorInfoVisbleItems(const SGPSector& sMap, bool check_consistency);
 
 
-static void RetrieveTempFilesFromSavedGame(HWFILE const f, UINT32& flags, INT16 const x, INT16 const y, INT8 const z, UINT32 const savegame_version)
+static void RetrieveTempFilesFromSavedGame(HWFILE const f, UINT32& flags, const SGPSector& sector, UINT32 const savegame_version)
 {
-	RetrieveTempFileFromSavedGame(f, flags, SF_ITEM_TEMP_FILE_EXISTS,              x, y, z);
-	RetrieveTempFileFromSavedGame(f, flags, SF_ROTTING_CORPSE_TEMP_FILE_EXISTS,    x, y, z);
-	RetrieveTempFileFromSavedGame(f, flags, SF_MAP_MODIFICATIONS_TEMP_FILE_EXISTS, x, y, z);
-	RetrieveTempFileFromSavedGame(f, flags, SF_DOOR_TABLE_TEMP_FILES_EXISTS,       x, y, z);
-	RetrieveTempFileFromSavedGame(f, flags, SF_REVEALED_STATUS_TEMP_FILE_EXISTS,   x, y, z);
-	RetrieveTempFileFromSavedGame(f, flags, SF_DOOR_STATUS_TEMP_FILE_EXISTS,       x, y, z);
-	RetrieveTempFileFromSavedGame(f, flags, SF_ENEMY_PRESERVED_TEMP_FILE_EXISTS,   x, y, z);
-	RetrieveTempFileFromSavedGame(f, flags, SF_CIV_PRESERVED_TEMP_FILE_EXISTS,     x, y, z);
-	RetrieveTempFileFromSavedGame(f, flags, SF_SMOKE_EFFECTS_TEMP_FILE_EXISTS,     x, y, z);
-	RetrieveTempFileFromSavedGame(f, flags, SF_LIGHTING_EFFECTS_TEMP_FILE_EXISTS,  x, y, z);
+	for (auto bit : sectorFlagBits)
+	{
+		RetrieveTempFileFromSavedGame(f, flags, bit, sector);
+	}
 
 	if (flags & SF_ITEM_TEMP_FILE_EXISTS)
 	{
-		SynchronizeItemTempFileVisbleItemsToSectorInfoVisbleItems(x, y, z, savegame_version >= 86);
+		SynchronizeItemTempFileVisbleItemsToSectorInfoVisbleItems(sector, savegame_version >= 86);
 	}
 
 	if (flags & SF_CIV_PRESERVED_TEMP_FILE_EXISTS && savegame_version < 78)
 	{
 		// Delete the file, because it is corrupted
-		char map_name[128];
-		GetMapTempFileName(SF_CIV_PRESERVED_TEMP_FILE_EXISTS, map_name, x, y, z);
-		FileDelete(map_name);
+		GCM->tempFiles()->deleteFile(GetMapTempFileName(SF_CIV_PRESERVED_TEMP_FILE_EXISTS, sector));
 		flags &= ~SF_CIV_PRESERVED_TEMP_FILE_EXISTS;
 	}
 }
@@ -164,24 +152,22 @@ void LoadMapTempFilesFromSavedGameFile(HWFILE const f, UINT32 const savegame_ver
 		{
 			// turn off alternate flags for the sectors he could be in
 			// randomly place him in one of the two possible sectors
-			SectorInfo[SECTOR(14, MAP_ROW_L)].uiFlags &= ~SF_USE_ALTERNATE_MAP;
-			SectorInfo[SECTOR( 8, MAP_ROW_L)].uiFlags &= ~SF_USE_ALTERNATE_MAP;
+			SectorInfo[SGPSector(14, MAP_ROW_L).AsByte()].uiFlags &= ~SF_USE_ALTERNATE_MAP;
+			SectorInfo[SGPSector(8, MAP_ROW_L).AsByte()].uiFlags &= ~SF_USE_ALTERNATE_MAP;
 
-			INT16 x;
-			INT16 y;
+			SGPSector sMap;
 			if (Random(2))
 			{
-				x = 11;
-				y = MAP_ROW_H;
+				sMap.x = 11;
+				sMap.y = MAP_ROW_H;
 			}
 			else
 			{
-				x = 4;
-				y = MAP_ROW_I;
+				sMap.x = 4;
+				sMap.y = MAP_ROW_I;
 			}
-			SectorInfo[SECTOR(x, y)].uiFlags |= SF_USE_ALTERNATE_MAP;
-			gabby.sSectorX = x;
-			gabby.sSectorY = y;
+			SectorInfo[sMap.AsByte()].uiFlags |= SF_USE_ALTERNATE_MAP;
+			gabby.sSector = sMap;
 		}
 	}
 
@@ -189,12 +175,13 @@ void LoadMapTempFilesFromSavedGameFile(HWFILE const f, UINT32 const savegame_ver
 
 	//First look through the above ground sectors
 	UINT32 counter = 0;
-	for (INT16 y = 1; y <= 16; ++y)
+	SGPSector sMap;
+	for (sMap.y = 1; sMap.y <= 16; ++sMap.y)
 	{
-		for (INT16 x = 1; x <= 16; ++x)
+		for (sMap.x = 1; sMap.x <= 16; ++sMap.x)
 		{
-			UINT32& flags = SectorInfo[SECTOR(x, y)].uiFlags;
-			RetrieveTempFilesFromSavedGame(f, flags, x, y, 0, savegame_version);
+			UINT32& flags = SectorInfo[sMap.AsByte()].uiFlags;
+			RetrieveTempFilesFromSavedGame(f, flags, sMap, savegame_version);
 
 			UINT32 const percentage = ++counter * 100 / 255;
 			RenderProgressBar(0, percentage);
@@ -204,103 +191,89 @@ void LoadMapTempFilesFromSavedGameFile(HWFILE const f, UINT32 const savegame_ver
 	//then look throught all the underground sectors
 	for (UNDERGROUND_SECTORINFO* u = gpUndergroundSectorInfoHead; u; u = u->next)
 	{
-		INT16  const x     = u->ubSectorX;
-		INT16  const y     = u->ubSectorY;
-		INT8   const z     = u->ubSectorZ;
 		UINT32&      flags = u->uiFlags;
-		RetrieveTempFilesFromSavedGame(f, flags, x, y, z, savegame_version);
+		RetrieveTempFilesFromSavedGame(f, flags, u->ubSector, savegame_version);
 	}
 }
 
 
-void SaveWorldItemsToTempItemFile(INT16 const sMapX, INT16 const sMapY, INT8 const bMapZ, UINT32 const uiNumberOfItems, WORLDITEM const* const pData)
+void SaveWorldItemsToTempItemFile(const SGPSector& sMap, const std::vector<WORLDITEM>& items)
 {
 	{
-		char filename[128];
-		GetMapTempFileName(SF_ITEM_TEMP_FILE_EXISTS, filename, sMapX, sMapY, bMapZ);
-		AutoSGPFile f(FileMan::openForWriting(filename));
-		FileWriteArray(f, uiNumberOfItems, pData);
+		AutoSGPFile f(GCM->tempFiles()->openForWriting(GetMapTempFileName(SF_ITEM_TEMP_FILE_EXISTS, sMap), true));
+		Assert(items.size() <= UINT32_MAX);
+		UINT32 numItems = static_cast<UINT32>(items.size());
+		f->writeArray(numItems, items.data());
 		// Close the file before
 		// SynchronizeItemTempFileVisbleItemsToSectorInfoVisbleItems() reads it
 	}
 
-	SetSectorFlag(sMapX, sMapY, bMapZ, SF_ITEM_TEMP_FILE_EXISTS);
-	SynchronizeItemTempFileVisbleItemsToSectorInfoVisbleItems(sMapX, sMapY, bMapZ, false);
+	SetSectorFlag(sMap, SF_ITEM_TEMP_FILE_EXISTS);
+	SynchronizeItemTempFileVisbleItemsToSectorInfoVisbleItems(sMap, false);
 }
 
 
-void LoadWorldItemsFromTempItemFile(INT16 const x, INT16 const y, INT8 const z, UINT32* const item_count, WORLDITEM** const items)
+std::vector<WORLDITEM> LoadWorldItemsFromTempItemFile(const SGPSector& sMap)
 {
-	char filename[128];
-	GetMapTempFileName(SF_ITEM_TEMP_FILE_EXISTS, filename, x, y, z);
+	ST::string const filename = GetMapTempFileName(SF_ITEM_TEMP_FILE_EXISTS, sMap);
 
-	UINT32                 l_item_count;
-	SGP::Buffer<WORLDITEM> l_items;
+	std::vector<WORLDITEM> l_items;
 	// If the file doesn't exists, it's no problem
-	if (GCM->doesGameResExists(filename))
+	if (GCM->tempFiles()->exists(filename))
 	{
-		AutoSGPFile f(GCM->openGameResForReading(filename));
+		AutoSGPFile f(GCM->tempFiles()->openForReading(filename));
 
-		FileRead(f, &l_item_count, sizeof(l_item_count));
-		if (l_item_count != 0)
+		UINT32 numItems = 0;
+		f->read(&numItems, sizeof(UINT32));
+		if (numItems != 0)
 		{
-			l_items.Allocate(l_item_count);
-			FileRead(f, l_items, l_item_count * sizeof(*l_items));
+			l_items.assign(numItems, WORLDITEM{});
+			f->read(l_items.data(), numItems * sizeof(WORLDITEM));
 		}
 	}
-	else
-	{
-		l_item_count = 0;
-	}
-	*item_count = l_item_count;
-	*items      = l_items.Release();
+	return l_items;
 }
 
 
-void AddItemsToUnLoadedSector(INT16 const sMapX, INT16 const sMapY, INT8 const bMapZ, INT16 const sGridNo, UINT32 const uiNumberOfItemsToAdd, OBJECTTYPE const* const pObject, UINT8 const ubLevel, UINT16 const usFlags, INT8 const bRenderZHeightAboveLevel, Visibility const bVisible)
+void AddItemsToUnLoadedSector(const SGPSector& sMap, INT16 const sGridNo, UINT32 const uiNumberOfItemsToAdd, OBJECTTYPE const* const pObject, UINT8 const ubLevel, UINT16 const usFlags, INT8 const bRenderZHeightAboveLevel, Visibility const bVisible)
 {
-	UINT32     uiNumberOfItems;
-	WORLDITEM* wis;
-	LoadWorldItemsFromTempItemFile(sMapX, sMapY, bMapZ, &uiNumberOfItems, &wis);
+	std::vector<WORLDITEM> wis = LoadWorldItemsFromTempItemFile(sMap);
 
 	//loop through all the objects to add
 	for (UINT32 uiLoop1 = 0; uiLoop1 < uiNumberOfItemsToAdd; ++uiLoop1)
 	{
 		// Loop through the array to see if there is a free spot to add an item to it
-		UINT32 cnt;
+		size_t cnt;
 		for (cnt = 0;; ++cnt)
 		{
-			if (cnt == uiNumberOfItems)
+			if (cnt == wis.size())
 			{
 				//Error, there wasnt a free spot.  Reallocate memory for the array
-				wis = REALLOC(wis, WORLDITEM, ++uiNumberOfItems);
+				wis.push_back(WORLDITEM{});
 				break;
 			}
 			if (!wis[cnt].fExists) break;
 		}
 
-		WORLDITEM* const wi = &wis[cnt];
-		wi->fExists                  = TRUE;
-		wi->sGridNo                  = sGridNo;
-		wi->ubLevel                  = ubLevel;
-		wi->usFlags                  = usFlags;
-		wi->bVisible                 = bVisible;
-		wi->bRenderZHeightAboveLevel = bRenderZHeightAboveLevel;
-		wi->o                        = pObject[uiLoop1];
+		WORLDITEM& wi = wis[cnt];
+		wi.fExists                  = TRUE;
+		wi.sGridNo                  = sGridNo;
+		wi.ubLevel                  = ubLevel;
+		wi.usFlags                  = usFlags;
+		wi.bVisible                 = bVisible;
+		wi.bRenderZHeightAboveLevel = bRenderZHeightAboveLevel;
+		wi.o                        = pObject[uiLoop1];
 
-		if (sGridNo == NOWHERE && !(wi->usFlags & WORLD_ITEM_GRIDNO_NOT_SET_USE_ENTRY_POINT))
+		if (sGridNo == NOWHERE && !(wi.usFlags & WORLD_ITEM_GRIDNO_NOT_SET_USE_ENTRY_POINT))
 		{
-			wi->usFlags |= WORLD_ITEM_GRIDNO_NOT_SET_USE_ENTRY_POINT;
+			wi.usFlags |= WORLD_ITEM_GRIDNO_NOT_SET_USE_ENTRY_POINT;
 			// Display warning.....
-			SLOGW(DEBUG_TAG_TACTSAVE,
-				"Trying to add item ( %d: %ls ) to invalid gridno in unloaded sector. Please Report.",
-				wi->o.usItem, ItemNames[wi->o.usItem]);
+			SLOGW("Trying to add item ( {}: {} ) to invalid gridno in unloaded sector. Please Report.",
+				wi.o.usItem, GCM->getItem(wi.o.usItem)->getName());
 		}
 	}
 
-	SaveWorldItemsToTempItemFile(sMapX, sMapY, bMapZ, uiNumberOfItems, wis);
-
-	MemFree(wis);
+	SaveWorldItemsToTempItemFile(sMap, wis);
 }
 
 
@@ -309,7 +282,7 @@ extern BOOLEAN gfInMeanwhile;
 
 static void SaveNPCInformationToProfileStruct(void);
 static void SetLastTimePlayerWasInSector(void);
-static void SaveRottingCorpsesToTempCorpseFile(INT16 sMapX, INT16 sMapY, INT8 bMapZ);
+static void SaveRottingCorpsesToTempCorpseFile(const SGPSector& sector);
 
 
 void SaveCurrentSectorsInformationToTempItemFile()
@@ -328,27 +301,23 @@ void SaveCurrentSectorsInformationToTempItemFile()
 		should_be_in_meanwhile = true;
 	}
 
-	INT16 const x = gWorldSectorX;
-	INT16 const y = gWorldSectorY;
-	INT8  const z = gbWorldSectorZ;
-
 	// If we haven't been to tactical yet
-	if (x == 0 && y == 0) return;
+	if (!gWorldSector.IsValid()) return;
 
 	SaveBloodSmellAndRevealedStatesFromMapToTempFile();
 
 	// handle all reachable before save
-	HandleAllReachAbleItemsInTheSector(x, y, z);
+	HandleAllReachAbleItemsInTheSector(gWorldSector);
 
-	SaveWorldItemsToTempItemFile(x, y, z, guiNumWorldItems, gWorldItems);
-	SaveRottingCorpsesToTempCorpseFile(x, y, z);
-	SaveDoorTableToDoorTableTempFile(x, y, z);
-	SaveRevealedStatusArrayToRevealedTempFile(x, y, z);
-	SaveDoorStatusArrayToDoorStatusTempFile(x, y, z);
-	NewWayOfSavingEnemyAndCivliansToTempFile(x, y, z, TRUE, FALSE);  // Save the enemies
-	NewWayOfSavingEnemyAndCivliansToTempFile(x, y, z, FALSE, FALSE); // Save the civilian info
-	SaveSmokeEffectsToMapTempFile(x, y, z);
-	SaveLightEffectsToMapTempFile(x, y, z);
+	SaveWorldItemsToTempItemFile(gWorldSector, gWorldItems);
+	SaveRottingCorpsesToTempCorpseFile(gWorldSector);
+	SaveDoorTableToDoorTableTempFile(gWorldSector);
+	SaveRevealedStatusArrayToRevealedTempFile(gWorldSector);
+	SaveDoorStatusArrayToDoorStatusTempFile(gWorldSector);
+	NewWayOfSavingEnemyAndCivliansToTempFile(gWorldSector, TRUE, FALSE);  // Save the enemies
+	NewWayOfSavingEnemyAndCivliansToTempFile(gWorldSector, FALSE, FALSE); // Save the civilian info
+	SaveSmokeEffectsToMapTempFile(gWorldSector);
+	SaveLightEffectsToMapTempFile(gWorldSector);
 
 	// Save certain information from the NPC's soldier structure to the Merc structure
 	SaveNPCInformationToProfileStruct();
@@ -360,9 +329,9 @@ void SaveCurrentSectorsInformationToTempItemFile()
 }
 
 
-void HandleAllReachAbleItemsInTheSector(INT16 const x, INT16 const y, INT8 const z)
+void HandleAllReachAbleItemsInTheSector(const SGPSector& sector)
 { // Find out which items in the list are reachable
-	if (guiNumWorldItems == 0) return;
+	if (gWorldItems.size() == 0) return;
 
 	MAPCREATE_STRUCT const& m = gMapInformation;
 	GridNo grid_no = m.sCenterGridNo;
@@ -370,7 +339,7 @@ void HandleAllReachAbleItemsInTheSector(INT16 const x, INT16 const y, INT8 const
 	if (grid_no == -1) grid_no = m.sEastGridNo;
 	if (grid_no == -1) grid_no = m.sSouthGridNo;
 	if (grid_no == -1) grid_no = m.sWestGridNo;
-	AssertMsg(grid_no != -1, String("Map %c%d_b%d does not have any entry points!", 'A' + y - 1, x, z));
+	AssertMsg(grid_no != -1, ST::format("Map {} does not have any entry points!", sector));
 	if (grid_no == -1) return;
 
 	GridNo       grid_no2 = NOWHERE;
@@ -380,9 +349,7 @@ void HandleAllReachAbleItemsInTheSector(INT16 const x, INT16 const y, INT8 const
 		FOR_EACH_IN_TEAM(s, OUR_TEAM)
 		{
 			if (s->bLife <= 0) continue;
-			if (s->sSectorX != x) continue;
-			if (s->sSectorY != y) continue;
-			if (s->bSectorZ != z) continue;
+			if (s->sSector != sector) continue;
 			if (!FindBestPath(s, isolated, s->bLevel, WALKING, NO_COPYROUTE, 0)) continue;
 			grid_no2 = isolated;
 			break;
@@ -394,25 +361,25 @@ void HandleAllReachAbleItemsInTheSector(INT16 const x, INT16 const y, INT8 const
 	FOR_EACH_WORLD_ITEM(wi)
 	{
 		bool reachable;
-		if (wi->o.bTrap > 0)
+		if (wi.o.bTrap > 0)
 		{
 			// If the item is trapped, then flag it as unreachable
 			reachable = false;
 		}
-		else if (ItemTypeExistsAtLocation(wi->sGridNo, OWNERSHIP, wi->ubLevel, 0))
+		else if (ItemTypeExistsAtLocation(wi.sGridNo, OWNERSHIP, wi.ubLevel, 0))
 		{
 			reachable = false;
 		}
-		else if (wi->o.usItem == CHALICE)
+		else if (wi.o.usItem == CHALICE)
 		{
 			reachable = false;
 		}
-		else if (gpWorldLevelData[wi->sGridNo].uiFlags & MAPELEMENT_REACHABLE)
+		else if (gpWorldLevelData[wi.sGridNo].uiFlags & MAPELEMENT_REACHABLE)
 		{
 			// The gridno itself is reachable, so the item is reachable
 			reachable = true;
 		}
-		else if (wi->ubLevel > 0)
+		else if (wi.ubLevel > 0)
 		{
 			// Items on roofs are always reachable
 			reachable = true;
@@ -423,14 +390,14 @@ void HandleAllReachAbleItemsInTheSector(INT16 const x, INT16 const y, INT8 const
 			reachable = false;
 			for (UINT8 dir = 0; dir != NUM_WORLD_DIRECTIONS; dir += 2)
 			{
-				GridNo const new_loc = NewGridNo(wi->sGridNo, DirectionInc(dir));
-				if (new_loc == wi->sGridNo) continue;
+				GridNo const new_loc = NewGridNo(wi.sGridNo, DirectionInc(dir));
+				if (new_loc == wi.sGridNo) continue;
 
 				// then it's a valid gridno, so test it
 				// requires non-wall movement cost from one location to the other!
 				if (!(gpWorldLevelData[new_loc].uiFlags & MAPELEMENT_REACHABLE)) continue;
 
-				UINT8 const movement_cost = gubWorldMovementCosts[wi->sGridNo][OppositeDirection(dir)][0];
+				UINT8 const movement_cost = gubWorldMovementCosts[wi.sGridNo][OppositeDirection(dir)][0];
 				// If we find a door movement cost, if the door is open the gridno
 				// should be accessible itself
 				if (movement_cost == TRAVELCOST_DOOR) continue;
@@ -443,41 +410,38 @@ void HandleAllReachAbleItemsInTheSector(INT16 const x, INT16 const y, INT8 const
 
 		if (reachable)
 		{
-			wi->usFlags |= WORLD_ITEM_REACHABLE;
+			wi.usFlags |= WORLD_ITEM_REACHABLE;
 		}
 		else
 		{
-			wi->usFlags &= ~WORLD_ITEM_REACHABLE;
+			wi.usFlags &= ~WORLD_ITEM_REACHABLE;
 		}
 	}
 }
 
 
-static UINT32 GetSectorFlags(INT16 const x, INT16 const y, UINT8 const z)
+static UINT32 GetSectorFlags(const SGPSector& sector)
 {
-	if (z == 0)
+	if (sector.z == 0)
 	{
-		return SectorInfo[SECTOR(x, y)].uiFlags;
+		return SectorInfo[sector.AsByte()].uiFlags;
 	}
 	else
 	{
-		UNDERGROUND_SECTORINFO const* const u = FindUnderGroundSector(x, y, z);
+		UNDERGROUND_SECTORINFO const* const u = FindUnderGroundSector(sector);
 		return u ? u->uiFlags : 0;
 	}
 }
 
 
-static void   LoadAndAddWorldItemsFromTempFile(INT16 sMapX, INT16 sMapY, INT8 bMapZ);
+static void   LoadAndAddWorldItemsFromTempFile(const SGPSector& sector);
 static UINT32 GetLastTimePlayerWasInSector(void);
-static void   LoadRottingCorpsesFromTempCorpseFile(INT16 sMapX, INT16 sMapY, INT8 bMapZ);
+static void   LoadRottingCorpsesFromTempCorpseFile(const SGPSector& sMap);
 
 
 void LoadCurrentSectorsInformationFromTempItemsFile()
 {
-	INT16  const x     = gWorldSectorX;
-	INT16  const y     = gWorldSectorY;
-	INT8   const z     = gbWorldSectorZ;
-	UINT32 const flags = GetSectorFlags(x, y, z);
+	UINT32 const flags = GetSectorFlags(gWorldSector);
 
 	if (AreInMeanwhile())
 	{
@@ -492,7 +456,7 @@ void LoadCurrentSectorsInformationFromTempItemsFile()
 			//If there is a file, load in the Items array
 			if (flags & SF_ITEM_TEMP_FILE_EXISTS)
 			{
-				LoadAndAddWorldItemsFromTempFile(x, y, z);
+				LoadAndAddWorldItemsFromTempFile(gWorldSector);
 			}
 
 			gfWasInMeanwhile = FALSE;
@@ -500,42 +464,34 @@ void LoadCurrentSectorsInformationFromTempItemsFile()
 		return;
 	}
 
-	bool used_tempfile = false;
-
 	if (flags & SF_ITEM_TEMP_FILE_EXISTS)
 	{
-		LoadAndAddWorldItemsFromTempFile(x, y, z);
-		used_tempfile = true;
+		LoadAndAddWorldItemsFromTempFile(gWorldSector);
 	}
 
 	if (flags & SF_ROTTING_CORPSE_TEMP_FILE_EXISTS)
 	{
-		LoadRottingCorpsesFromTempCorpseFile(x, y, z);
-		used_tempfile = true;
+		LoadRottingCorpsesFromTempCorpseFile(gWorldSector);
 	}
 
 	if (flags & SF_MAP_MODIFICATIONS_TEMP_FILE_EXISTS)
 	{
 		LoadAllMapChangesFromMapTempFileAndApplyThem();
-		used_tempfile = true;
 	}
 
 	if (flags & SF_DOOR_TABLE_TEMP_FILES_EXISTS)
 	{
 		LoadDoorTableFromDoorTableTempFile();
-		used_tempfile = true;
 	}
 
 	if (flags & SF_REVEALED_STATUS_TEMP_FILE_EXISTS)
 	{
 		LoadRevealedStatusArrayFromRevealedTempFile();
-		used_tempfile = true;
 	}
 
 	if (flags & SF_DOOR_STATUS_TEMP_FILE_EXISTS)
 	{
 		LoadDoorStatusArrayFromDoorStatusTempFile();
-		used_tempfile = true;
 	}
 
 	// if the save is an older version, use the old way of loading it up
@@ -544,7 +500,6 @@ void LoadCurrentSectorsInformationFromTempItemsFile()
 		if (flags & SF_ENEMY_PRESERVED_TEMP_FILE_EXISTS)
 		{
 			LoadEnemySoldiersFromTempFile();
-			used_tempfile = true;
 		}
 	}
 	else
@@ -553,25 +508,21 @@ void LoadCurrentSectorsInformationFromTempItemsFile()
 		if (flags & SF_ENEMY_PRESERVED_TEMP_FILE_EXISTS)
 		{
 			NewWayOfLoadingEnemySoldiersFromTempFile();
-			used_tempfile = true;
 		}
 		if (flags & SF_CIV_PRESERVED_TEMP_FILE_EXISTS)
 		{
 			NewWayOfLoadingCiviliansFromTempFile();
-			used_tempfile = true;
 		}
 	}
 
 	if (flags & SF_SMOKE_EFFECTS_TEMP_FILE_EXISTS)
 	{
-		LoadSmokeEffectsFromMapTempFile(x, y, z);
-		used_tempfile = true;
+		LoadSmokeEffectsFromMapTempFile(gWorldSector);
 	}
 
 	if (flags & SF_LIGHTING_EFFECTS_TEMP_FILE_EXISTS)
 	{
-		LoadLightEffectsFromMapTempFile(x, y, z);
-		used_tempfile = true;
+		LoadLightEffectsFromMapTempFile(gWorldSector);
 	}
 
 	// Init the world since we have modified the map
@@ -579,26 +530,22 @@ void LoadCurrentSectorsInformationFromTempItemsFile()
 
 	guiTimeCurrentSectorWasLastLoaded = GetLastTimePlayerWasInSector();
 
-#if 0 // XXX was commented out
-	if (used_tempfile) ValidateSoldierInitLinks(3);
-#endif
-
 	StripEnemyDetailedPlacementsIfSectorWasPlayerLiberated();
 }
 
 
 static void SetLastTimePlayerWasInSector(void)
 {
-	if (gbWorldSectorZ == 0)
+	if (gWorldSector.z == 0)
 	{
-		SectorInfo[SECTOR(gWorldSectorX, gWorldSectorY)].uiTimeCurrentSectorWasLastLoaded = GetWorldTotalMin();
+		SectorInfo[gWorldSector.AsByte()].uiTimeCurrentSectorWasLastLoaded = GetWorldTotalMin();
 	}
-	else if (gbWorldSectorZ > 0)
+	else if (gWorldSector.z > 0)
 	{
-		UNDERGROUND_SECTORINFO* const u = FindUnderGroundSector(gWorldSectorX, gWorldSectorY, gbWorldSectorZ);
+		UNDERGROUND_SECTORINFO* const u = FindUnderGroundSector(gWorldSector);
 		if (!u)
 		{
-			SLOGW(DEBUG_TAG_TACTSAVE, "Failed to Set the 'uiTimeCurrentSectorWasLastLoaded' for an underground sector");
+			SLOGW("Failed to Set the 'uiTimeCurrentSectorWasLastLoaded' for an underground sector");
 			return;
 		}
 		u->uiTimeCurrentSectorWasLastLoaded = GetWorldTotalMin();
@@ -608,16 +555,16 @@ static void SetLastTimePlayerWasInSector(void)
 
 static UINT32 GetLastTimePlayerWasInSector(void)
 {
-	if (gbWorldSectorZ == 0)
+	if (gWorldSector.z == 0)
 	{
-		return SectorInfo[SECTOR(gWorldSectorX, gWorldSectorY)].uiTimeCurrentSectorWasLastLoaded;
+		return SectorInfo[gWorldSector.AsByte()].uiTimeCurrentSectorWasLastLoaded;
 	}
-	else if (gbWorldSectorZ > 0)
+	else if (gWorldSector.z > 0)
 	{
-		UNDERGROUND_SECTORINFO const* const u = FindUnderGroundSector(gWorldSectorX, gWorldSectorY, gbWorldSectorZ);
+		UNDERGROUND_SECTORINFO const* const u = FindUnderGroundSector(gWorldSector);
 		if (!u)
 		{
-			SLOGW(DEBUG_TAG_TACTSAVE, "Failed to Get the 'uiTimeCurrentSectorWasLastLoaded' from an underground sector");
+			SLOGW("Failed to Get the 'uiTimeCurrentSectorWasLastLoaded' from an underground sector");
 			return 0;
 		}
 		return u->uiTimeCurrentSectorWasLastLoaded;
@@ -626,35 +573,32 @@ static UINT32 GetLastTimePlayerWasInSector(void)
 }
 
 
-static void LoadAndAddWorldItemsFromTempFile(INT16 const sMapX, INT16 const sMapY, INT8 const bMapZ)
+static void LoadAndAddWorldItemsFromTempFile(const SGPSector& sMap)
 {
-	UINT32     n_items;
-	WORLDITEM* items;
-	LoadWorldItemsFromTempItemFile(sMapX, sMapY, bMapZ, &n_items, &items);
+	std::vector<WORLDITEM> items = LoadWorldItemsFromTempItemFile(sMap);
 
 	// Have we already been to the sector?
-	if (GetSectorFlagStatus(sMapX, sMapY, bMapZ, SF_ALREADY_LOADED))
+	if (GetSectorFlagStatus(sMap, SF_ALREADY_LOADED))
 	{
 		// Completly replace the current sectors item table because all the items
 		// SHOULD be in the temp file.
 		TrashWorldItems();
 	}
 
-	if (n_items == 0) return;
+	if (items.size() == 0) return;
 
 	// Add the items in the file to the current sector's item table
-	WORLDITEM const* const end = items + n_items;
-	for (WORLDITEM* i = items; i != end; ++i)
+	for (WORLDITEM& wi : items)
 	{
-		if (!i->fExists) continue;
+		if (!wi.fExists) continue;
 
-		GridNo pos = i->sGridNo;
-		if (i->usFlags & WORLD_ITEM_GRIDNO_NOT_SET_USE_ENTRY_POINT)
+		GridNo pos = wi.sGridNo;
+		if (wi.usFlags & WORLD_ITEM_GRIDNO_NOT_SET_USE_ENTRY_POINT)
 		{
 			// The item has an invalid gridno, use the maps entry point
 			pos = gMapInformation.sCenterGridNo;
 		}
-		else if (i->usFlags & WOLRD_ITEM_FIND_SWEETSPOT_FROM_GRIDNO)
+		else if (wi.usFlags & WORLD_ITEM_FIND_SWEETSPOT_FROM_GRIDNO)
 		{
 			// Find a gridno to place the item at
 			GridNo new_pos = FindNearestAvailableGridNoForItem(pos, 5);
@@ -665,30 +609,26 @@ static void LoadAndAddWorldItemsFromTempFile(INT16 const sMapX, INT16 const sMap
 			if (new_pos != NOWHERE) pos = new_pos;
 		}
 
-		AddItemToPool(pos, &i->o, static_cast<Visibility>(i->bVisible), i->ubLevel, i->usFlags, i->bRenderZHeightAboveLevel);
+		AddItemToPool(pos, &wi.o, static_cast<Visibility>(wi.bVisible), wi.ubLevel, wi.usFlags, wi.bRenderZHeightAboveLevel);
 	}
-
-	MemFree(items);
 }
 
 
 void InitTacticalSave()
 {
-	FileMan::createDir(TEMPDIR);
-	EraseDirectory(TEMPDIR);
+	GCM->tempFiles()->createDir(TACTICAL_SAVE_TEMPDIR);
+	GCM->tempFiles()->eraseDir(TACTICAL_SAVE_TEMPDIR);
 }
 
 
-static void SaveRottingCorpsesToTempCorpseFile(INT16 const x, INT16 const y, INT8 const z)
+static void SaveRottingCorpsesToTempCorpseFile(const SGPSector& sector)
 {
-	char map_name[128];
-	GetMapTempFileName(SF_ROTTING_CORPSE_TEMP_FILE_EXISTS, map_name, x, y, z);
-	AutoSGPFile f(FileMan::openForWriting(map_name));
+	AutoSGPFile f(GCM->tempFiles()->openForWriting(GetMapTempFileName(SF_ROTTING_CORPSE_TEMP_FILE_EXISTS, sector), true));
 
 	// Save the number of the rotting corpses
 	UINT32 n_corpses = 0;
 	CFOR_EACH_ROTTING_CORPSE(c) ++n_corpses;
-	FileWrite(f, &n_corpses, sizeof(UINT32));
+	f->write(&n_corpses, sizeof(UINT32));
 
 	// Loop through all the carcases in the array and save the active ones
 	CFOR_EACH_ROTTING_CORPSE(c)
@@ -696,28 +636,27 @@ static void SaveRottingCorpsesToTempCorpseFile(INT16 const x, INT16 const y, INT
 		InjectRottingCorpseIntoFile(f, &c->def);
 	}
 
-	SetSectorFlag(x, y, z, SF_ROTTING_CORPSE_TEMP_FILE_EXISTS);
+	SetSectorFlag(sector, SF_ROTTING_CORPSE_TEMP_FILE_EXISTS);
 }
 
 
-static void LoadRottingCorpsesFromTempCorpseFile(INT16 const x, INT16 const y, INT8 const z)
+static void LoadRottingCorpsesFromTempCorpseFile(const SGPSector& sMap)
 {
 	RemoveCorpses();
 
-	char map_name[128];
-	GetMapTempFileName(SF_ROTTING_CORPSE_TEMP_FILE_EXISTS, map_name, x, y, z);
+	ST::string const map_name = GetMapTempFileName(SF_ROTTING_CORPSE_TEMP_FILE_EXISTS, sMap);
 
 	// If the file doesn't exist, it's no problem.
-	if (!GCM->doesGameResExists(map_name)) return;
+	if (!GCM->tempFiles()->exists(map_name)) return;
 
-	AutoSGPFile f(GCM->openGameResForReading(map_name));
+	AutoSGPFile f(GCM->tempFiles()->openForReading(map_name));
 
 	// Load the number of Rotting corpses
 	UINT32 n_corpses;
-	FileRead(f, &n_corpses, sizeof(UINT32));
+	f->read(&n_corpses, sizeof(UINT32));
 
 	bool const maybe_dont_add = !(gTacticalStatus.uiFlags & LOADING_SAVED_GAME) &&
-					z == 0 && GetTownIdForSector(SECTOR(x, y)) != BLANK_SECTOR; // In town?
+					sMap.z == 0 && GetTownIdForSector(sMap) != BLANK_SECTOR; // In town?
 	for (UINT32 n = n_corpses; n != 0; --n)
 	{
 		ROTTING_CORPSE_DEFINITION def;
@@ -764,7 +703,7 @@ static void LoadRottingCorpsesFromTempCorpseFile(INT16 const x, INT16 const y, I
 		}
 		if (!AddRottingCorpse(&def))
 		{
-			SLOGD(DEBUG_TAG_TACTSAVE, "Failed to add a corpse to GridNo # %d", def.sGridNo);
+			SLOGD("Failed to add a corpse to GridNo # {}", def.sGridNo);
 		}
 	}
 
@@ -773,12 +712,12 @@ static void LoadRottingCorpsesFromTempCorpseFile(INT16 const x, INT16 const y, I
 }
 
 
-void AddWorldItemsToUnLoadedSector(const INT16 sMapX, const INT16 sMapY, const INT8 bMapZ, const UINT32 item_count, const WORLDITEM* const wis)
+void AddWorldItemsToUnLoadedSector(const SGPSector& sMap, const std::vector<WORLDITEM>& wis)
 {
-	for (const WORLDITEM* wi = wis; wi != wis + item_count; ++wi)
+	for (const WORLDITEM& wi : wis)
 	{
-		if (!wi->fExists) continue;
-		AddItemsToUnLoadedSector(sMapX, sMapY, bMapZ, wi->sGridNo, 1, &wi->o, wi->ubLevel, wi->usFlags, wi->bRenderZHeightAboveLevel, static_cast<Visibility>(wi->bVisible));
+		if (!wi.fExists) continue;
+		AddItemsToUnLoadedSector(sMap, wi.sGridNo, 1, &wi.o, wi.ubLevel, wi.usFlags, wi.bRenderZHeightAboveLevel, static_cast<Visibility>(wi.bVisible));
 	}
 }
 
@@ -810,36 +749,30 @@ static void SaveNPCInformationToProfileStruct(void)
 }
 
 
-void ChangeNpcToDifferentSector(MERCPROFILESTRUCT& p, INT16 sSectorX, INT16 sSectorY, INT8 bSectorZ)
+void ChangeNpcToDifferentSector(MERCPROFILESTRUCT& p, const SGPSector& sSector)
 {
+	SGPSector nextSector = sSector;
 	if (p.ubMiscFlags2 & PROFILE_MISC_FLAG2_LEFT_COUNTRY)
 	{
 		// override location, this person is OUTTA here
-		sSectorX = 0;
-		sSectorY = 0;
-		bSectorZ = 0;
+		nextSector = SGPSector();
 	}
 	// Carmen no longer traverses out, he is temporarily removed instead
 
-	p.sSectorX = sSectorX;
-	p.sSectorY = sSectorY;
-	p.bSectorZ = bSectorZ;
+	p.sSector = nextSector;
 	p.fUseProfileInsertionInfo = FALSE;
 }
 
 
-void AddRottingCorpseToUnloadedSectorsRottingCorpseFile(INT16 const sMapX, INT16 const sMapY, INT8 const bMapZ, ROTTING_CORPSE_DEFINITION const* const corpse_def)
+void AddRottingCorpseToUnloadedSectorsRottingCorpseFile(const SGPSector& sMap, ROTTING_CORPSE_DEFINITION const* const corpse_def)
 {
-	char map_name[128];
-	GetMapTempFileName(SF_ROTTING_CORPSE_TEMP_FILE_EXISTS, map_name, sMapX, sMapY, bMapZ);
-
-	AutoSGPFile f(FileMan::openForReadWrite(map_name));
+	AutoSGPFile f(GCM->tempFiles()->openForReadWrite(GetMapTempFileName(SF_ROTTING_CORPSE_TEMP_FILE_EXISTS, sMap)));
 
 	UINT32 corpse_count;
-	if (FileGetSize(f) != 0)
+	if (f->size() != 0)
 	{
-		FileRead(f, &corpse_count, sizeof(corpse_count));
-		FileSeek(f, 0, FILE_SEEK_FROM_START);
+		f->read(&corpse_count, sizeof(corpse_count));
+		f->seek(0, FILE_SEEK_FROM_START);
 	}
 	else
 	{
@@ -847,26 +780,28 @@ void AddRottingCorpseToUnloadedSectorsRottingCorpseFile(INT16 const sMapX, INT16
 	}
 
 	++corpse_count;
-	FileWrite(f, &corpse_count, sizeof(corpse_count));
+	f->write(&corpse_count, sizeof(corpse_count));
 
-	FileSeek(f, 0, FILE_SEEK_FROM_END);
+	f->seek(0, FILE_SEEK_FROM_END);
 	InjectRottingCorpseIntoFile(f, corpse_def);
 
-	SetSectorFlag(sMapX, sMapY, bMapZ, SF_ROTTING_CORPSE_TEMP_FILE_EXISTS);
+	SetSectorFlag(sMap, SF_ROTTING_CORPSE_TEMP_FILE_EXISTS);
 }
 
 
-void SetSectorFlag(INT16 const x, INT16 const y, UINT8 const z, SectorFlags const flag_to_set)
+void SetSectorFlag(const SGPSector& sector, SectorFlags const flag_to_set)
 {
+	static const SGPSector tixa(TIXA_SECTOR_X, TIXA_SECTOR_Y);
+	static const SGPSector gunrange(GUN_RANGE_X, GUN_RANGE_Y, GUN_RANGE_Z);
 	if (flag_to_set == SF_ALREADY_VISITED)
 	{
 		// Do certain things when particular sectors are visited
-		if (x == TIXA_SECTOR_X && y == TIXA_SECTOR_Y)
+		if (sector == tixa)
 		{
 			// Tixa prison (not seen until Tixa visited)
 			SectorInfo[SEC_J9].uiFacilitiesFlags |= SFCF_PRISON;
 		}
-		else if (x == GUN_RANGE_X && y == GUN_RANGE_Y && z == GUN_RANGE_Z)
+		else if (sector == gunrange)
 		{
 			// Alma shooting range (not seen until sector visited)
 			SectorInfo[SEC_H13].uiFacilitiesFlags |= SFCF_GUN_RANGE;
@@ -876,7 +811,7 @@ void SetSectorFlag(INT16 const x, INT16 const y, UINT8 const z, SectorFlags cons
 		}
 
 		// Increment daily counter of sectors visited
-		if (!GetSectorFlagStatus(x, y, z, SF_ALREADY_VISITED) &&
+		if (!GetSectorFlagStatus(sector, SF_ALREADY_VISITED) &&
 			++gStrategicStatus.ubNumNewSectorsVisitedToday == NEW_SECTORS_EQUAL_TO_ACTIVITY)
 		{
 			// Visited enough to count as an active day
@@ -884,39 +819,38 @@ void SetSectorFlag(INT16 const x, INT16 const y, UINT8 const z, SectorFlags cons
 		}
 	}
 
-	if (z == 0)
+	if (sector.z == 0)
 	{
-		SectorInfo[SECTOR(x, y)].uiFlags |= flag_to_set;
+		SectorInfo[sector.AsByte()].uiFlags |= flag_to_set;
 	}
 	else
 	{
-		UNDERGROUND_SECTORINFO* const u = FindUnderGroundSector(x, y, z);
+		UNDERGROUND_SECTORINFO* const u = FindUnderGroundSector(sector);
 		if (u) u->uiFlags |= flag_to_set;
 	}
 }
 
-
-void ReSetSectorFlag(INT16 const x, INT16 const y, UINT8 const z, SectorFlags const flag_to_clear)
+void ReSetSectorFlag(const SGPSector& sector, SectorFlags const flag_to_clear)
 {
-	if (z == 0)
+	if (sector.z == 0)
 	{
-		SectorInfo[SECTOR(x, y)].uiFlags &= ~flag_to_clear;
+		SectorInfo[sector.AsByte()].uiFlags &= ~flag_to_clear;
 	}
 	else
 	{
-		UNDERGROUND_SECTORINFO* const u = FindUnderGroundSector(x, y, z);
+		UNDERGROUND_SECTORINFO* const u = FindUnderGroundSector(sector);
 		if (u) u->uiFlags &= ~flag_to_clear;
 	}
 }
 
 
-BOOLEAN GetSectorFlagStatus(INT16 const x, INT16 const y, UINT8 const z, SectorFlags const flag_to_check)
+BOOLEAN GetSectorFlagStatus(const SGPSector& sSector, SectorFlags const flag_to_check)
 {
-	return (GetSectorFlags(x, y, z) & flag_to_check) != 0;
+	return (GetSectorFlags(sSector) & flag_to_check) != 0;
 }
 
 
-void AddDeadSoldierToUnLoadedSector(INT16 const x, INT16 const y, UINT8 const z, SOLDIERTYPE* const s, INT16 const grid_no, UINT32 const flags)
+void AddDeadSoldierToUnLoadedSector(const SGPSector& sMap, SOLDIERTYPE* const s, INT16 const grid_no, UINT32 const flags)
 {
 	// Setup the flags for the items and the rotting corpses
 	UINT16 flags_for_world_items    = 0;
@@ -928,12 +862,12 @@ void AddDeadSoldierToUnLoadedSector(INT16 const x, INT16 const y, UINT8 const z,
 	}
 	else if (flags & ADD_DEAD_SOLDIER_TO_SWEETSPOT)
 	{
-		flags_for_world_items    = WOLRD_ITEM_FIND_SWEETSPOT_FROM_GRIDNO | WORLD_ITEM_REACHABLE;
+		flags_for_world_items    = WORLD_ITEM_FIND_SWEETSPOT_FROM_GRIDNO | WORLD_ITEM_REACHABLE;
 		flags_for_rotting_corpse = ROTTING_CORPSE_FIND_SWEETSPOT_FROM_GRIDNO;
 	}
 	else
 	{
-		SLOGE(DEBUG_TAG_ASSERTS, "Flag not is Switch statement");
+		SLOGA("Flag not is Switch statement");
 	}
 
 	//Create an array of objects from the mercs inventory
@@ -960,23 +894,22 @@ void AddDeadSoldierToUnLoadedSector(INT16 const x, INT16 const y, UINT8 const z,
 			}
 
 			ReduceAmmoDroppedByNonPlayerSoldiers(*s, o);
-			AddItemsToUnLoadedSector(x, y, z, grid_no, 1, &o, s->bLevel, flags_for_world_items, 0, VISIBLE);
+			AddItemsToUnLoadedSector(sMap, grid_no, 1, &o, s->bLevel, flags_for_world_items, 0, VISIBLE);
 		}
 	}
 
 	DropKeysInKeyRing(*s, grid_no, s->bLevel, VISIBLE, false, 0, true);
 
 	// Convert the soldier into a rotting corpse
-	ROTTING_CORPSE_DEFINITION c;
-	memset(&c, 0, sizeof(c));
+	ROTTING_CORPSE_DEFINITION c{};
 	c.ubBodyType        = s->ubBodyType;
 	c.sGridNo           = grid_no;
 	c.sHeightAdjustment = s->sHeightAdjustment;
 	c.bVisible          = TRUE;
-	SET_PALETTEREP_ID(c.HeadPal,  s->HeadPal);
-	SET_PALETTEREP_ID(c.VestPal,  s->VestPal);
-	SET_PALETTEREP_ID(c.SkinPal,  s->SkinPal);
-	SET_PALETTEREP_ID(c.PantsPal, s->PantsPal);
+	c.HeadPal           = s->HeadPal;
+	c.VestPal           = s->VestPal;
+	c.SkinPal           = s->SkinPal;
+	c.PantsPal          = s->PantsPal;
 	c.bDirection        = s->bDirection;
 	c.uiTimeOfDeath     = GetWorldTotalMin();
 	c.usFlags           = flags_for_rotting_corpse;
@@ -994,7 +927,7 @@ void AddDeadSoldierToUnLoadedSector(INT16 const x, INT16 const y, UINT8 const z,
 					possible_death_anims[Random(lengthof(possible_death_anims))];
 	c.ubType = gubAnimSurfaceCorpseID[s->ubBodyType][death_anim];
 
-	AddRottingCorpseToUnloadedSectorsRottingCorpseFile(x, y, z, &c);
+	AddRottingCorpseToUnloadedSectorsRottingCorpseFile(sMap, &c);
 }
 
 
@@ -1002,7 +935,7 @@ void SaveTempNpcQuoteArrayToSaveGameFile(HWFILE const f)
 {
 	// Write zero size marker for the obsolescent temporary NPC quote file.
 	UINT32 const size = 0;
-	FileWrite(f, &size, sizeof(size));
+	f->write(&size, sizeof(size));
 }
 
 
@@ -1010,8 +943,8 @@ void LoadTempNpcQuoteArrayToSaveGameFile(HWFILE const f)
 {
 	// Skip obsolescent temporary NPC quote file.
 	UINT32 size;
-	FileRead(f, &size, sizeof(size));
-	FileSeek(f, size, FILE_SEEK_FROM_CURRENT);
+	f->read(&size, sizeof(size));
+	f->seek(size, FILE_SEEK_FROM_CURRENT);
 }
 
 
@@ -1035,7 +968,7 @@ static UINT8 const* GetRotationArray();
 
 void NewJA2EncryptedFileRead(HWFILE const f, BYTE* const pDest, UINT32 const uiBytesToRead)
 {
-	FileRead(f, pDest, uiBytesToRead);
+	f->read(pDest, uiBytesToRead);
 
 	const UINT8* const pubRotationArray = GetRotationArray();
 	UINT8              ubArrayIndex     = 0;
@@ -1063,7 +996,7 @@ void NewJA2EncryptedFileWrite(HWFILE const hFile, BYTE const* const data, UINT32
 		if (++ubArrayIndex >= NEW_ROTATION_ARRAY_SIZE) ubArrayIndex = 0;
 	}
 
-	FileWrite(hFile, buf, uiBytesToWrite);
+	hFile->write(buf, uiBytesToWrite);
 }
 
 
@@ -1072,7 +1005,7 @@ static const UINT8 ubRotationArray[46] = { 132, 235, 125, 99, 15, 220, 140, 89, 
 
 void JA2EncryptedFileRead(HWFILE const f, BYTE* const pDest, UINT32 const uiBytesToRead)
 {
-	FileRead(f, pDest, uiBytesToRead);
+	f->read(pDest, uiBytesToRead);
 
 	UINT8 ubArrayIndex = 0;
 	UINT8 ubLastByte   = 0;
@@ -1098,15 +1031,13 @@ void JA2EncryptedFileWrite(HWFILE const hFile, BYTE const* const data, UINT32 co
 		if (++ubArrayIndex >= ROTATION_ARRAY_SIZE) ubArrayIndex = 0;
 	}
 
-	FileWrite(hFile, buf, uiBytesToWrite);
+	hFile->write(buf, uiBytesToWrite);
 }
 
-
-void GetMapTempFileName(SectorFlags const uiType, char* const pMapName, INT16 const sMapX, INT16 const sMapY, INT8 const bMapZ)
+ST::string GetMapTempFileName(SectorFlags uiType, const SGPSector& sector)
 {
 	// Convert the current sector location into a file name
-	char zTempName[512];
-	GetMapFileName(sMapX, sMapY, bMapZ, zTempName, FALSE);
+	ST::string zTempName = GetMapFileName(sector, FALSE);
 
 	const char* prefix;
 	switch (uiType)
@@ -1122,99 +1053,94 @@ void GetMapTempFileName(SectorFlags const uiType, char* const pMapName, INT16 co
 		case SF_LIGHTING_EFFECTS_TEMP_FILE_EXISTS:  prefix = "l";  break;
 		case SF_CIV_PRESERVED_TEMP_FILE_EXISTS:     prefix = "c";  break;
 
-		default: SLOGE(DEBUG_TAG_ASSERTS, "GetMapTempFileName: invalid Type"); return;
+		default: SLOGA("GetMapTempFileName: invalid Type"); return "";
 	}
-	sprintf(pMapName, TEMPDIR "/%s_%s", prefix, zTempName);
+	return ST::format(TACTICAL_SAVE_TEMPDIR "/{}_{}", prefix, zTempName);
 }
 
 
-static UINT32 UpdateLoadedSectorsItemInventory(INT16 x, INT16 y, INT8 z, UINT32 n_items);
+static UINT32 UpdateLoadedSectorsItemInventory(const SGPSector& sector, UINT32 n_items);
 
 
-UINT32 GetNumberOfVisibleWorldItemsFromSectorStructureForSector(INT16 const x, INT16 const y, INT8 const z)
+UINT32 GetNumberOfVisibleWorldItemsFromSectorStructureForSector(const SGPSector& sMap)
 {
 	UINT32 n_items;
-	if (z == 0)
+	if (sMap.z == 0)
 	{
-		n_items = SectorInfo[SECTOR(x, y)].uiNumberOfWorldItemsInTempFileThatCanBeSeenByPlayer;
+		n_items = SectorInfo[sMap.AsByte()].uiNumberOfWorldItemsInTempFileThatCanBeSeenByPlayer;
 	}
 	else
 	{
 		//find the underground sector
-		UNDERGROUND_SECTORINFO const* const u = FindUnderGroundSector(x, y, z);
+		UNDERGROUND_SECTORINFO const* const u = FindUnderGroundSector(sMap);
 		n_items = u ? u->uiNumberOfWorldItemsInTempFileThatCanBeSeenByPlayer : 0;
 	}
 
 	// If the requested sector is currently loaded
-	if (gfWorldLoaded &&
-		x == gWorldSectorX &&
-		y == gWorldSectorY &&
-		z == gbWorldSectorZ)
+	if (gfWorldLoaded && sMap == gWorldSector)
 	{
 		// Since items might have been added, update
-		n_items = UpdateLoadedSectorsItemInventory(x, y, z, n_items);
+		n_items = UpdateLoadedSectorsItemInventory(sMap, n_items);
 	}
 
 	return n_items;
 }
 
 
-void SetNumberOfVisibleWorldItemsInSectorStructureForSector(INT16 const x, INT16 const y, INT8 const z, UINT32 const n_items)
+void SetNumberOfVisibleWorldItemsInSectorStructureForSector(const SGPSector& sector, UINT32 const n_items)
 {
-	if (z == 0)
+	if (sector.z == 0)
 	{
-		SectorInfo[SECTOR(x, y)].uiNumberOfWorldItemsInTempFileThatCanBeSeenByPlayer = n_items;
+		SectorInfo[sector.AsByte()].uiNumberOfWorldItemsInTempFileThatCanBeSeenByPlayer = n_items;
 	}
 	else
 	{
-		UNDERGROUND_SECTORINFO* const u = FindUnderGroundSector(x, y, z);
+		UNDERGROUND_SECTORINFO* const u = FindUnderGroundSector(sector);
 		if (u) u->uiNumberOfWorldItemsInTempFileThatCanBeSeenByPlayer = n_items;
 	}
 }
 
 
-static void SynchronizeItemTempFileVisbleItemsToSectorInfoVisbleItems(INT16 const sMapX, INT16 const sMapY, INT8 const bMapZ, bool const check_consistency)
+static void SynchronizeItemTempFileVisbleItemsToSectorInfoVisbleItems(const SGPSector& sMap, bool const check_consistency)
 {
-	UINT32     uiTotalNumberOfItems;
-	WORLDITEM* pTotalSectorList;
-	LoadWorldItemsFromTempItemFile(sMapX, sMapY, bMapZ, &uiTotalNumberOfItems, &pTotalSectorList);
+	std::vector<WORLDITEM> pTotalSectorList = LoadWorldItemsFromTempItemFile(sMap);
 
 	UINT32 uiItemCount = 0;
-	if (uiTotalNumberOfItems > 0)
+	if (pTotalSectorList.size() > 0)
 	{
-		for (const WORLDITEM* wi = pTotalSectorList; wi != pTotalSectorList + uiTotalNumberOfItems; ++wi)
+		for (const WORLDITEM& wi : pTotalSectorList)
 		{
 			if (!IsMapScreenWorldItemVisibleInMapInventory(wi)) continue;
-			uiItemCount += wi->o.ubNumberOfObjects;
+			uiItemCount += wi.o.ubNumberOfObjects;
 		}
-		MemFree(pTotalSectorList);
+		pTotalSectorList.clear();
 	}
 
 	if (check_consistency)
 	{
-		const UINT32 uiReported = GetNumberOfVisibleWorldItemsFromSectorStructureForSector(sMapX, sMapY, bMapZ);
+		const UINT32 uiReported = GetNumberOfVisibleWorldItemsFromSectorStructureForSector(sMap);
 		if (uiItemCount != uiReported)
 		{
-			SLOGW(DEBUG_TAG_TACTSAVE, "SynchronizeItemTempFile() Reported %d, should be %d", uiReported, uiItemCount);
+			SLOGW("SynchronizeItemTempFile() Reported {}, should be {}", uiReported, uiItemCount);
 		}
 	}
-	SetNumberOfVisibleWorldItemsInSectorStructureForSector(sMapX, sMapY, bMapZ, uiItemCount);
+	SetNumberOfVisibleWorldItemsInSectorStructureForSector(sMap, uiItemCount);
 }
 
 
-static UINT32 UpdateLoadedSectorsItemInventory(INT16 const x, INT16 const y, INT8 const z, UINT32 const n_items)
+static UINT32 UpdateLoadedSectorsItemInventory(const SGPSector& sector, UINT32 const n_items)
 {
 	UINT32 n = 0;
 	CFOR_EACH_WORLD_ITEM(wi)
 	{
 		if (!IsMapScreenWorldItemVisibleInMapInventory(wi)) continue;
-		n += wi->o.ubNumberOfObjects;
+		n += wi.o.ubNumberOfObjects;
 	}
 
 	// Update the value in the sector info struct, if the item count is different
 	if (n != n_items)
 	{
-		SetNumberOfVisibleWorldItemsInSectorStructureForSector(x, y, z, n);
+		SetNumberOfVisibleWorldItemsInSectorStructureForSector(sector, n);
 	}
 
 	return n;
@@ -3517,7 +3443,7 @@ static UINT8 const* GetRotationArray()
 
 TEST(TacticalSave, asserts)
 {
-	EXPECT_EQ(lengthof(g_encryption_array), BASE_NUMBER_OF_ROTATION_ARRAYS * 12);
+	EXPECT_EQ(lengthof(g_encryption_array), static_cast<size_t>(BASE_NUMBER_OF_ROTATION_ARRAYS * 12));
 }
 
 #endif

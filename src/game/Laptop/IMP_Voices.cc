@@ -17,6 +17,10 @@
 #include "Font_Control.h"
 
 
+#include <string_theory/format>
+#include <string_theory/string>
+
+
 //current and last pages
 INT32 iCurrentVoices = 0;
 static INT32 const iLastVoice = 2;
@@ -135,7 +139,7 @@ static void DecrementVoice(void)
 }
 
 
-static void MakeButton(UINT idx, const char* img_file, INT32 off_normal, INT32 on_normal, const wchar_t* text, INT16 x, INT16 y, GUI_CALLBACK click)
+static void MakeButton(UINT idx, const char* img_file, INT32 off_normal, INT32 on_normal, const ST::string& text, INT16 x, INT16 y, GUI_CALLBACK click)
 {
 	BUTTON_PICS* const img = LoadButtonImage(img_file, off_normal, on_normal);
 	giIMPVoicesButtonImage[idx] = img;
@@ -147,9 +151,9 @@ static void MakeButton(UINT idx, const char* img_file, INT32 off_normal, INT32 o
 }
 
 
-static void BtnIMPVoicesDoneCallback(GUI_BUTTON* btn, INT32 reason);
-static void BtnIMPVoicesNextCallback(GUI_BUTTON* btn, INT32 reason);
-static void BtnIMPVoicesPreviousCallback(GUI_BUTTON* btn, INT32 reason);
+static void BtnIMPVoicesDoneCallback(GUI_BUTTON* btn, UINT32 reason);
+static void BtnIMPVoicesNextCallback(GUI_BUTTON* btn, UINT32 reason);
+static void BtnIMPVoicesPreviousCallback(GUI_BUTTON* btn, UINT32 reason);
 
 
 static void CreateIMPVoicesButtons(void)
@@ -182,9 +186,9 @@ static void DestroyIMPVoicesButtons(void)
 }
 
 
-static void BtnIMPVoicesNextCallback(GUI_BUTTON *btn, INT32 reason)
+static void BtnIMPVoicesNextCallback(GUI_BUTTON *btn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		IncrementVoice();
 		if (SoundIsPlaying(uiVocVoiceSound)) SoundStop(uiVocVoiceSound);
@@ -194,9 +198,9 @@ static void BtnIMPVoicesNextCallback(GUI_BUTTON *btn, INT32 reason)
 }
 
 
-static void BtnIMPVoicesPreviousCallback(GUI_BUTTON *btn, INT32 reason)
+static void BtnIMPVoicesPreviousCallback(GUI_BUTTON *btn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		DecrementVoice();
 		if (SoundIsPlaying(uiVocVoiceSound)) SoundStop(uiVocVoiceSound);
@@ -206,9 +210,9 @@ static void BtnIMPVoicesPreviousCallback(GUI_BUTTON *btn, INT32 reason)
 }
 
 
-static void BtnIMPVoicesDoneCallback(GUI_BUTTON *btn, INT32 reason)
+static void BtnIMPVoicesDoneCallback(GUI_BUTTON *btn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		iCurrentImpPage = IMP_MAIN_PAGE;
 
@@ -265,7 +269,7 @@ static void PlayVoice()
 }
 
 
-static void IMPPortraitRegionButtonCallback(MOUSE_REGION* pRegion, INT32 iReason);
+static void IMPPortraitRegionButtonCallback(MOUSE_REGION* pRegion, UINT32 iReason);
 
 
 static void CreateIMPVoiceMouseRegions(void)
@@ -284,10 +288,10 @@ static void DestroyIMPVoiceMouseRegions(void)
 }
 
 
-static void IMPPortraitRegionButtonCallback(MOUSE_REGION* pRegion, INT32 iReason)
+static void IMPPortraitRegionButtonCallback(MOUSE_REGION* pRegion, UINT32 iReason)
 {
 	// callback handler for imp portrait region button events
-	if(iReason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if(iReason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		if( ! SoundIsPlaying( uiVocVoiceSound ) )
 		{
@@ -299,12 +303,10 @@ static void IMPPortraitRegionButtonCallback(MOUSE_REGION* pRegion, INT32 iReason
 
 static void RenderVoiceIndex(void)
 {
-
-	wchar_t sString[ 32 ];
 	INT16 sX, sY;
 
 	// render the voice index value on the the blank portrait
-	swprintf(sString, lengthof(sString), L"%ls %d", pIMPVoicesStrings, iCurrentVoices + 1);
+	ST::string sString = ST::format("{} {}", pIMPVoicesStrings, iCurrentVoices + 1);
 	FindFontCenterCoordinates( 290 + LAPTOP_UL_X, 0, 100, 0, sString, FONT12ARIAL, &sX, &sY );
 	SetFontAttributes(FONT12ARIAL, FONT_WHITE);
 	MPrint(sX, 320, sString);

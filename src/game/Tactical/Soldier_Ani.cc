@@ -6,7 +6,6 @@
 #include "Overhead.h"
 #include "Soldier_Find.h"
 #include "Debug.h"
-#include "MemMan.h"
 #include "Overhead_Types.h"
 #include "Soldier_Control.h"
 #include "Animation_Cache.h"
@@ -63,13 +62,15 @@
 #include "ScreenIDs.h"
 #include "Items.h"
 #include "Shading.h"
+#include "Strategic_Movement.h"
 
 #include "Soldier.h"
 
 #include "ContentManager.h"
 #include "GameInstance.h"
 #include "WeaponModels.h"
-#include "slog/slog.h"
+#include "Logger.h"
+#include "MercProfile.h"
 
 #define NO_JUMP			0
 #define MAX_ANIFRAMES_PER_FLASH	2
@@ -84,7 +85,7 @@ static const DOUBLE gHopFenceForwardNWDist[NUMSOLDIERBODYTYPES]     = { 2.7, 1.0
 static const DOUBLE gHopFenceForwardFullSEDist[NUMSOLDIERBODYTYPES] = { 1.1, 1.0, 2.1, 1.1 };
 static const DOUBLE gHopFenceForwardFullNWDist[NUMSOLDIERBODYTYPES] = { 0.8, 0.2, 2.7, 0.8 };
 static const DOUBLE gFalloffBackwardsDist[NUMSOLDIERBODYTYPES]      = { 1, 0.8, 1, 1 };
-static const DOUBLE gClimbUpRoofDist[NUMSOLDIERBODYTYPES]           = { 2, 0.1, 2, 2 };
+static const float  gClimbUpRoofDist[NUMSOLDIERBODYTYPES]           = { 2.0f, 0.1f, 2.0f, 2.0f };
 static const DOUBLE gClimbUpRoofLATDist[NUMSOLDIERBODYTYPES]        = { 0.7, 0.5, 0.7, 0.5 };
 static const DOUBLE gClimbDownRoofStartDist[NUMSOLDIERBODYTYPES]    = { 5.0, 1.0, 1, 1 };
 static const DOUBLE gClimbUpRoofDistGoingLower[NUMSOLDIERBODYTYPES] = { 0.9, 0.1, 1, 1 };
@@ -97,8 +98,6 @@ static BOOLEAN HandleUnjamAnimation(SOLDIERTYPE* pSoldier);
 
 BOOLEAN AdjustToNextAnimationFrame( SOLDIERTYPE *pSoldier )
 {
-	EV_S_FIREWEAPON SFireWeapon;
-
 	UINT16 sNewAniFrame, anAniFrame;
 	INT8 ubCurrentHeight;
 	UINT16 usOldAnimState;
@@ -111,11 +110,7 @@ BOOLEAN AdjustToNextAnimationFrame( SOLDIERTYPE *pSoldier )
 	UINT16 usItem;
 	RANDOM_ANI_DEF *pAnimDef;
 	UINT8 ubDesiredHeight;
-	BOOLEAN bOKFireWeapon;
-	BOOLEAN bWeaponJammed;
 	UINT16 usUIMovementMode;
-
-	SoldierSP soldier = GetSoldier(pSoldier);
 
 	do
 	{
@@ -325,12 +320,13 @@ BOOLEAN AdjustToNextAnimationFrame( SOLDIERTYPE *pSoldier )
 
 					// SHOOT GUN
 					// MAKE AN EVENT, BUT ONLY DO STUFF IF WE OWN THE GUY!
+					EV_S_FIREWEAPON SFireWeapon;
 					SFireWeapon.usSoldierID = pSoldier->ubID;
 					SFireWeapon.uiUniqueId = pSoldier->uiUniqueSoldierIdValue;
 					SFireWeapon.sTargetGridNo = pSoldier->sTargetGridNo;
 					SFireWeapon.bTargetLevel = pSoldier->bTargetLevel;
 					SFireWeapon.bTargetCubeLevel= pSoldier->bTargetCubeLevel;
-					AddGameEvent( S_FIREWEAPON, 0, &SFireWeapon );
+					AddGameEvent(SFireWeapon, 0);
 					break;
 
 				case 431:
@@ -398,13 +394,9 @@ BOOLEAN AdjustToNextAnimationFrame( SOLDIERTYPE *pSoldier )
 
 					uiJumpAddress = NO_JUMP;
 
-					if ( anAniFrame == 999 )
-					{
-						// Fail jump, re-load old anim
-						ChangeSoldierState( pSoldier, usOldAnimState, 0, FALSE );
-						return( TRUE );
-					}
-					break;
+					// Fail jump, re-load old anim
+					ChangeSoldierState( pSoldier, usOldAnimState, 0, FALSE );
+					return( TRUE );
 
 				case 437:
 
@@ -488,6 +480,12 @@ BOOLEAN AdjustToNextAnimationFrame( SOLDIERTYPE *pSoldier )
 
 					//CODE: FOR A NON-INTERRUPTABLE SCRIPT - SIGNAL DONE
 					pSoldier->fInNonintAnim = FALSE;
+
+					if (pSoldier->usAnimState == STEAL_ITEM) {
+						SLOGD("Reducing attacker busy count..., CODE FROM ANIMATION {} ( {} )",
+							gAnimControl[pSoldier->usAnimState].zAnimStr, pSoldier->usAnimState);
+						ReduceAttackBusyCount(pSoldier, FALSE);
+					}
 
 					// ATE: if it's the begin cower animation, unset ui, cause it could
 					// be from player changin stance
@@ -659,17 +657,17 @@ BOOLEAN AdjustToNextAnimationFrame( SOLDIERTYPE *pSoldier )
 					else if (pSoldier->bDoBurst == 1)
 					{
 						// CHECK FOR GUN JAM
-						bWeaponJammed = CheckForGunJam( pSoldier );
-						if ( bWeaponJammed == TRUE )
+						auto const weaponJammed = CheckForGunJam(pSoldier);
+						if (weaponJammed == FireWeaponResult::JAMMED)
 						{
 							fStop = TRUE;
 							// stop shooting!
 							pSoldier->bBulletsLeft = 0;
 
 							// OK, Stop burst sound...
-							if ( pSoldier->iBurstSoundID != NO_SAMPLE )
+							if ( pSoldier->uiBurstSoundID != NO_SAMPLE )
 							{
-								SoundStop( pSoldier->iBurstSoundID );
+								SoundStop( pSoldier->uiBurstSoundID );
 							}
 
 							if (pSoldier->bTeam == OUR_TEAM)
@@ -678,10 +676,10 @@ BOOLEAN AdjustToNextAnimationFrame( SOLDIERTYPE *pSoldier )
 								//ScreenMsg( FONT_MCOLOR_LTYELLOW, MSG_INTERFACE, L"Gun jammed!" );
 							}
 
-							SLOGD(DEBUG_TAG_SOLDIER, "Freeing up attacker - aborting start of attack due to burst gun jam");
+							SLOGD("Freeing up attacker - aborting start of attack due to burst gun jam");
 							FreeUpAttacker(pSoldier);
 						}
-						else if ( bWeaponJammed == 255 )
+						else if (weaponJammed == FireWeaponResult::UNJAMMED)
 						{
 							// Play intermediate animation...
 							if ( HandleUnjamAnimation( pSoldier ) )
@@ -697,7 +695,7 @@ BOOLEAN AdjustToNextAnimationFrame( SOLDIERTYPE *pSoldier )
 						pSoldier->bDoBurst = 1;
 
 						// ATE; Reduce it due to animation being stopped...
-						SLOGD(DEBUG_TAG_SOLDIER, "Freeing up attacker - Burst animation ended");
+						SLOGD("Freeing up attacker - Burst animation ended");
 						ReduceAttackBusyCount(pSoldier, FALSE);
 
 
@@ -743,7 +741,6 @@ BOOLEAN AdjustToNextAnimationFrame( SOLDIERTYPE *pSoldier )
 					//CODE: FINISH BURST
 					pSoldier->fDoSpread = FALSE;
 					pSoldier->bDoBurst = 1;
-					//pSoldier->fBurstCompleted = TRUE;
 					break;
 
 				case 450:
@@ -800,14 +797,7 @@ BOOLEAN AdjustToNextAnimationFrame( SOLDIERTYPE *pSoldier )
 
 					// CODE: HANDLE CLIMBING ROOF,
 					// Move merc up
-					if ( pSoldier->bDirection == NORTH )
-					{
-						SetSoldierHeight( pSoldier, (FLOAT)(pSoldier->dHeightAdjustment + gClimbUpRoofDist[ pSoldier->ubBodyType ] ) );
-					}
-					else
-					{
-						SetSoldierHeight( pSoldier, (FLOAT)(pSoldier->dHeightAdjustment + gClimbUpRoofDist[ pSoldier->ubBodyType ] ) );
-					}
+					SetSoldierHeight(pSoldier, pSoldier->dHeightAdjustment + gClimbUpRoofDist[pSoldier->ubBodyType]);
 					break;
 
 				case 455:
@@ -824,14 +814,7 @@ BOOLEAN AdjustToNextAnimationFrame( SOLDIERTYPE *pSoldier )
 
 					// CODE: HANDLE CLIMBING ROOF,
 					// Move merc DOWN
-					if ( pSoldier->bDirection == NORTH )
-					{
-						SetSoldierHeight( pSoldier, (FLOAT)(pSoldier->dHeightAdjustment - gClimbUpRoofDist[ pSoldier->ubBodyType ] ) );
-					}
-					else
-					{
-						SetSoldierHeight( pSoldier, (FLOAT)(pSoldier->dHeightAdjustment - gClimbUpRoofDist[ pSoldier->ubBodyType ] ) );
-					}
+					SetSoldierHeight(pSoldier, pSoldier->dHeightAdjustment - gClimbUpRoofDist[pSoldier->ubBodyType]);
 					break;
 
 				case 457:
@@ -882,10 +865,10 @@ BOOLEAN AdjustToNextAnimationFrame( SOLDIERTYPE *pSoldier )
 						// Update UI
 						DirtyMercPanelInterface( pSoldier, DIRTYLEVEL2 );
 
-						MemFree( pSoldier->pTempObject );
+						delete pSoldier->pTempObject;
 						pSoldier->pTempObject = NULL;
 
-						MemFree( pSoldier->pThrowParams );
+						delete pSoldier->pThrowParams;
 						pSoldier->pThrowParams = NULL;
 					}
 					break;
@@ -944,7 +927,7 @@ BOOLEAN AdjustToNextAnimationFrame( SOLDIERTYPE *pSoldier )
 					{
 						INT16 sDiff = pSoldier->sHeightAdjustment - pSoldier->sDesiredHeight;
 
-						if ( ABS( sDiff ) > 4 )
+						if (std::abs(sDiff) > 4)
 						{
 							if ( sDiff > 0 )
 							{
@@ -1055,16 +1038,16 @@ BOOLEAN AdjustToNextAnimationFrame( SOLDIERTYPE *pSoldier )
 					return( TRUE );
 
 				case 470:
-
+				{
 					// CODE: CHECK FOR OK WEAPON SHOT!
-					bOKFireWeapon =  OKFireWeapon( pSoldier );
-
-					if ( bOKFireWeapon == FALSE )
+					auto const okFireWeapon = OKFireWeapon(pSoldier);
+					if (okFireWeapon == FireWeaponResult::JAMMED)
 					{
-						SLOGD(DEBUG_TAG_SOLDIER, "Fire Weapon: Gun Cannot fire, code 470");
+						SLOGD("Fire Weapon: Gun Cannot fire, code 470");
 
 						// OK, SKIP x # OF FRAMES
 						// Skip 3 frames, ( a third ia added at the end of switch.. ) For a total of 4
+						// XXX Code and comment do not match. Should we really skip 5 frames in total?
 						pSoldier->usAniCode += 4;
 
 						// Reduce by a bullet...
@@ -1073,10 +1056,10 @@ BOOLEAN AdjustToNextAnimationFrame( SOLDIERTYPE *pSoldier )
 						PlayLocationJA2Sample(pSoldier->sGridNo, S_DRYFIRE1, MIDVOLUME, 1);
 
 						// Free-up!
-						SLOGD(DEBUG_TAG_SOLDIER, "Freeing up attacker - gun failed to fire");
+						SLOGD("Freeing up attacker - gun failed to fire");
 						FreeUpAttacker(pSoldier);
 					}
-					else if ( bOKFireWeapon == 255 )
+					else if (okFireWeapon == FireWeaponResult::UNJAMMED)
 					{
 						// Play intermediate animation...
 						if ( HandleUnjamAnimation( pSoldier ) )
@@ -1085,6 +1068,7 @@ BOOLEAN AdjustToNextAnimationFrame( SOLDIERTYPE *pSoldier )
 						}
 					}
 					break;
+				}
 
 				case 471:
 
@@ -1291,7 +1275,7 @@ BOOLEAN AdjustToNextAnimationFrame( SOLDIERTYPE *pSoldier )
 
 					// CODE: FORCE FREE ATTACKER
 					// Release attacker
-					SLOGD(DEBUG_TAG_SOLDIER, "Releasesoldierattacker, code 480");
+					SLOGD("Releasesoldierattacker, code 480");
 
 					ReleaseSoldiersAttacker( pSoldier );
 
@@ -1333,7 +1317,7 @@ BOOLEAN AdjustToNextAnimationFrame( SOLDIERTYPE *pSoldier )
 
 					// CODE: GIVE ITEM
 					SoldierGiveItemFromAnimation( pSoldier );
-					if (pSoldier->ubProfile != NO_PROFILE && pSoldier->ubProfile >= FIRST_NPC )
+					if (pSoldier->ubProfile != NO_PROFILE && MercProfile(pSoldier->ubProfile).isNPC())
 					{
 						TriggerNPCWithGivenApproach(pSoldier->ubProfile, APPROACH_DONE_GIVING_ITEM);
 					}
@@ -1556,12 +1540,12 @@ BOOLEAN AdjustToNextAnimationFrame( SOLDIERTYPE *pSoldier )
 						// DROP ITEM
 						HandleSoldierPickupItem( pSoldier, pSoldier->uiPendingActionData1, (INT16)(pSoldier->uiPendingActionData4 ), pSoldier->bPendingActionData3 );
 						// EVENT HAS BEEN HANDLED
-						soldier->removePendingAction();
+						Soldier{pSoldier}.removePendingAction();
 
 					//}
 					//else
 					//{
-					//	SLOGD(DEBUG_TAG_SOLDIER, "CODE 493 Error, Pickup item action called but not setup" );
+					//	SLOGD("CODE 493 Error, Pickup item action called but not setup" );
 					//}
 					break;
 
@@ -1574,12 +1558,12 @@ BOOLEAN AdjustToNextAnimationFrame( SOLDIERTYPE *pSoldier )
 						SoldierHandleInteractiveObject(*pSoldier);
 
 						// EVENT HAS BEEN HANDLED
-						soldier->removePendingAction();
+						Soldier{pSoldier}.removePendingAction();
 
 					//}
 					//else
 					//{
-					//	SLOGD(DEBUG_TAG_SOLDIER, "CODE 494 Error, OPen door action called but not setup" );
+					//	SLOGD("CODE 494 Error, OPen door action called but not setup" );
 					//}
 					break;
 
@@ -1588,7 +1572,7 @@ BOOLEAN AdjustToNextAnimationFrame( SOLDIERTYPE *pSoldier )
 					if (pSoldier->bAction == AI_ACTION_UNLOCK_DOOR || (pSoldier->bAction == AI_ACTION_LOCK_DOOR && !(pSoldier->fAIFlags & AI_LOCK_DOOR_INCLUDES_CLOSE) ) )
 					{
 						// EVENT HAS BEEN HANDLED
-						soldier->removePendingAction();
+						Soldier{pSoldier}.removePendingAction();
 
 						// do nothing here
 					}
@@ -1614,8 +1598,7 @@ BOOLEAN AdjustToNextAnimationFrame( SOLDIERTYPE *pSoldier )
 						}
 
 						// EVENT HAS BEEN HANDLED
-						soldier->removePendingAction();
-
+						Soldier{pSoldier}.removePendingAction();
 					}
 
 
@@ -1666,7 +1649,7 @@ BOOLEAN AdjustToNextAnimationFrame( SOLDIERTYPE *pSoldier )
 
 								default:
 									// IF we are here - something is wrong - we should have a death animation here
-									SLOGD(DEBUG_TAG_SOLDIER, "Death sequence needed for animation %d",
+									SLOGD("Death sequence needed for animation {}",
 										pSoldier->usAnimState);
 									return TRUE;
 							}
@@ -1693,8 +1676,7 @@ BOOLEAN AdjustToNextAnimationFrame( SOLDIERTYPE *pSoldier )
 								gfPotentialTeamChangeDuringDeath = TRUE;
 
 								// Release attacker
-								SLOGD(DEBUG_TAG_SOLDIER,
-									"Releasesoldierattacker, code 497 = check for death");
+								SLOGD("Releasesoldierattacker, code 497 = check for death");
 								ReleaseSoldiersAttacker( pSoldier );
 
 								// ATE: OK - the above call can potentially
@@ -1793,7 +1775,7 @@ BOOLEAN AdjustToNextAnimationFrame( SOLDIERTYPE *pSoldier )
 						if (pSoldier->fChangingStanceDueToSuppression)
 						{
 							pSoldier->fChangingStanceDueToSuppression = FALSE;
-							SLOGD(DEBUG_TAG_SOLDIER, "Freeing up attacker - end of suppression stance change");
+							SLOGD("Freeing up attacker - end of suppression stance change");
 							ReduceAttackBusyCount(pSoldier->suppressor, FALSE);
 						}
 
@@ -1920,8 +1902,7 @@ BOOLEAN AdjustToNextAnimationFrame( SOLDIERTYPE *pSoldier )
 						else
 						{
 							// IF we are here - something is wrong - we should have a death animation here
-							SLOGD(DEBUG_TAG_SOLDIER,
-								"Soldier Ani: GOTO Stance not chained properly: %d %d %d",
+							SLOGD("Soldier Ani: GOTO Stance not chained properly: {} {} {}",
 								ubDesiredHeight, ubCurrentHeight, pSoldier->usAnimState);
 							SoldierGotoStationaryStance(pSoldier);
 							return TRUE;
@@ -2224,16 +2205,14 @@ no_cry:
 				case 753:
 
 					// code: freeup attcker
-					SLOGD(DEBUG_TAG_SOLDIER,
-						"Reducing attacker busy count..., CODE FROM ANIMATION %hs ( %d )",
+					SLOGD("Reducing attacker busy count..., CODE FROM ANIMATION {} ( {} )",
 						gAnimControl[pSoldier->usAnimState].zAnimStr, pSoldier->usAnimState);
 					ReduceAttackBusyCount(pSoldier, FALSE);
 
 					// ATE: Here, reduce again if creaturequeen tentical attack...
 					if ( pSoldier->usAnimState == QUEEN_SWIPE )
 					{
-						SLOGD(DEBUG_TAG_SOLDIER,
-							"Reducing attacker busy count for end of queen swipe");
+						SLOGD("Reducing attacker busy count for end of queen swipe");
 						ReduceAttackBusyCount(pSoldier, FALSE);
 					}
 					break;
@@ -2263,7 +2242,7 @@ no_cry:
 							AutoPlaceObject( pSoldier, pSoldier->pTempObject, TRUE );
 						}
 
-						MemFree( pSoldier->pTempObject );
+						delete pSoldier->pTempObject;
 						pSoldier->pTempObject = NULL;
 					}
 				}
@@ -2273,8 +2252,7 @@ no_cry:
 
 					// INcrement attacker busy count....
 					gTacticalStatus.ubAttackBusyCount++;
-					SLOGD(DEBUG_TAG_SOLDIER,
-						"Incrementing attacker busy count..., CODE FROM ANIMATION %hs ( %d ) : Count now %d",
+					SLOGD("Incrementing attacker busy count..., CODE FROM ANIMATION {} ( {} ) : Count now {}",
 						gAnimControl[pSoldier->usAnimState].zAnimStr, pSoldier->usAnimState,
 						gTacticalStatus.ubAttackBusyCount);
 					break;
@@ -2321,7 +2299,10 @@ no_cry:
 					INT8 bPanicTrigger;
 
 					bPanicTrigger = ClosestPanicTrigger( pSoldier );
-					SetOffPanicBombs(pSoldier, bPanicTrigger);
+					if (bPanicTrigger != -1)
+					{
+						SetOffPanicBombs(pSoldier, bPanicTrigger);
+					}
 					// any AI guy has been specially given keys for this, now take them
 					// away
 					pSoldier->bHasKeys = pSoldier->bHasKeys >> 1;
@@ -2342,7 +2323,7 @@ no_cry:
 						AddItemToPool(pSoldier->sPendingActionData2, pSoldier->pTempObject, VISIBLE, pSoldier->bLevel, 0, -1);
 						NotifySoldiersToLookforItems( );
 
-						MemFree( pSoldier->pTempObject );
+						delete pSoldier->pTempObject;
 						pSoldier->pTempObject = NULL;
 					}
 					break;
@@ -2538,13 +2519,6 @@ no_cry:
 			}
 			// Adjust frame control pos, and try again
 			pSoldier->usAniCode++;
-		}
-		else if ( sNewAniFrame == 999 )
-		{
-
-			// Go to start, by default
-			pSoldier->usAniCode = 0;
-
 		}
 
 	// Loop here until we break on a real item!
@@ -2965,10 +2939,7 @@ BOOLEAN HandleSoldierDeath( SOLDIERTYPE *pSoldier , BOOLEAN *pfMadeCorpse )
 			}
 		}
 
-		if (TurnSoldierIntoCorpse(*pSoldier))
-		{
-			*pfMadeCorpse = TRUE;
-		}
+		*pfMadeCorpse = TurnSoldierIntoCorpse(*pSoldier);
 
 		// Remove mad as target, one he has died!
 		RemoveManAsTarget( pSoldier );
@@ -2981,7 +2952,7 @@ BOOLEAN HandleSoldierDeath( SOLDIERTYPE *pSoldier , BOOLEAN *pfMadeCorpse )
 			if ( !pSoldier->fDoingExternalDeath )
 			{
 				// Release attacker
-				SLOGD(DEBUG_TAG_SOLDIER, "Releasesoldierattacker, code 497 = handle soldier death");
+				SLOGD("Releasesoldierattacker, code 497 = handle soldier death");
 				ReleaseSoldiersAttacker( pSoldier );
 			}
 		}
@@ -2998,7 +2969,7 @@ BOOLEAN HandleSoldierDeath( SOLDIERTYPE *pSoldier , BOOLEAN *pfMadeCorpse )
 		// If we are here - something funny has heppende
 		// We either have played a death animation when we are not dead, or we are calling
 		// this ani code in an animation which is not a death animation
-		SLOGD(DEBUG_TAG_SOLDIER, "Death animation called when not dead..." );
+		SLOGD("Death animation called when not dead..." );
 	}
 
 	return( fBuddyJustDead );
@@ -3010,7 +2981,7 @@ void HandlePlayerTeamMemberDeathAfterSkullAnimation(SOLDIERTYPE* pSoldier)
 	// Release attacker
 	if ( !pSoldier->fDoingExternalDeath )
 	{
-		SLOGD(DEBUG_TAG_SOLDIER, "Releasesoldierattacker, code 497 = handle soldier death");
+		SLOGD("Releasesoldierattacker, code 497 = handle soldier death");
 		ReleaseSoldiersAttacker( pSoldier );
 	}
 
@@ -3040,7 +3011,7 @@ void CheckForAndHandleSoldierDeath(SOLDIERTYPE* pSoldier, BOOLEAN* pfMadeCorpse)
 
 		default:
 			// IF we are here - something is wrong - we should have an animation stop here
-			SLOGW(DEBUG_TAG_SOLDIER, "CODE 440 Error, Death STOP not handled" );
+			SLOGW("CODE 440 Error, Death STOP not handled");
 			return;
 	}
 	ChangeSoldierState(pSoldier, state, 0, FALSE);
@@ -3107,9 +3078,10 @@ static void CheckForAndHandleSoldierIncompacitated(SOLDIERTYPE* pSoldier)
 	}
 
 	// Randomly fall back or forward, if we are in the standing hit animation
+	// FIX civs do not have FALLFORWARD_FROMHIT_CROUCH so they must fall from a standing position when cowering (issue #157)
 	UINT16 state;
 	if ( pSoldier->usAnimState == GENERIC_HIT_STAND || pSoldier->usAnimState == STANDING_BURST_HIT ||
-		pSoldier->usAnimState == RIFLE_STAND_HIT )
+		pSoldier->usAnimState == RIFLE_STAND_HIT || pSoldier->usAnimState == CIV_COWER_HIT )
 	{
 		INT8    bTestDirection = pSoldier->bDirection;
 		BOOLEAN fForceDirection = FALSE;
@@ -3182,7 +3154,7 @@ static void CheckForAndHandleSoldierIncompacitated(SOLDIERTYPE* pSoldier)
 
 			default:
 				// We have missed something here - send debug msg
-				SLOGW(DEBUG_TAG_SOLDIER, "Generic hit not chained");
+				SLOGW("Generic hit not chained");
 				return;
 		}
 	}
@@ -3224,7 +3196,7 @@ BOOLEAN CheckForAndHandleSoldierDyingNotFromHit( SOLDIERTYPE *pSoldier )
 			case BLOODCAT_HIT:               state = BLOODCAT_DYING;        break;
 
 			default:
-				SLOGD(DEBUG_TAG_SOLDIER, "Death state %d has no death hit", pSoldier->usAnimState);
+				SLOGD("Death state {} has no death hit", pSoldier->usAnimState);
 			{
 				BOOLEAN fMadeCorpse;
 				CheckForAndHandleSoldierDeath( pSoldier, &fMadeCorpse );
@@ -3409,7 +3381,7 @@ void HandleCheckForDeathCommonCode(SOLDIERTYPE* const pSoldier)
 
 		default:
 			// IF we are here - something is wrong - we should have a death animation here
-			SLOGD(DEBUG_TAG_SOLDIER, "unconscious hit sequence needed for animation %d", pSoldier->usAnimState);
+			SLOGD("unconscious hit sequence needed for animation {}", pSoldier->usAnimState);
 
 	}
 	// OTHERWISE, GOTO APPROPRIATE STOPANIMATION!
@@ -3441,7 +3413,7 @@ void HandleCheckForDeathCommonCode(SOLDIERTYPE* const pSoldier)
 
 		default:
 			// IF we are here - something is wrong - we should have a death animation here
-			SLOGW(DEBUG_TAG_SOLDIER, "unconscious hit sequence needed for animation %d", pSoldier->usAnimState);
+			SLOGD("unconscious hit sequence needed for animation {}", pSoldier->usAnimState);
 			return;
 	}
 	ChangeSoldierState(pSoldier, state, 0, FALSE);

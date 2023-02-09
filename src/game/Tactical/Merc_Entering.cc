@@ -31,6 +31,9 @@
 #include "Music_Control.h"
 #include "ContentMusic.h"
 #include "UILayout.h"
+#include "GamePolicy.h"
+#include "GameInstance.h"
+#include "ContentManager.h"
 
 
 #define MAX_MERC_IN_HELI		20
@@ -356,6 +359,8 @@ static INT8         gbNumHeliSeatsOccupied = 0;
 static BOOLEAN gfFirstGuyDown = FALSE;
 
 static UINT32 uiSoundSample;
+static UINT32 uiSoundVolume;
+
 static INT16  gsGridNoSweetSpot;
 static INT16  gsHeliXPos;
 static INT16  gsHeliYPos;
@@ -412,7 +417,7 @@ void StartHelicopterRun( INT16 sGridNoSweetSpot )
 
 	InterruptTime();
 	PauseGame();
-	LockPauseState(LOCK_PAUSE_20);
+	LockPauseState(LOCK_PAUSE_START_HELI);
 
 	ConvertGridNoToCenterCellXY( sGridNoSweetSpot, &sX, &sY );
 
@@ -430,7 +435,8 @@ void StartHelicopterRun( INT16 sGridNoSweetSpot )
 	guiHeliLastUpdate = GetJA2Clock( );
 
 	// Start sound
-	uiSoundSample = PlayJA2Sample(HELI_1, 0, 10000, MIDDLEPAN);
+	uiSoundVolume = 0;
+	uiSoundSample = PlayJA2Sample(HELI_1, uiSoundVolume, 10000, MIDDLEPAN);
 	fFadingHeliIn = TRUE;
 
 	gfHandleHeli = TRUE;
@@ -448,7 +454,6 @@ void HandleHeliDrop( )
 {
 	UINT8 ubScriptCode;
 	UINT32 uiClock;
-	INT32 iVol;
 	INT32 cnt;
 	ANITILE_PARAMS	AniParams;
 
@@ -468,12 +473,12 @@ void HandleHeliDrop( )
 				// Add merc to sector
 				SOLDIERTYPE& s = *gHeliSeats[cnt];
 				s.ubStrategicInsertionCode = INSERTION_CODE_NORTH;
-				UpdateMercInSector(s, SECTORX(START_SECTOR), SECTORY(START_SECTOR), 0);
+				UpdateMercInSector(s, SGPSector(gamepolicy(start_sector)));
 
 				// Check for merc arrives quotes...
 				HandleMercArrivesQuotes(s);
 
-				ScreenMsg(FONT_MCOLOR_WHITE, MSG_INTERFACE, TacticalStr[MERC_HAS_ARRIVED_STR], s.name);
+				ScreenMsg(FONT_MCOLOR_WHITE, MSG_INTERFACE, st_format_printf(TacticalStr[MERC_HAS_ARRIVED_STR], s.name));
 			}
 
 			// Remove heli
@@ -518,10 +523,9 @@ void HandleHeliDrop( )
 			{
 				if( uiSoundSample!=NO_SAMPLE )
 				{
-					iVol=SoundGetVolume( uiSoundSample );
-					iVol=__min( HIGHVOLUME, iVol+5);
-					SoundSetVolume(uiSoundSample, iVol);
-					if(iVol==HIGHVOLUME)
+					uiSoundVolume = std::min(UINT32(HIGHVOLUME), uiSoundVolume + 5);
+					SoundSetVolume(uiSoundSample, CalculateSoundEffectsVolume(uiSoundVolume));
+					if(uiSoundVolume == HIGHVOLUME)
 							fFadingHeliIn=FALSE;
 				}
 				else
@@ -533,12 +537,9 @@ void HandleHeliDrop( )
 			{
 				if( uiSoundSample!=NO_SAMPLE )
 				{
-					iVol=SoundGetVolume(uiSoundSample);
-
-					iVol=__max( 0, iVol-5);
-
-					SoundSetVolume(uiSoundSample, iVol);
-					if(iVol==0)
+					uiSoundVolume = std::max(0, INT32(uiSoundVolume) - 5);
+					SoundSetVolume(uiSoundSample, CalculateSoundEffectsVolume(uiSoundVolume));
+					if(uiSoundVolume == 0)
 					{
 						// Stop sound
 						SoundStop( uiSoundSample );
@@ -601,7 +602,7 @@ void HandleHeliDrop( )
 						// Change insertion code
 						s.ubStrategicInsertionCode = INSERTION_CODE_NORTH;
 
-						UpdateMercInSector(s, SECTORX(START_SECTOR), SECTORY(START_SECTOR), 0);
+						UpdateMercInSector(s, SGPSector(gamepolicy(start_sector)));
 
 						// IF the first guy down, set squad!
 						if ( gfFirstGuyDown )
@@ -609,7 +610,7 @@ void HandleHeliDrop( )
 							gfFirstGuyDown = FALSE;
 							SetCurrentSquad(s.bAssignment, TRUE );
 						}
-						ScreenMsg(FONT_MCOLOR_WHITE, MSG_INTERFACE, TacticalStr[MERC_HAS_ARRIVED_STR], s.name);
+						ScreenMsg(FONT_MCOLOR_WHITE, MSG_INTERFACE, st_format_printf(TacticalStr[MERC_HAS_ARRIVED_STR], s.name));
 
 						gbCurDrop++;
 
@@ -692,7 +693,7 @@ void HandleHeliDrop( )
 				case HELI_SHOW_HELI:
 
 					// Start animation
-					memset( &AniParams, 0, sizeof( ANITILE_PARAMS ) );
+					AniParams = ANITILE_PARAMS{};
 					AniParams.sGridNo = gsGridNoSweetSpot;
 					AniParams.ubLevelID = ANI_SHADOW_LEVEL;
 					AniParams.sDelay = 90;
@@ -789,8 +790,11 @@ static void HandleFirstHeliDropOfGame(void)
 		// Call people to area
 		CallAvailableEnemiesTo( gsGridNoSweetSpot );
 
-		// Say quote.....
-		SayQuoteFromAnyBodyInSector( QUOTE_ENEMY_PRESENCE );
+		if (NumEnemyInSector() > 0)
+		{
+			// Say quote.....
+			SayQuoteFromAnyBodyInSector(QUOTE_ENEMY_PRESENCE);
+		}
 
 		// Start music
 		SetMusicMode( MUSIC_TACTICAL_ENEMYPRESENT );

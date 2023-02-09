@@ -1,9 +1,9 @@
 #ifndef __IMAGE_H
 #define __IMAGE_H
 
-#include "AutoPtr.h"
 #include "Buffer.h"
 #include "Types.h"
+#include <memory>
 
 // The HIMAGE module provides a common interface for managing image data. This module
 // includes:
@@ -104,7 +104,7 @@ struct SGPImage
 #define SGPGetGValue(rgb)   ((BYTE) (((UINT16) (rgb)) >> 8))
 
 
-SGPImage* CreateImage(const char* ImageFile, UINT16 fContents);
+SGPImage* CreateImage(const ST::string& ImageFile, UINT16 fContents);
 
 // This function will run the appropriate copy function based on the type of SGPImage object
 BOOLEAN CopyImageToBuffer(SGPImage const*, UINT32 fBufferType, BYTE* pDestBuf, UINT16 usDestWidth, UINT16 usDestHeight, UINT16 usX, UINT16 usY, SGPBox const* src_rect);
@@ -134,6 +134,6 @@ void ConvertRGBDistribution565To655( UINT16 * p16BPPData, UINT32 uiNumberOfPixel
 void ConvertRGBDistribution565To556( UINT16 * p16BPPData, UINT32 uiNumberOfPixels );
 void ConvertRGBDistribution565ToAny( UINT16 * p16BPPData, UINT32 uiNumberOfPixels );
 
-typedef SGP::AutoPtr<SGPImage> AutoSGPImage;
+typedef std::unique_ptr<SGPImage> AutoSGPImage;
 
 #endif

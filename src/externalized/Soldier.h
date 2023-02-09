@@ -1,14 +1,16 @@
 #pragma once
 
+#include "Soldier_Control.h"
 #include "Types.h"
 #include <memory>
 
-struct SOLDIERTYPE;
 
 class Soldier
 {
 public:
-	Soldier(SOLDIERTYPE* s);
+	Soldier(SOLDIERTYPE* s) : mSoldier{s}
+	{
+	}
 
 	/** Remove pending action. */
 	void removePendingAction();
@@ -16,9 +18,15 @@ public:
 	/** Remove any pending animation. */
 	void removePendingAnimation();
 
-	bool hasPendingAction() const;
+	bool hasPendingAction(UINT8 action = NO_PENDING_ACTION) const;
+	static bool anyoneHasPendingAction(UINT8 action, UINT8 team = OUR_TEAM);
 
 	void setPendingAction(UINT8 action);
+
+	/**
+	 * As above, for those actions that take a gridno 
+	 * and a direction as the second and third action data. */
+	void setPendingAction(UINT8 action, GridNo, UINT8 direction);
 
 	/**
 	 * Handle pending action.
@@ -33,7 +41,10 @@ public:
 
 protected:
 
-	const char* getPofileName() const;
+	void switchHeadGear(int switchDirection);
+
+	/** Get the profile name for the solider **/
+	const ST::string& getProfileName() const;
 
 	/** Get free head slot or NO_SLOT if the both are occupied. */
 	int8_t getFreeHeadSlot() const;
@@ -47,11 +58,3 @@ protected:
 private:
 	SOLDIERTYPE* mSoldier;
 };
-
-typedef std::shared_ptr<Soldier> SoldierSP;
-
-/** Get soldier object from the structure. */
-std::shared_ptr<Soldier> GetSoldier(struct SOLDIERTYPE* s);
-
-/** Get soldier object from the structure. */
-std::shared_ptr<const Soldier> GetSoldier(const struct SOLDIERTYPE* s);

@@ -1,77 +1,77 @@
-#include <queue>
-
+#include "Dialogue_Control.h"
+#include "AI.h"
+#include "AIMMembers.h"
+#include "Assignments.h"
+#include "Civ_Quotes.h"
+#include "ContentManager.h"
+#include "Cursors.h"
+#include "Dialogs.h"
 #include "Directories.h"
+#include "Faces.h"
+#include "Facts.h"
 #include "Font.h"
 #include "Font_Control.h"
+#include "Game_Clock.h"
+#include "GameInstance.h"
 #include "GameLoop.h"
+#include "GameRes.h"
+#include "GameScreen.h"
+#include "GameSettings.h"
 #include "Handle_UI.h"
+#include "Interface_Control.h"
+#include "Interface_Dialogue.h"
+#include "Interface_Utils.h"
 #include "Isometric_Utils.h"
+#include "JAScreens.h"
+#include "Logger.h"
+#include "LOS.h"
+#include "Map_Screen_Interface.h"
 #include "MapScreen.h"
-#include "MessageBoxScreen.h"
-#include "Soldier_Control.h"
-#include "Faces.h"
+#include "Meanwhile.h"
+#include "MercProfile.h"
+#include "Mercs.h"
+#include "MercTextBox.h"
+#include "Message.h"
+#include "MouseSystem.h"
+#include "NPC.h"
+#include "OppList.h"
+#include "Overhead.h"
+#include "Overhead_Types.h"
+#include "PreBattle_Interface.h"
+#include "QArray.h"
+#include "Quests.h"
+#include "Random.h"
+#include "Render_Dirty.h"
+#include "RenderWorld.h"
+#include "ScreenIDs.h"
+#include "ShopKeeper_Interface.h"
+#include "SkillCheck.h"
+#include "Soldier_Macros.h"
+#include "SoundMan.h"
+#include "Squads.h"
+#include "StrategicMap.h"
+#include "UILayout.h"
+#include "Video.h"
 #include "VObject.h"
 #include "VSurface.h"
 #include "WCheck.h"
-#include "Overhead.h"
-#include "Dialogue_Control.h"
-#include "Message.h"
-#include "Render_Dirty.h"
-#include "Soldier_Profile.h"
 #include "WordWrap.h"
-#include "AIMMembers.h"
-#include "Mercs.h"
-#include "Interface_Dialogue.h"
-#include "MercTextBox.h"
-#include "RenderWorld.h"
-#include "Soldier_Macros.h"
-#include "Squads.h"
-#include "ScreenIDs.h"
-#include "Interface_Utils.h"
-#include "StrategicMap.h"
-#include "PreBattle_Interface.h"
-#include "Game_Clock.h"
-#include "Quests.h"
-#include "Cursors.h"
-#include "GameScreen.h"
-#include "Random.h"
-#include "GameSettings.h"
-#include "ShopKeeper_Interface.h"
-#include "Map_Screen_Interface.h"
-#include "Meanwhile.h"
-#include "SkillCheck.h"
-#include "Interface_Control.h"
-#include "Civ_Quotes.h"
-#include "OppList.h"
-#include "AI.h"
 #include "WorldMan.h"
-#include "LOS.h"
-#include "QArray.h"
-#include "JAScreens.h"
-#include "Video.h"
-#include "SoundMan.h"
-#include "GameRes.h"
-#include "UILayout.h"
+#include <map>
+#include <memory>
+#include <queue>
+#include <string_theory/format>
 
-#include "ContentManager.h"
-#include "GameInstance.h"
-#include "MercProfile.h"
-#include "content/Dialogs.h"
-#include "sgp/UTF8String.h"
-
-#define QUOTE_MESSAGE_SIZE			520
 
 #define DIALOGUE_DEFAULT_SUBTITLE_WIDTH	200
 #define TEXT_DELAY_MODIFIER			60
 
 
-typedef std::queue<DialogueEvent*>DialogueQueue;
+using DialogueQueue = std::queue<std::unique_ptr<DialogueEvent>>;
 
-BOOLEAN fExternFacesLoaded = FALSE;
+static std::map<ProfileID, FACETYPE*> externalNPCFaces;
 
-FACETYPE* uiExternalStaticNPCFaces[NUMBER_OF_EXTERNAL_NPC_FACES];
-const ProfileID g_external_face_profile_ids[] =
-{
+const ProfileID preloadedExternalNPCFaces[] = {
 	SKYRIDER,
 	FRED,
 	MATT,
@@ -166,36 +166,49 @@ void ShutdownDialogueControl()
 	EmptyDialogueQueue();
 
 	// shutdown external static NPC faces
-	ShutdownStaticExternalNPCFaces();
+	UnloadExternalNPCFaces();
 
 	// gte rid of portraits for cars
 	UnLoadCarPortraits();
 }
 
 
-void InitalizeStaticExternalNPCFaces( void )
+void LoadExternalNPCFace(ProfileID mercID)
 {
-	INT32 iCounter = 0;
+	if (externalNPCFaces.find(mercID) == externalNPCFaces.end())
+	{
+		externalNPCFaces[mercID] = &InitFace(mercID, nullptr, FACE_FORCE_SMALL);
+	}
+}
+
+FACETYPE* GetExternalNPCFace(ProfileID mercID)
+{
+	LoadExternalNPCFace(mercID); // ensure we have loaded the face
+	return externalNPCFaces.at(mercID);
+}
+
+void PreloadExternalNPCFaces()
+{
 	// go and grab all external NPC faces that are needed for the game who won't exist as soldiertypes
 
-	if (fExternFacesLoaded) return;
+	if (!externalNPCFaces.empty()) return;
 
-	fExternFacesLoaded = TRUE;
-
-	for( iCounter = 0; iCounter < NUMBER_OF_EXTERNAL_NPC_FACES; iCounter++ )
+	for (size_t i = 0; i < lengthof(preloadedExternalNPCFaces); i++)
 	{
-		uiExternalStaticNPCFaces[iCounter] = &InitFace(g_external_face_profile_ids[iCounter], 0, FACE_FORCE_SMALL);
+		LoadExternalNPCFace(preloadedExternalNPCFaces[i]);
 	}
 }
 
 
-void ShutdownStaticExternalNPCFaces()
+void UnloadExternalNPCFaces()
 {
-	if (!fExternFacesLoaded) return;
-	fExternFacesLoaded = FALSE;
-
 	// Remove all external NPC faces.
-	FOR_EACH(FACETYPE*, i, uiExternalStaticNPCFaces) DeleteFace(*i);
+	for (auto const& entry : externalNPCFaces)
+	{
+		DeleteFace(entry.second);
+	}
+
+	externalNPCFaces.clear();
 }
 
 
@@ -214,7 +227,7 @@ BOOLEAN DialogueQueueIsEmpty( )
 }
 
 
-BOOLEAN	DialogueQueueIsEmptyOrSomebodyTalkingNow( )
+BOOLEAN	DialogueQueueIsEmptyAndNobodyIsTalking()
 {
 	if ( gpCurrentTalkingFace != NULL )
 	{
@@ -274,7 +287,7 @@ void HandleDialogue()
 		fOldEngagedInConvFlagOn = TRUE;
 
 		PauseGame();
-		LockPauseState(LOCK_PAUSE_14);
+		LockPauseState(LOCK_PAUSE_ENGAGED_IN_CONV);
 	}
 	else if (fOldEngagedInConvFlagOn && !(gTacticalStatus.uiFlags & ENGAGED_IN_CONV))
 	{
@@ -394,7 +407,7 @@ void HandleDialogue()
 		{
 			f.uiFlags &= ~FACE_MODAL;
 			EndModalTactical();
-			SLOGD(DEBUG_TAG_INTERFACE, "Ending Modal Tactical Quote.");
+			SLOGD("Ending Modal Tactical Quote.");
 		}
 
 		if (f.uiFlags & FACE_TRIGGER_PREBATTLE_INT)
@@ -443,12 +456,11 @@ void HandleDialogue()
 	}
 
 	// If here, pick current one from queue and play
-	DialogueEvent*const d = ghDialogueQ.front();
+	auto const& d = ghDialogueQ.front();
 
 	// If we are in auto bandage, ignore any quotes!
 	if (gTacticalStatus.fAutoBandageMode || !d->Execute())
 	{
-		delete d;
 		if(!ghDialogueQ.empty()) ghDialogueQ.pop();
 	}
 }
@@ -458,7 +470,7 @@ void DialogueEvent::Add(DialogueEvent* const d)
 {
 	try
 	{
-		ghDialogueQ.push(d);
+		ghDialogueQ.emplace(d);
 	}
 	catch (...)
 	{
@@ -627,7 +639,7 @@ void CharacterDialogue(UINT8 const character, UINT16 const quote, FACETYPE* cons
 				if (fInMapMode && !GamePaused())
 				{
 					PauseGame();
-					LockPauseState(LOCK_PAUSE_15);
+					LockPauseState(LOCK_PAUSE_MERC_TALKING);
 					fWasPausedDuringDialogue = TRUE;
 				}
 
@@ -699,8 +711,8 @@ void CharacterDialogueUsingAlternateFile(SOLDIERTYPE& s, UINT16 const quote, Dia
 }
 
 
-static void    CreateTalkingUI(DialogueHandler, FACETYPE&, UINT8 ubCharacterNum, const wchar_t* zQuoteStr);
-static BOOLEAN GetDialogue(const MercProfile &profile, UINT16 usQuoteNum, wchar_t* zDialogueText, size_t Length, CHAR8* zSoundString, bool useAlternateDialogueFile);
+static void CreateTalkingUI(DialogueHandler bUIHandlerID, FACETYPE& f, UINT8 ubCharacterNum, const ST::string& zQuoteStr);
+static BOOLEAN GetDialogue(const MercProfile &profile, UINT16 usQuoteNum, ST::string& zDialogueText, ST::string& zSoundString, bool useAlternateDialogueFile);
 
 
 // execute specific character dialogue
@@ -708,8 +720,6 @@ BOOLEAN ExecuteCharacterDialogue(UINT8 const ubCharacterNum, UINT16 const usQuot
 {
 	gpCurrentTalkingFace = face;
 	gubCurrentTalkingID  = ubCharacterNum;
-
-	CHAR8 zSoundString[164];
 
 	// Check if we are dead now or not....( if from a soldier... )
 
@@ -800,8 +810,9 @@ BOOLEAN ExecuteCharacterDialogue(UINT8 const ubCharacterNum, UINT16 const usQuot
 	// Check face index
 	CHECKF(face != NULL);
 
-	wchar_t gzQuoteStr[QUOTE_MESSAGE_SIZE];
-	if (!GetDialogue(MercProfile(ubCharacterNum), usQuoteNum, gzQuoteStr, lengthof(gzQuoteStr),
+	ST::string gzQuoteStr;
+	ST::string zSoundString;
+	if (!GetDialogue(MercProfile(ubCharacterNum), usQuoteNum, gzQuoteStr,
 		zSoundString, useAlternateDialogueFile))
 	{
 		return( FALSE );
@@ -819,13 +830,13 @@ BOOLEAN ExecuteCharacterDialogue(UINT8 const ubCharacterNum, UINT16 const usQuot
 }
 
 
-static void DisplayTextForExternalNPC(UINT8 ubCharacterNum, const wchar_t* zQuoteStr);
+static void DisplayTextForExternalNPC(UINT8 ubCharacterNum, const ST::string& zQuoteStr);
 static void HandleExternNPCSpeechFace(FACETYPE&);
-static void HandleTacticalNPCTextUI(UINT8 ubCharacterNum, const wchar_t* zQuoteStr);
-static void HandleTacticalTextUI(ProfileID profile_id, const wchar_t* zQuoteStr);
+static void HandleTacticalNPCTextUI(UINT8 ubCharacterNum, const ST::string& zQuoteStr);
+static void HandleTacticalTextUI(ProfileID profile_id, const ST::string& zQuoteStr);
 
 
-static void CreateTalkingUI(DialogueHandler const bUIHandlerID, FACETYPE& f, UINT8 const ubCharacterNum, wchar_t const* const zQuoteStr)
+static void CreateTalkingUI(DialogueHandler bUIHandlerID, FACETYPE& f, UINT8 ubCharacterNum, const ST::string& zQuoteStr)
 {
 	// Show text, if on
 	if (gGameSettings.fOptions[TOPTION_SUBTITLES] || !f.fValidSpeech)
@@ -873,48 +884,48 @@ static void CreateTalkingUI(DialogueHandler const bUIHandlerID, FACETYPE& f, UIN
 	}
 }
 
-static BOOLEAN GetDialogue(const MercProfile &profile, UINT16 usQuoteNum, wchar_t* zDialogueText, size_t Length, CHAR8* zSoundString, bool useAlternateDialogueFile)
+static BOOLEAN GetDialogue(const MercProfile &profile, UINT16 usQuoteNum, ST::string& zDialogueText, ST::string& zSoundString, bool useAlternateDialogueFile)
 {
 	// first things first  - gDIALOGUESIZErab the text (if player has SUBTITLE PREFERENCE ON)
 	//if ( gGameSettings.fOptions[ TOPTION_SUBTITLES ] )
 	{
-		const char* pFilename = Content::GetDialogueTextFilename(
+		ST::string zFilename = Content::GetDialogueTextFilename(
 						profile,
 						useAlternateDialogueFile,
-						ProfileCurrentlyTalkingInDialoguePanel(profile.getNum()));
+						ProfileCurrentlyTalkingInDialoguePanel(profile.getID()));
 
 		bool success = false;
 		try
 		{
-			UTF8String* quote = GCM->loadDialogQuoteFromFile(pFilename, usQuoteNum);
+			ST::string* quote = GCM->loadDialogQuoteFromFile(zFilename, usQuoteNum);
 			if(quote)
 			{
-				wcsncpy(zDialogueText, quote->getWCHAR().data(), Length);
+				zDialogueText = *quote;
 				delete quote;
-				success = zDialogueText[0] != L'\0';
+				success = !zDialogueText.empty();
 			}
 		}
 		catch (...) { success = false; }
 		if (!success)
 		{
-			swprintf(zDialogueText, Length, L"I have no text in the EDT file (%d) %hs", usQuoteNum, pFilename);
+			zDialogueText = ST::format("I have no text in the EDT file ({}) {}", usQuoteNum, zFilename);
 			return( FALSE );
 		}
 	}
 
 	// CHECK IF THE FILE EXISTS, IF NOT, USE DEFAULT!
-	const char* pFilename = Content::GetDialogueVoiceFilename(
+	ST::string zFilename = Content::GetDialogueVoiceFilename(
 		profile, usQuoteNum, useAlternateDialogueFile,
-		ProfileCurrentlyTalkingInDialoguePanel(profile.getNum()),
+		ProfileCurrentlyTalkingInDialoguePanel(profile.getID()),
 		isRussianVersion() || isRussianGoldVersion());
 
-	strcpy( zSoundString, pFilename );
+	zSoundString = zFilename;
 	return(TRUE);
 }
 
 
 // Handlers for tactical UI stuff
-static void HandleTacticalNPCTextUI(const UINT8 ubCharacterNum, const wchar_t* const zQuoteStr)
+static void HandleTacticalNPCTextUI(UINT8 ubCharacterNum, const ST::string& zQuoteStr)
 {
 	// Setup dialogue text box
 	if ( guiCurrentScreen != MAP_SCREEN )
@@ -924,16 +935,16 @@ static void HandleTacticalNPCTextUI(const UINT8 ubCharacterNum, const wchar_t* c
 	}
 
 	// post message to mapscreen message system
-	swprintf( gTalkPanel.zQuoteStr, lengthof(gTalkPanel.zQuoteStr), L"\"%ls\"", zQuoteStr );
-	MapScreenMessage(FONT_MCOLOR_WHITE, MSG_DIALOG, L"%ls: \"%ls\"", GetProfile(ubCharacterNum).zNickname, zQuoteStr);
+	gTalkPanel.zQuoteStr = ST::format("\"{}\"", zQuoteStr);
+	MapScreenMessage(FONT_MCOLOR_WHITE, MSG_DIALOG, ST::format("{}: \"{}\"", GetProfile(ubCharacterNum).zNickname, zQuoteStr));
 }
 
 
-static void ExecuteTacticalTextBox(INT16 sLeftPosition, INT16 sTopPosition, const wchar_t* pString);
+void ExecuteTacticalTextBox(INT16 sLeftPosition, INT16 sTopPosition, const ST::string& pString);
 
 
 // Handlers for tactical UI stuff
-static void DisplayTextForExternalNPC(const UINT8 ubCharacterNum, const wchar_t* const zQuoteStr)
+static void DisplayTextForExternalNPC(UINT8 ubCharacterNum, const ST::string& zQuoteStr)
 {
 	INT16 sLeft;
 	INT16 sTop;
@@ -946,9 +957,9 @@ static void DisplayTextForExternalNPC(const UINT8 ubCharacterNum, const wchar_t*
 	}
 
 	// post message to mapscreen message system
-	swprintf( gTalkPanel.zQuoteStr, lengthof(gTalkPanel.zQuoteStr), L"\"%ls\"", zQuoteStr );
-	MapScreenMessage(FONT_MCOLOR_WHITE, MSG_DIALOG, L"%ls: \"%ls\"",
-				GetProfile(ubCharacterNum).zNickname, zQuoteStr);
+	gTalkPanel.zQuoteStr = ST::format("\"{}\"", zQuoteStr);
+	MapScreenMessage(FONT_MCOLOR_WHITE, MSG_DIALOG, ST::format("{}: \"{}\"",
+				GetProfile(ubCharacterNum).zNickname, zQuoteStr));
 
 	if ( guiCurrentScreen == MAP_SCREEN )
 	{
@@ -968,23 +979,21 @@ static void DisplayTextForExternalNPC(const UINT8 ubCharacterNum, const wchar_t*
 }
 
 
-static void HandleTacticalTextUI(const ProfileID profile_id, const wchar_t* const zQuoteStr)
+static void HandleTacticalTextUI(ProfileID profile_id, const ST::string& zQuoteStr)
 {
-	wchar_t zText[QUOTE_MESSAGE_SIZE];
-
-	swprintf( zText, lengthof(zText), L"\"%ls\"", zQuoteStr );
+	ST::string zText = ST::format("\"{}\"", zQuoteStr);
 
 	ExecuteTacticalTextBox( g_ui.getTacticalTextBoxX(), g_ui.getTacticalTextBoxY(), zText );
 
-	MapScreenMessage(FONT_MCOLOR_WHITE, MSG_DIALOG, L"%ls: \"%ls\"", GetProfile(profile_id).zNickname, zQuoteStr);
+	MapScreenMessage(FONT_MCOLOR_WHITE, MSG_DIALOG, ST::format("{}: \"{}\"", GetProfile(profile_id).zNickname, zQuoteStr));
 }
 
 
 static void RenderSubtitleBoxOverlay(VIDEO_OVERLAY* pBlitter);
-static void TextOverlayClickCallback(MOUSE_REGION* pRegion, INT32 iReason);
+static void TextOverlayClickCallback(MOUSE_REGION* pRegion, UINT32 iReason);
 
 
-static void ExecuteTacticalTextBox(const INT16 sLeftPosition, INT16 sTopPosition, const wchar_t* const pString)
+void ExecuteTacticalTextBox(INT16 sLeftPosition, INT16 sTopPosition, const ST::string& pString)
 {
 	// check if mouse region created, if so, do not recreate
 	if (fTextBoxMouseRegionCreated) return;
@@ -1006,7 +1015,7 @@ static void ExecuteTacticalTextBox(const INT16 sLeftPosition, INT16 sTopPosition
 }
 
 
-static void FaceOverlayClickCallback(MOUSE_REGION* pRegion, INT32 iReason);
+static void FaceOverlayClickCallback(MOUSE_REGION* pRegion, UINT32 iReason);
 static void RenderFaceOverlay(VIDEO_OVERLAY* pBlitter);
 
 
@@ -1131,13 +1140,13 @@ void HandleDialogueEnd(FACETYPE& f)
 
 		if (&f != gpCurrentTalkingFace)
 		{
-			//ScreenMsg( FONT_MCOLOR_LTYELLOW, MSG_INTERFACE, L"HandleDialogueEnd() face mismatch." );
+			//ScreenMsg( FONT_MCOLOR_LTYELLOW, MSG_INTERFACE, "HandleDialogueEnd() face mismatch." );
 			return;
 		}
 
 		if (f.fTalking)
 		{
-			SLOGD(DEBUG_TAG_INTERFACE, "HandleDialogueEnd() face still talking." );
+			SLOGD("HandleDialogueEnd() face still talking." );
 			return;
 		}
 
@@ -1272,12 +1281,10 @@ static void RenderFaceOverlay(VIDEO_OVERLAY* const blt)
 		MPrint(sFontX, sFontY, s->name);
 
 		// What sector are we in, (and is it the same as ours?)
-		if (s->sSectorX != gWorldSectorX || s->sSectorY != gWorldSectorY ||
-			s->bSectorZ != gbWorldSectorZ || s->fBetweenSectors)
+		if (s->sSector != gWorldSector || s->fBetweenSectors)
 		{
-			wchar_t sector_id[50];
-			GetSectorIDString(s->sSectorX, s->sSectorY, s->bSectorZ, sector_id, lengthof(sector_id), FALSE);
-			ReduceStringLength(sector_id, lengthof(sector_id), 64, BLOCKFONT2);
+			ST::string sector_id = GetSectorIDString(s->sSector, FALSE);
+			sector_id = ReduceStringLength(sector_id, 64, BLOCKFONT2);
 			FindFontCenterCoordinates(x + 12, y + 68, 73, 9, sector_id, BLOCKFONT2, &sFontX, &sFontY);
 			MPrint(sFontX, sFontY, sector_id);
 		}
@@ -1288,7 +1295,7 @@ static void RenderFaceOverlay(VIDEO_OVERLAY* const blt)
 	}
 	else
 	{
-		wchar_t const* const name = GetProfile(f.ubCharacterNum).zNickname;
+		ST::string name = GetProfile(f.ubCharacterNum).zNickname;
 		FindFontCenterCoordinates(x + 9, y + 55, 73, 9, name, BLOCKFONT2, &sFontX, &sFontY);
 		MPrint(sFontX, sFontY, name);
 	}
@@ -1386,37 +1393,6 @@ void SayQuoteFromAnyBodyInSector(UINT16 const quote_id)
 	ChooseRedIfPresentAndAirRaid(mercs_in_sector, n_mercs, quote_id);
 }
 
-
-void SayQuoteFromAnyBodyInThisSector(INT16 const x, INT16 const y, INT8 const z, UINT16 const quote_id)
-{
-	// Loop through all our guys and randomly say one from someone in our sector
-	INT32       n_mercs = 0;
-	SOLDIERTYPE* mercs_in_sector[20];
-	FOR_EACH_IN_TEAM(i, OUR_TEAM)
-	{
-		// Add guy if he's a candidate
-		SOLDIERTYPE& s = *i;
-		if (s.sSectorX != x)
-			continue;
-		if (s.sSectorY != y)
-			continue;
-		if (s.bSectorZ != z)
-			continue;
-		if (AM_AN_EPC(&s))
-			continue;
-		if (s.uiStatusFlags & SOLDIER_GASSED)
-			continue;
-		if (AM_A_ROBOT(&s))
-			continue;
-		if (s.fMercAsleep)
-			continue;
-		mercs_in_sector[n_mercs++] = &s;
-	}
-
-	ChooseRedIfPresentAndAirRaid(mercs_in_sector, n_mercs, quote_id);
-}
-
-
 void SayQuoteFromNearbyMercInSector(GridNo const gridno, INT8 const distance, UINT16 const quote_id)
 {
 	// Loop through all our guys and randomly say one from someone in our sector
@@ -1440,7 +1416,7 @@ void SayQuoteFromNearbyMercInSector(GridNo const gridno, INT8 const distance, UI
 			continue;
 		if (!SoldierTo3DLocationLineOfSightTest(&s, gridno, 0, 0, MaxDistanceVisible(), TRUE))
 			continue;
-		if (quote_id == QUOTE_STUFF_MISSING_DRASSEN && Random(100) > EffectiveWisdom(&s))
+		if (quote_id == QUOTE_STUFF_MISSING_DRASSEN && static_cast<INT8>(Random(100)) > EffectiveWisdom(&s))
 			continue;
 		mercs_in_sector[n_mercs++] = &s;
 	}
@@ -1505,16 +1481,16 @@ void SayQuote58FromNearbyMercInSector(GridNo const gridno, INT8 const distance, 
 }
 
 
-static void TextOverlayClickCallback(MOUSE_REGION* pRegion, INT32 iReason)
+static void TextOverlayClickCallback(MOUSE_REGION* pRegion, UINT32 iReason)
 {
 	static BOOLEAN fLButtonDown = FALSE;
 
-	if (iReason & MSYS_CALLBACK_REASON_LBUTTON_DWN )
+	if (iReason & MSYS_CALLBACK_REASON_POINTER_DWN )
 	{
 		fLButtonDown = TRUE;
 	}
 
-	if (iReason & MSYS_CALLBACK_REASON_LBUTTON_UP && fLButtonDown )
+	if (iReason & MSYS_CALLBACK_REASON_POINTER_UP && fLButtonDown )
 	{
 		if(  gpCurrentTalkingFace != NULL )
 		{
@@ -1528,16 +1504,16 @@ static void TextOverlayClickCallback(MOUSE_REGION* pRegion, INT32 iReason)
 }
 
 
-static void FaceOverlayClickCallback(MOUSE_REGION* pRegion, INT32 iReason)
+static void FaceOverlayClickCallback(MOUSE_REGION* pRegion, UINT32 iReason)
 {
 	static BOOLEAN fLButtonDown = FALSE;
 
-	if (iReason & MSYS_CALLBACK_REASON_LBUTTON_DWN )
+	if (iReason & MSYS_CALLBACK_REASON_POINTER_DWN )
 	{
 		fLButtonDown = TRUE;
 	}
 
-	if (iReason & MSYS_CALLBACK_REASON_LBUTTON_UP && fLButtonDown )
+	if (iReason & MSYS_CALLBACK_REASON_POINTER_UP && fLButtonDown )
 	{
 		if(  gpCurrentTalkingFace != NULL )
 		{
@@ -1552,9 +1528,9 @@ static void FaceOverlayClickCallback(MOUSE_REGION* pRegion, INT32 iReason)
 }
 
 
-UINT32 FindDelayForString(const wchar_t* const sString)
+UINT32 FindDelayForString(const ST::string& str)
 {
-	return( (UINT32)wcslen( sString ) * TEXT_DELAY_MODIFIER );
+	return( (UINT32)str.to_utf32().size() * TEXT_DELAY_MODIFIER );
 }
 
 void BeginLoggingForBleedMeToos( BOOLEAN fStart )
@@ -1597,7 +1573,7 @@ static void CheckForStopTimeQuotes(UINT16 const usQuoteNum)
 	// Stop Time, game
 	EnterModalTactical(TACTICAL_MODAL_NOMOUSE);
 	gpCurrentTalkingFace->uiFlags |= FACE_MODAL;
-	SLOGD(DEBUG_TAG_INTERFACE, "Starting Modal Tactical Quote.");
+	SLOGD("Starting Modal Tactical Quote.");
 }
 
 
@@ -1630,7 +1606,7 @@ UINT8 GetQuoteBitNumberFromQuoteID(UINT32 const uiQuoteID)
 	for (size_t i = 0; i != lengthof(gubMercValidPrecedentQuoteID); ++i)
 	{
 		if (gubMercValidPrecedentQuoteID[i] == uiQuoteID)
-			return i;
+			return static_cast<UINT8>(i);
 	}
 	return 0;
 }
@@ -1704,7 +1680,7 @@ void DeleteDialogueControlGraphics()
 
 TEST(DialogueControl, asserts)
 {
-	EXPECT_EQ(lengthof(g_external_face_profile_ids), NUMBER_OF_EXTERNAL_NPC_FACES);
+	EXPECT_EQ(lengthof(preloadedExternalNPCFaces), 6);
 }
 
 #endif

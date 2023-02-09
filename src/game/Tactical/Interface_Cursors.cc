@@ -1,6 +1,7 @@
 #include "MouseSystem.h"
 #include "TileDef.h"
 #include "Timer_Control.h"
+#include "Touch_UI.h"
 #include "Input.h"
 #include "Handle_UI.h"
 #include "Cursors.h"
@@ -45,11 +46,11 @@ const UICursor gUICursors[NUM_UI_CURSORS] =
 	{ALL_MOVE_PRONE_UICURSOR,            UICURSOR_SNAPPING | UICURSOR_SHOWTILE | UICURSOR_DONTSHOW2NDLEVEL,                                    0,                         FIRSTPOINTERS5  },
 	{ALL_MOVE_VEHICLE_UICURSOR,          UICURSOR_SNAPPING | UICURSOR_SHOWTILE | UICURSOR_DONTSHOW2NDLEVEL,                                    0,                         FIRSTPOINTERS5  },
 
-	{MOVE_REALTIME_UICURSOR,             UICURSOR_FREEFLOWING | UICURSOR_SHOWTILEAPDEPENDENT | UICURSOR_DONTSHOW2NDLEVEL,                      VIDEO_NO_CURSOR,           FIRSTPOINTERS2  },
-	{MOVE_RUN_REALTIME_UICURSOR,         UICURSOR_FREEFLOWING | UICURSOR_SHOWTILE | UICURSOR_DONTSHOW2NDLEVEL,                                 VIDEO_NO_CURSOR,           FIRSTPOINTERS7  },
+	{MOVE_REALTIME_UICURSOR,             UICURSOR_FREEFLOWING | UICURSOR_SHOWTILEAPDEPENDENT | UICURSOR_DONTSHOW2NDLEVEL,                      VIDEO_DEFAULT_TO_NO_CURSOR,           FIRSTPOINTERS2  },
+	{MOVE_RUN_REALTIME_UICURSOR,         UICURSOR_FREEFLOWING | UICURSOR_SHOWTILE | UICURSOR_DONTSHOW2NDLEVEL,                                 VIDEO_DEFAULT_TO_NO_CURSOR,           FIRSTPOINTERS7  },
 
-	{CONFIRM_MOVE_REALTIME_UICURSOR,     UICURSOR_FREEFLOWING | UICURSOR_SHOWTILE | UICURSOR_DONTSHOW2NDLEVEL,                                 VIDEO_NO_CURSOR,           FIRSTPOINTERS4  },
-	{ALL_MOVE_REALTIME_UICURSOR,         UICURSOR_FREEFLOWING | UICURSOR_SHOWTILE | UICURSOR_DONTSHOW2NDLEVEL,                                 VIDEO_NO_CURSOR,           FIRSTPOINTERS5  },
+	{CONFIRM_MOVE_REALTIME_UICURSOR,     UICURSOR_FREEFLOWING | UICURSOR_SHOWTILE | UICURSOR_DONTSHOW2NDLEVEL,                                 VIDEO_DEFAULT_TO_NO_CURSOR,           FIRSTPOINTERS4  },
+	{ALL_MOVE_REALTIME_UICURSOR,         UICURSOR_FREEFLOWING | UICURSOR_SHOWTILE | UICURSOR_DONTSHOW2NDLEVEL,                                 VIDEO_DEFAULT_TO_NO_CURSOR,           FIRSTPOINTERS5  },
 
 	{ON_OWNED_MERC_UICURSOR,             UICURSOR_SNAPPING,                                                                                    0,                         0               },
 	{ON_OWNED_SELMERC_UICURSOR,          UICURSOR_SNAPPING,                                                                                    0,                         0               },
@@ -220,7 +221,7 @@ void DrawUICursor()
 		gViewportRegion.ChangeCursor(VIDEO_NO_CURSOR);
 
 		// Check if we are in the viewport region...
-		if ( gViewportRegion.uiFlags & MSYS_MOUSE_IN_AREA )
+		if ( gViewportRegion.uiFlags & MSYS_MOUSE_IN_AREA || IsPointerOnTacticalTouchUI())
 		{
 			DrawItemTileCursor( );
 		}
@@ -231,14 +232,14 @@ void DrawUICursor()
 		return;
 	}
 
-	const GridNo usMapPos = GetMouseMapPos();
+	const GridNo usMapPos = guiCurrentCursorGridNo;
 	if (usMapPos != NOWHERE)
 	{
 		gusCurMousePos = usMapPos;
 
 		if ( guiCurUICursor == NO_UICURSOR )
 		{
-			gViewportRegion.ChangeCursor(VIDEO_NO_CURSOR);
+			gViewportRegion.ChangeCursor(VIDEO_DEFAULT_TO_NO_CURSOR);
 			return;
 		}
 
@@ -338,7 +339,7 @@ void DrawUICursor()
 		if ( gUICursors[ guiCurUICursor ].uiFlags & UICURSOR_SNAPPING )
 		{
 			// Hide mouse region cursor
-			gViewportRegion.ChangeCursor(VIDEO_NO_CURSOR);
+			gViewportRegion.ChangeCursor(VIDEO_DEFAULT_TO_NO_CURSOR);
 
 			// Set Snapping Cursor
 			DrawSnappingCursor( );
@@ -404,7 +405,7 @@ void HideUICursor()
 	if ( gpItemPointer != NULL )
 	{
 		// Check if we are in the viewport region...
-		if (gViewportRegion.uiFlags & MSYS_MOUSE_IN_AREA) return;
+		if (gViewportRegion.uiFlags & MSYS_MOUSE_IN_AREA || IsPointerOnTacticalTouchUI()) return;
 	}
 
 	if (guiCurUICursor == NO_UICURSOR) return; //Do nothing here

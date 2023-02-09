@@ -1,44 +1,52 @@
-#include <stdexcept>
-
+#include "Faces.h"
+#include "Assignments.h"
+#include "ContentManager.h"
+#include "Dialogue_Control.h"
 #include "Directories.h"
+#include "Drugs_And_Alcohol.h"
 #include "Font.h"
+#include "Font_Control.h"
+#include "GameInstance.h"
+#include "GameSettings.h"
+#include "Gap.h"
+#include "Handle_UI.h"
 #include "HImage.h"
+#include "Interface.h"
 #include "Interface_Control.h"
+#include "Interface_Items.h"
 #include "Interface_Panels.h"
 #include "Isometric_Utils.h"
-#include "Local.h"
-#include "Timer_Control.h"
-#include "VObject.h"
-#include "WorldDef.h"
-#include "VSurface.h"
-#include "Render_Dirty.h"
-#include "SysUtil.h"
-#include "WCheck.h"
-#include "Video.h"
-#include "Faces.h"
-#include "Overhead.h"
-#include "Gap.h"
-#include "Soldier_Profile.h"
-#include "Sound_Control.h"
-#include "TeamTurns.h"
-#include "Soldier_Macros.h"
-#include "Dialogue_Control.h"
-#include "Font_Control.h"
-#include "Assignments.h"
-#include "Random.h"
-#include "Line.h"
-#include "GameSettings.h"
-#include "Squads.h"
-#include "Interface.h"
-#include "Quests.h"
-#include "Drugs_And_Alcohol.h"
-#include "Interface_Items.h"
-#include "Meanwhile.h"
-#include "Map_Screen_Interface.h"
-#include "SoundMan.h"
 #include "JAScreens.h"
+#include "Line.h"
+#include "Local.h"
+#include "Logger.h"
+#include "Map_Screen_Interface.h"
+#include "Meanwhile.h"
+#include "Overhead.h"
+#include "Overhead_Types.h"
+#include "Quests.h"
+#include "Random.h"
+#include "Render_Dirty.h"
+#include "RPCSmallFaceModel.h"
 #include "ScreenIDs.h"
+#include "Soldier_Control.h"
+#include "Soldier_Macros.h"
+#include "Soldier_Profile.h"
+#include "Soldier_Profile_Type.h"
+#include "Sound_Control.h"
+#include "SoundMan.h"
+#include "Squads.h"
+#include "SysUtil.h"
+#include "TeamTurns.h"
+#include "Timer_Control.h"
 #include "UILayout.h"
+#include "Video.h"
+#include "VObject.h"
+#include "VSurface.h"
+#include "WCheck.h"
+#include <stdexcept>
+#include <string_theory/format>
+
 
 
 // Defines
@@ -57,53 +65,6 @@ static UINT32   guiNumFaces = 0;
 		++iter)                                                 \
 		if (!iter->fAllocated) continue; else
 
-
-struct RPC_SMALL_FACE_VALUES
-{
-	ProfileID profile;
-	INT8      bEyesX;
-	INT8      bEyesY;
-	INT8      bMouthX;
-	INT8      bMouthY;
-};
-
-
-// TODO0013
-static const RPC_SMALL_FACE_VALUES gRPCSmallFaceValues[] =
-{
-	{ MIGUEL,    9, 8,  8, 24 },
-	{ CARLOS,    8, 8,  7, 24 },
-	{ IRA,      10, 8,  8, 26 },
-	{ DIMITRI,   7, 8,  7, 26 },
-	{ DEVIN,     6, 7,  7, 23 },
-	{ ROBOT,     0, 0,  0,  0 }, // THE RAT  (  62 )
-	{ HAMOUS,    8, 7,  8, 23 },
-	{ SLAY,      8, 8,  8, 22 },
-	{ RPC65,     0, 0,  0,  0 },
-	{ DYNAMO,    9, 4,  7, 22 },
-	{ SHANK,     8, 8,  8, 25 },
-	{ IGGY,      4, 6,  5, 22 },
-	{ VINCE,     8, 9,  7, 25 },
-	{ CONRAD,    4, 7,  5, 25 },
-	{ RPC71,     9, 7,  8, 22 }, // CARL     (  71 )
-	{ MADDOG,    9, 7,  9, 25 },
-	{ DARREL,    0, 0,  0,  0 },
-	{ PERKO,     0, 0,  0,  0 },
-
-	{ MARIA,     9, 3,  8, 23 },
-
-	{ JOEY,      9, 3,  8, 25 },
-
-	{ SKYRIDER, 11, 7,  9, 24 },
-	{ FRED,      9, 5,  7, 23 }, // Miner    ( 106 )
-
-	{ JOHN,      6, 4,  6, 24 },
-	{ MARY,     12, 4, 10, 24 },
-	{ MATT,      8, 6,  8, 23 }, // Miner    ( 148 )
-	{ OSWALD,    6, 5,  6, 23 }, // Miner    ( 156 )
-	{ CALVIN,   13, 7, 11, 24 }, // Miner    ( 157 )
-	{ CARL,      9, 7,  8, 22 }  // Miner    ( 158 )
-};
 
 
 static SGPVObject* guiPORTRAITICONS;
@@ -150,34 +111,33 @@ FACETYPE& InitFace(const ProfileID id, SOLDIERTYPE* const s, const UINT32 uiInit
 
 	FACETYPE& f = GetFreeFace();
 
-	const char* face_file;
+	ST::string face_file;
 	// Check if we are a big-face....
 	if (uiInitFlags & FACE_BIGFACE)
 	{
-		face_file = FACESDIR "/b%02d.sti";
+		face_file = FACESDIR "/b{02d}.sti";
 		// ATE: Check for profile - if elliot, use special face :)
 		if (id == ELLIOT && p.bNPCData > 3)
 		{
-			if      (p.bNPCData <   7) face_file = FACESDIR "/b%02da.sti";
-			else if (p.bNPCData <  10) face_file = FACESDIR "/b%02db.sti";
-			else if (p.bNPCData <  13) face_file = FACESDIR "/b%02dc.sti";
-			else if (p.bNPCData <  16) face_file = FACESDIR "/b%02dd.sti";
-			else if (p.bNPCData == 17) face_file = FACESDIR "/b%02de.sti";
+			if      (p.bNPCData <   7) face_file = FACESDIR "/b{02d}a.sti";
+			else if (p.bNPCData <  10) face_file = FACESDIR "/b{02d}b.sti";
+			else if (p.bNPCData <  13) face_file = FACESDIR "/b{02d}c.sti";
+			else if (p.bNPCData <  16) face_file = FACESDIR "/b{02d}d.sti";
+			else if (p.bNPCData == 17) face_file = FACESDIR "/b{02d}e.sti";
 		}
 	}
 	else
 	{
-		face_file = FACESDIR "/%02d.sti";
+		face_file = FACESDIR "/{02d}.sti";
 	}
 
 	// HERVE, PETER, ALBERTO and CARLO all use HERVE's portrait
 	INT32 const face_id = HERVE <= id && id <= CARLO ? HERVE : p.ubFaceIndex;
 
-	SGPFILENAME ImageFile;
-	sprintf(ImageFile, face_file, face_id);
+	ST::string ImageFile = ST::format(face_file.c_str(), face_id);
 	SGPVObject* const vo = AddVideoObjectFromFile(ImageFile);
 
-	memset(&f, 0, sizeof(f));
+	f = FACETYPE{};
 	f.uiFlags               = uiInitFlags;
 	f.fAllocated            = TRUE;
 	f.fDisabled             = TRUE; // default to off!
@@ -193,7 +153,6 @@ FACETYPE& InitFace(const ProfileID id, SOLDIERTYPE* const s, const UINT32 uiInit
 
 	f.uiExpressionFrequency = p.uiExpressionFrequency;
 	f.sMouthFrame           = 0;
-	f.uiMouthDelay          = 120;
 	f.uiVideoObject         = vo;
 
 	// Set palette
@@ -297,14 +256,13 @@ static void GetFaceRelativeCoordinates(FACETYPE const& f, UINT16* const pusEyesX
 	if (f.uiFlags & FACE_FORCE_SMALL ||
 			(!(f.uiFlags & FACE_BIGFACE) && p.ubMiscFlags & (PROFILE_MISC_FLAG_RECRUITED | PROFILE_MISC_FLAG_EPCACTIVE)))
 	{
-		// Loop through all values of available profiles to find ours
-		FOR_EACH(RPC_SMALL_FACE_VALUES const, i, gRPCSmallFaceValues)
+		const RPCSmallFaceModel* face = GCM->getRPCSmallFaceOffsets(pid);
+		if (face)
 		{
-			if (i->profile != pid) continue;
-			*pusEyesX  = i->bEyesX;
-			*pusEyesY  = i->bEyesY;
-			*pusMouthX = i->bMouthX;
-			*pusMouthY = i->bMouthY;
+			*pusEyesX = face->bEyesX;
+			*pusEyesY = face->bEyesY;
+			*pusMouthX = face->bMouthX;
+			*pusMouthY = face->bMouthY;
 			return;
 		}
 	}
@@ -509,8 +467,6 @@ static void BlinkAutoFace(FACETYPE& f)
 		NewEye(f);
 
 		INT16 sFrame = f.sEyeFrame;
-		if (sFrame > 4) sFrame = 4;
-
 		if (sFrame > 0)
 		{
 			// Blit Accordingly!
@@ -613,7 +569,7 @@ static void MouthAutoFace(FACETYPE& f)
 				FaceRestoreSavedBackgroundRect(f, f.usMouthX, f.usMouthY, f.usMouthOffsetX, f.usMouthOffsetY, f.usMouthWidth, f.usMouthHeight);
 			}
 		}
-		else if (GetJA2Clock() - f.uiMouthlast > f.uiMouthDelay)
+		else if (GetJA2Clock() - f.uiMouthlast > 120)
 		{
 			f.uiMouthlast = GetJA2Clock();
 
@@ -808,8 +764,7 @@ static void HandleRenderFaceAdjustments(FACETYPE& f, BOOLEAN const fDisplayBuffe
 			{
 				SetFontDestBuffer(uiRenderBuffer);
 
-				wchar_t sString[32];
-				swprintf(sString, lengthof(sString), L"%d", s->bOppCnt);
+				ST::string sString = ST::format("{}", s->bOppCnt);
 
 				SetFontAttributes(TINYFONT1, FONT_DKRED, DEFAULT_SHADOW, FONT_NEARBLACK);
 
@@ -886,6 +841,7 @@ static void HandleRenderFaceAdjustments(FACETYPE& f, BOOLEAN const fDisplayBuffe
 		INT16   sPtsAvailable = 0;
 		UINT16  usMaximumPts  = 0;
 		BOOLEAN fShowNumber   = FALSE;
+		static const SGPSector gunRange(GUN_RANGE_X, GUN_RANGE_Y, GUN_RANGE_Z);
 		switch (s->bAssignment)
 		{
 			case DOCTOR:
@@ -913,8 +869,7 @@ static void HandleRenderFaceAdjustments(FACETYPE& f, BOOLEAN const fDisplayBuffe
 			case TRAIN_BY_OTHER:
 			{
 				// there could be bonus pts for training at gun range
-				const BOOLEAN fAtGunRange = s->sSectorX == 13 &&
-								s->sSectorY == MAP_ROW_H && s->bSectorZ == 0;
+				const BOOLEAN fAtGunRange = s->sSector == gunRange;
 
 				switch (s->bAssignment)
 				{
@@ -975,8 +930,7 @@ static void HandleRenderFaceAdjustments(FACETYPE& f, BOOLEAN const fDisplayBuffe
 			{
 				SetFontDestBuffer(uiRenderBuffer);
 
-				wchar_t sString[32];
-				swprintf(sString, lengthof(sString), L"%d/%d", sPtsAvailable, usMaximumPts);
+				ST::string sString = ST::format("{}/{}", sPtsAvailable, usMaximumPts);
 
 				SetFontAttributes(FONT10ARIAL, FONT_YELLOW);
 
@@ -1053,8 +1007,7 @@ static void NewEye(FACETYPE& f)
 {
 	switch(f.sEyeFrame)
 	{
-		case 0 :
-			//f.sEyeFrame = (INT16)Random(2); // normal - can blink or frown
+		case 0: // normal
 			if ( f.ubExpression == ANGRY )
 			{
 				f.ubEyeWait = 0;
@@ -1066,78 +1019,35 @@ static void NewEye(FACETYPE& f)
 				f.sEyeFrame = 4;
 			}
 			else
-			//if (f.sEyeFrame && Talk.talking && Talk.expression != DYING)
-			///    f.sEyeFrame = 3;
-			//else
 				f.sEyeFrame = 1;
 			break;
-		case 1 :
-			// starting to blink  - has to finish unless dying
-			//if (Talk.expression == DYING)
-			//    f.sEyeFrame = 1;
-			//else
+
+		case 1 : // blink (eyelid down)
 			f.sEyeFrame = 2;
 			break;
-		case 2 :
-			//f.sEyeFrame = (INT16)Random(2); // finishing blink - can go normal or frown
-			//if (f.sEyeFrame && Talk.talking)
-			//    f.sEyeFrame = 3;
-			//else
-			//   if (Talk.expression == ANGRY)
-				// f.sEyeFrame = 3;
-			//   else
+		case 2 : // blink (eyelid up)
 			f.sEyeFrame = 0;
 			break;
 
-		case 3 : //f.sEyeFrame = 4; break; // frown
-
+		case 3 : // frown (eyebrown down)
 			f.ubEyeWait++;
-
 			if ( f.ubEyeWait > 6 )
 			{
 				f.sEyeFrame = 0;
 			}
 			break;
 
-		case 4 :
-
+		case 4 : // surprise (eyebrow up)
 			f.ubEyeWait++;
-
 			if ( f.ubEyeWait > 6 )
 			{
 				f.sEyeFrame = 0;
 			}
 			break;
 
-		case 5 :
-			f.sEyeFrame = 6;
+		default:
+			SLOGW("unexpected eye frame ({})", f.sEyeFrame);
 			f.sEyeFrame = 0;
-			break;
-
-		case 6 :
-			f.sEyeFrame = 7;
-			break;
-		case 7 :
-			f.sEyeFrame = (INT16)Random(2); // can stop frowning or continue
-		//if (f.sEyeFrame && Talk.expression != DYING)
-		//   f.sEyeFrame = 8;
-		//else
-		//    f.sEyeFrame = 0;
-		//break;
-		case 8 :
-			f.sEyeFrame =  9;
-			break;
-		case 9 :
-			f.sEyeFrame = 10;
-			break;
-		case 10:
-			f.sEyeFrame = 11;
-			break;
-		case 11:
-			f.sEyeFrame = 12;
-			break;
-		case 12:
-			f.sEyeFrame =  0;
 			break;
 	}
 }
@@ -1294,7 +1204,7 @@ static void FaceRestoreSavedBackgroundRect(FACETYPE const& f, INT16 const sDestL
 }
 
 
-void SetFaceTalking(FACETYPE& f, char const* const zSoundFile, wchar_t const* const zTextString)
+void SetFaceTalking(FACETYPE& f, const ST::string& zSoundFile, const ST::string& zTextString)
 {
 	// Set face to talking
 	f.fTalking          = TRUE;

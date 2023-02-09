@@ -12,8 +12,14 @@
 #include "Text_Input.h"
 #include "LaptopSave.h"
 #include "Font_Control.h"
+#include "GameInstance.h"
+#include "ContentManager.h"
+#include "IMPPolicy.h"
 
-static void BtnIMPAboutUsCallback(GUI_BUTTON *btn, INT32 reason);
+#include <string_theory/string>
+
+
+static void BtnIMPAboutUsCallback(GUI_BUTTON *btn, UINT32 reason);
 
 // position defines
 #define IMP_PLAYER_ACTIVATION_STRING_X LAPTOP_SCREEN_UL_X + 259
@@ -51,8 +57,8 @@ static void InitImpHomepageTextInputBoxes(void) {
 
 static void ProcessPlayerInputActivationString(void)
 {
-	wchar_t const* str = GetStringFromField(0);
-	bool stringMatchesCode = wcscmp(str, L"XEP624") == 0 || wcscmp(str, L"xep624") == 0;
+	ST::string str = GetStringFromField(0);
+	bool stringMatchesCode = GCM->getIMPPolicy()->isCodeAccepted(str);
 
 	if (stringMatchesCode && !LaptopSaveInfo.fIMPCompletedFlag) {
 		iCurrentImpPage = IMP_MAIN_PAGE;
@@ -72,7 +78,7 @@ static void ProcessPlayerInputActivationString(void)
 static void GetPlayerKeyBoardInputForIMPHomePage(void)
 {
 	InputAtom					InputEvent;
-	while (DequeueEvent(&InputEvent))
+	while (DequeueSpecificEvent(&InputEvent, KEYBOARD_EVENTS))
 	{
 		if(!HandleTextInput( &InputEvent ) && (InputEvent.usEvent == KEY_DOWN || InputEvent.usEvent == KEY_REPEAT || InputEvent.usEvent == KEY_UP ) )
 		{
@@ -127,9 +133,9 @@ static void RemoveIMPHomePageButtons(void)
 }
 
 
-static void BtnIMPAboutUsCallback(GUI_BUTTON *btn, INT32 reason)
+static void BtnIMPAboutUsCallback(GUI_BUTTON *btn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		iCurrentImpPage = IMP_ABOUT_US;
 		fButtonPendingFlag = TRUE;

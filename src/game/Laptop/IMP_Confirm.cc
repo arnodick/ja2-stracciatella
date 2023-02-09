@@ -12,6 +12,7 @@
 #include "IMP_Compile_Character.h"
 #include "IMP_Text_System.h"
 #include "IMP_Confirm.h"
+#include "Items.h"
 #include "Finances.h"
 #include "Soldier_Profile.h"
 #include "Soldier_Profile_Type.h"
@@ -22,6 +23,7 @@
 #include "Game_Clock.h"
 #include "Game_Event_Hook.h"
 #include "LaptopSave.h"
+#include "SaveLoadGame.h"
 #include "Strategic.h"
 #include "Random.h"
 #include "Button_System.h"
@@ -32,9 +34,10 @@
 #include "GameInstance.h"
 #include "policy/GamePolicy.h"
 #include "policy/IMPPolicy.h"
-#include "slog/slog.h"
+#include "Logger.h"
 
-#define IMP_MERC_FILE "imp.dat"
+#include <string_theory/string>
+
 
 static BUTTON_PICS* giIMPConfirmButtonImage[2];
 GUIButtonRef giIMPConfirmButton[2];
@@ -69,10 +72,8 @@ static const FacePosInfo g_face_info[] =
 };
 
 
-BOOLEAN fLoadingCharacterForPreviousImpProfile = FALSE;
-
-static void BtnIMPConfirmNo(GUI_BUTTON *btn, INT32 reason);
-static void BtnIMPConfirmYes(GUI_BUTTON *btn, INT32 reason);
+static void BtnIMPConfirmNo(GUI_BUTTON *btn, UINT32 reason);
+static void BtnIMPConfirmYes(GUI_BUTTON *btn, UINT32 reason);
 
 
 static void CreateConfirmButtons(void);
@@ -112,7 +113,7 @@ void HandleIMPConfirm( void )
 }
 
 
-static void MakeButton(UINT idx, const wchar_t* text, INT16 y, GUI_CALLBACK click)
+static void MakeButton(UINT idx, const ST::string& text, INT16 y, GUI_CALLBACK click)
 {
 	BUTTON_PICS* const img = LoadButtonImage(LAPTOPDIR "/button_2.sti", 0, 1);
 	giIMPConfirmButtonImage[idx] = img;
@@ -154,12 +155,14 @@ static BOOLEAN AddCharacterToPlayersTeam(void)
 	MERC_HIRE_STRUCT HireMercStruct;
 
 
-	// last minute chage to make sure merc with right facehas not only the right body but body specific skills...
-	// ie..small mercs have martial arts..but big guys and women don't don't
+	// last minute change to make sure merc with right face has not only the right body, but body specific skills...
+	// ie. small mercs have martial arts, but big guys and women don't
+	if (!fLoadingCharacterForPreviousImpProfile)
+	{
+		HandleMercStatsForChangesInFace();
+	}
 
-	HandleMercStatsForChangesInFace( );
-
-	memset(&HireMercStruct, 0, sizeof(MERC_HIRE_STRUCT));
+	HireMercStruct = MERC_HIRE_STRUCT{};
 
 	HireMercStruct.ubProfileID = ( UINT8 )( PLAYER_GENERATED_CHARACTER_ID + LaptopSaveInfo.iVoiceId ) ;
 
@@ -169,9 +172,9 @@ static BOOLEAN AddCharacterToPlayersTeam(void)
 		GiveItemsToPC( 	HireMercStruct.ubProfileID );
 	}
 
+	HireMercStruct.bWhatKindOfMerc = MERC_TYPE__PLAYER_CHARACTER;
 
-	HireMercStruct.sSectorX = SECTORX(g_merc_arrive_sector);
-	HireMercStruct.sSectorY = SECTORY(g_merc_arrive_sector);
+	HireMercStruct.sSector = g_merc_arrive_sector;
 	HireMercStruct.fUseLandingZoneForArrival = TRUE;
 
 	HireMercStruct.fCopyProfileItemsOver = TRUE;
@@ -196,13 +199,9 @@ static BOOLEAN AddCharacterToPlayersTeam(void)
 	}
 }
 
-
-static void WriteOutCurrentImpCharacter(INT32 iProfileId);
-
-
-static void BtnIMPConfirmYes(GUI_BUTTON *btn, INT32 reason)
+static void BtnIMPConfirmYes(GUI_BUTTON *btn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		if (LaptopSaveInfo.fIMPCompletedFlag)
 		{
@@ -217,15 +216,24 @@ static void BtnIMPConfirmYes(GUI_BUTTON *btn, INT32 reason)
 		}
 
 		// line moved by CJC Nov 28 2002 to AFTER the check for money
-		LaptopSaveInfo.fIMPCompletedFlag = TRUE;
+		LaptopSaveInfo.fIMPCompletedFlag = AddCharacterToPlayersTeam();
+		if (!LaptopSaveInfo.fIMPCompletedFlag) return; // only if merc hiring failed: no charge, give it another go
+
+		SOLDIERTYPE* const pSoldier = FindSoldierByProfileID(PLAYER_GENERATED_CHARACTER_ID + LaptopSaveInfo.iVoiceId);
+		if (!pSoldier) return;
+
+		if (fLoadingCharacterForPreviousImpProfile && gamepolicy(imp_load_keep_inventory))
+		{
+			IMPSavedProfileLoadInventory(gMercProfiles[PLAYER_GENERATED_CHARACTER_ID + LaptopSaveInfo.iVoiceId].zNickname, pSoldier);
+			// re-add letter, since it just got wiped and almost certainly is not present in the import
+			if (pSoldier->ubID == 0 && FindObj(pSoldier, LETTER) == NO_SLOT) {
+				CreateSpecialItem(pSoldier, LETTER);
+			}
+		}
 
 		// charge the player
 		AddTransactionToPlayersBook(IMP_PROFILE, (UINT8)(PLAYER_GENERATED_CHARACTER_ID + LaptopSaveInfo.iVoiceId), GetWorldTotalMin(), -COST_OF_PROFILE);
-		AddHistoryToPlayersLog(HISTORY_CHARACTER_GENERATED, 0, GetWorldTotalMin(), -1, -1);
-		AddCharacterToPlayersTeam();
-
-		// write the created imp merc
-		WriteOutCurrentImpCharacter((UINT8)(PLAYER_GENERATED_CHARACTER_ID + LaptopSaveInfo.iVoiceId));
+		AddHistoryToPlayersLog(HISTORY_CHARACTER_GENERATED, 0, GetWorldTotalMin(), SGPSector(-1, -1));
 
 		fButtonPendingFlag = TRUE;
 		iCurrentImpPage = IMP_HOME_PAGE;
@@ -247,9 +255,9 @@ static void BtnIMPConfirmYes(GUI_BUTTON *btn, INT32 reason)
 
 
 // fixed? by CJC Nov 28 2002
-static void BtnIMPConfirmNo(GUI_BUTTON *btn, INT32 reason)
+static void BtnIMPConfirmNo(GUI_BUTTON *btn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		iCurrentImpPage = IMP_FINISH;
 
@@ -364,11 +372,6 @@ static void GiveItemsToPC(UINT8 ubProfileId)
 	{
 		MakeProfileInvItemAnySlot(p, COMBAT_KNIFE, 100, 1);
 	}
-
-	if (HasSkillTrait(p, CAMOUFLAGED))
-	{
-		MakeProfileInvItemAnySlot(p, CAMOUFLAGEKIT, 100, 1);
-	}
 }
 
 
@@ -428,23 +431,10 @@ static INT32 FirstFreeBigEnoughPocket(MERCPROFILESTRUCT const& p, UINT16 const u
 	return(-1);
 }
 
-
-static void WriteOutCurrentImpCharacter(INT32 iProfileId)
-{
-	// grab the profile number and write out what is contained there in
-	AutoSGPFile hFile(FileMan::openForWriting(IMP_MERC_FILE));
-
-	// Write the profile id, portrait id and the profile itself. Abort on error
-	FileWrite(hFile, &iProfileId,      sizeof(INT32));
-	FileWrite(hFile, &iPortraitNumber, sizeof(INT32));
-	InjectMercProfileIntoFile(hFile, gMercProfiles[iProfileId]);
-}
-
 void ResetIMPCharactersEyesAndMouthOffsets(const UINT8 ubMercProfileID)
 {
-	// ATE: Check boundary conditions!
 	MERCPROFILESTRUCT& p = GetProfile(ubMercProfileID);
-	if (p.ubFaceIndex - 200 > 16 || ubMercProfileID >= PROF_HUMMER) return;
+	if (p.ubFaceIndex < 200 || p.ubFaceIndex >= 200 + lengthof(g_face_info) || ubMercProfileID >= PROF_HUMMER) return;
 
 	const FacePosInfo* const fi = &g_face_info[p.ubFaceIndex - 200];
 	p.usEyesX  = fi->eye_x;

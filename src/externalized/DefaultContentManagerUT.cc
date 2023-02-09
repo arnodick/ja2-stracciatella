@@ -1,27 +1,21 @@
 #include "DefaultContentManagerUT.h"
 
-#include "GameRes.h"
 #include "sgp/FileMan.h"
-
-#include "externalized/DefaultContentManager.h"
 #include "externalized/TestUtils.h"
+#include <utility>
 
-/** Create DefaultContentManager for usage in unit testing. */
-DefaultContentManager * createDefaultCMForTesting()
+DefaultContentManagerUT::DefaultContentManagerUT(RustPointer<EngineOptions> engineOptions)
+	: DefaultContentManager(std::move(engineOptions))
 {
-	std::string extraDataDir = GetExtraDataDir();
-	std::string configFolderPath = FileMan::joinPaths(extraDataDir, "unittests");
-	std::string gameResRootPath = FileMan::joinPaths(extraDataDir, "unittests");
-	std::string externalizedDataPath = FileMan::joinPaths(extraDataDir, "externalized");
+}
 
-	DefaultContentManager *cm;
+DefaultContentManagerUT* DefaultContentManagerUT::createDefaultCMForTesting()
+{
+	RustPointer<EngineOptions> engineOptions(EngineOptions_default());
+	ST::string extraDataDir = GetExtraDataDir();
+	ST::string gameResRootPath = FileMan::joinPaths(extraDataDir, "unittests");
 
-	cm = new DefaultContentManager(GameVersion::ENGLISH,
-					configFolderPath,
-					gameResRootPath, externalizedDataPath);
+	EngineOptions_setVanillaGameDir(engineOptions.get(), gameResRootPath.c_str());
 
-	// we don't load game resources
-	// bacause we don't need them at the moment
-
-	return cm;
+	return new DefaultContentManagerUT(std::move(engineOptions));
 }

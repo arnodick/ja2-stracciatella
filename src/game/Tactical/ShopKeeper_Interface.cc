@@ -9,6 +9,7 @@
 #include "Timer_Control.h"
 #include "Types.h"
 #include "MercPortrait.h"
+#include "MercProfile.h"
 #include "ShopKeeper_Interface.h"
 #include "Game_Clock.h"
 #include "Render_Dirty.h"
@@ -56,16 +57,22 @@
 #include "LOS.h"
 #include "Button_System.h"
 #include "Video.h"
-#include "MemMan.h"
 #include "Debug.h"
 #include "Items.h"
 #include "UILayout.h"
 #include "CalibreModel.h"
 #include "ContentManager.h"
+#include "DealerModel.h"
 #include "GameInstance.h"
 #include "MagazineModel.h"
 #include "WeaponModels.h"
 #include "policy/GamePolicy.h"
+#include "Observable.h"
+
+#include <string_theory/format>
+#include <string_theory/string>
+
+#include <algorithm>
 
 #define SKI_BUTTON_FONT				MILITARYFONT1//FONT14ARIAL
 #define SKI_BUTTON_COLOR				73
@@ -211,13 +218,11 @@
 #define DELAY_FOR_SHOPKEEPER_IDLE_QUOTE		20000
 #define CHANCE_FOR_SHOPKEEPER_IDLE_QUOTE		40
 
-#define MAX_SUBOBJECTS_PER_OBJECT			MAX(MAX_OBJECTS_PER_SLOT, (2 + MAX_ATTACHMENTS)) // (2nd part is main item, ammo/payload, and 4 attachments)
+#define MAX_SUBOBJECTS_PER_OBJECT			std::max(MAX_OBJECTS_PER_SLOT, (2 + MAX_ATTACHMENTS)) // (2nd part is main item, ammo/payload, and 4 attachments)
 
 #define REALLY_BADLY_DAMAGED_THRESHOLD			30
 
 #define REPAIR_DELAY_IN_HOURS				6
-
-#define FLO_DISCOUNT_PERCENTAGE			10
 
 
 static SGPVObject* guiMainTradeScreenImage;
@@ -302,6 +307,9 @@ static BOOLEAN gfPerformTransactionInProgress = FALSE;
 static BOOLEAN gfCommonQuoteUsedThisSession[NUM_COMMON_SK_QUOTES];
 
 
+Observable<INT8, UINT16, BOOLEAN> OnItemTransacted = {};
+Observable<INT8, UINT16, BOOLEAN, UINT32_S*> OnItemPriced = {};
+
 // Enums for possible evaluation results
 enum
 {
@@ -332,23 +340,23 @@ static ITEM_TO_ADD_AFTER_SKI_OPEN gItemToAdd;
 
 
 //Page up buttons for the merchants
-static void BtnSKI_InvPageUpButtonCallback(GUI_BUTTON* btn, INT32 reason);
+static void BtnSKI_InvPageUpButtonCallback(GUI_BUTTON* btn, UINT32 reason);
 static BUTTON_PICS* guiSKI_InvPageUpButtonImage;
 static GUIButtonRef guiSKI_InvPageUpButton;
 
 //Page down buttons for the merchants
-static void BtnSKI_InvPageDownButtonCallback(GUI_BUTTON* btn, INT32 reason);
+static void BtnSKI_InvPageDownButtonCallback(GUI_BUTTON* btn, UINT32 reason);
 static BUTTON_PICS* guiSKI_InvPageDownButtonImage;
 static GUIButtonRef guiSKI_InvPageDownButton;
 
 
 //Transaction buttons
-static void BtnSKI_TransactionButtonCallback(GUI_BUTTON* btn, INT32 reason);
+static void BtnSKI_TransactionButtonCallback(GUI_BUTTON* btn, UINT32 reason);
 static BUTTON_PICS* guiSKI_TransactionButtonImage;
 static GUIButtonRef guiSKI_TransactionButton;
 
 //Done buttons
-static void BtnSKI_DoneButtonCallback(GUI_BUTTON* btn, INT32 reason);
+static void BtnSKI_DoneButtonCallback(GUI_BUTTON* btn, UINT32 reason);
 static BUTTON_PICS* guiSKI_DoneButtonImage;
 static GUIButtonRef guiSKI_DoneButton;
 
@@ -401,6 +409,17 @@ static void GetShopKeeperInterfaceUserInput(void);
 static void HandleShopKeeperInterface(void);
 static void RenderShopKeeperInterface(void);
 
+
+const DealerModel* SelectedArmsDealer()
+{
+	auto dealer = GCM->getDealer(gbSelectedArmsDealerID);
+	if (dealer == NULL)
+	{
+		ST::string err = ST::format("Dealer is NULL ({})", gbSelectedArmsDealerID);
+		throw std::runtime_error(err.to_std_string());
+	}
+	return dealer;
+}
 
 ScreenID ShopKeeperScreenHandle()
 {
@@ -462,12 +481,12 @@ ScreenID ShopKeeperScreenHandle()
 	}
 
 	// render buttons marked dirty
-	DisableSMPpanelButtonsWhenInShopKeeperInterface();
+	ShopKeeperInterface_SetSMpanelButtonsState(false);
 	RenderButtons( );
 
 	// render help
 	SaveBackgroundRects( );
-	RenderButtonsFastHelp( );
+	RenderFastHelp( );
 
 	ExecuteBaseDirtyRectQueue();
 	EndFrameBufferRender();
@@ -503,7 +522,7 @@ void ShopKeeperScreenShutdown(void)
 }
 
 
-static GUIButtonRef MakeButton(BUTTON_PICS* const img, const wchar_t* const text, const INT16 x, const INT16 prio, const GUI_CALLBACK click, const wchar_t* const help)
+static GUIButtonRef MakeButton(BUTTON_PICS* img, const ST::string& text, INT16 x, INT16 prio, GUI_CALLBACK click, const ST::string& help)
 {
 	const INT16 text_col   = SKI_BUTTON_COLOR;
 	const INT16 shadow_col = DEFAULT_SHADOW;
@@ -522,9 +541,9 @@ static BOOLEAN InitShopKeepersFace(UINT8 ubMercID);
 static void InitializeShopKeeper(BOOLEAN fResetPage);
 static BOOLEAN OfferObjectToDealer(OBJECTTYPE* pComplexObject, UINT8 ubOwnerProfileId, INT8 bOwnerSlotId);
 static void ResetAllQuoteSaidFlags();
-static void SelectArmsDealersDropItemToGroundMovementRegionCallBack(MOUSE_REGION* pRegion, INT32 iReason);
-static void SelectArmsDealersDropItemToGroundRegionCallBack(MOUSE_REGION* pRegion, INT32 iReason);
-static void SelectArmsDealersFaceRegionCallBack(MOUSE_REGION* pRegion, INT32 iReason);
+static void SelectArmsDealersDropItemToGroundMovementRegionCallBack(MOUSE_REGION* pRegion, UINT32 iReason);
+static void SelectArmsDealersDropItemToGroundRegionCallBack(MOUSE_REGION* pRegion, UINT32 iReason);
+static void SelectArmsDealersFaceRegionCallBack(MOUSE_REGION* pRegion, UINT32 iReason);
 
 
 static void EnterShopKeeperInterface(void)
@@ -595,8 +614,8 @@ static void EnterShopKeeperInterface(void)
 
 	//Transaction button
 	//if the dealer repairs, use the repair fast help text for the transaction button
-	const wchar_t* help;
-	if (ArmsDealerInfo[gbSelectedArmsDealerID].ubTypeOfArmsDealer == ARMS_DEALER_REPAIRS)
+	ST::string help;
+	if (DoesDealerDoRepairs(gbSelectedArmsDealerID))
 	{
 		help = SkiMessageBoxText[SKI_REPAIR_TRANSACTION_BUTTON_HELP_TEXT];
 	}
@@ -631,11 +650,11 @@ static void EnterShopKeeperInterface(void)
 				MSYS_PRIORITY_HIGH-1,
 				CURSOR_NORMAL, MSYS_NO_CALLBACK, SelectArmsDealersFaceRegionCallBack);
 
-	memset( ArmsDealerOfferArea, 0, sizeof( INVENTORY_IN_SLOT ) * SKI_NUM_TRADING_INV_SLOTS );
-	memset( PlayersOfferArea, 0, sizeof( INVENTORY_IN_SLOT ) * SKI_NUM_TRADING_INV_SLOTS );
+	std::fill_n(ArmsDealerOfferArea, SKI_NUM_TRADING_INV_SLOTS, INVENTORY_IN_SLOT{});
+	std::fill_n(PlayersOfferArea, SKI_NUM_TRADING_INV_SLOTS, INVENTORY_IN_SLOT{});
 
 
-	if( ArmsDealerInfo[ gbSelectedArmsDealerID ].ubTypeOfArmsDealer == ARMS_DEALER_REPAIRS )
+	if (DoesDealerDoRepairs(gbSelectedArmsDealerID))
 	{
 		HandlePossibleRepairDelays();
 	}
@@ -644,12 +663,12 @@ static void EnterShopKeeperInterface(void)
 	//Setup the currently selected arms dealer
 	InitializeShopKeeper( TRUE );
 
-	memset( &gMoveingItem, 0, sizeof( INVENTORY_IN_SLOT ) );
+	gMoveingItem = INVENTORY_IN_SLOT{};
 
-	memset( &gfCommonQuoteUsedThisSession, FALSE, sizeof( gfCommonQuoteUsedThisSession ) );
+	std::fill(std::begin(gfCommonQuoteUsedThisSession), std::end(gfCommonQuoteUsedThisSession), FALSE);
 
 	//Init the shopkeepers face
-	InitShopKeepersFace( ArmsDealerInfo[ gbSelectedArmsDealerID ].ubShopKeeperID );
+	InitShopKeepersFace( SelectedArmsDealer()->profileID );
 
 	gfDoneBusinessThisSession = FALSE;
 
@@ -678,7 +697,7 @@ static void EnterShopKeeperInterface(void)
 
 		//if this is NOT a repair dealer or he is is but there is enough space in the player's offer area
 		// (you can't be out of space if it isn't a repairman, only they can fill it up with repaired items!)
-		if( ( ArmsDealerInfo[ gbSelectedArmsDealerID ].ubTypeOfArmsDealer != ARMS_DEALER_REPAIRS ) ||
+		if( (!DoesDealerDoRepairs(gbSelectedArmsDealerID)) ||
 			( CountNumberOfItemsInThePlayersOfferArea( ) < SKI_NUM_ARMS_DEALERS_INV_SLOTS ) )
 		{
 			// if we're supposed to store the original pocket #, but that pocket still holds more of these
@@ -706,7 +725,7 @@ static void EnterShopKeeperInterface(void)
 		}
 
 		//Clear the contents of the structure
-		memset( &gItemToAdd, 0, sizeof( ITEM_TO_ADD_AFTER_SKI_OPEN ) );
+		gItemToAdd = ITEM_TO_ADD_AFTER_SKI_OPEN{};
 		gItemToAdd.fActive = FALSE;
 	}
 
@@ -736,7 +755,7 @@ static void EnterShopKeeperInterface(void)
 
 static BOOLEAN InitShopKeepersFace(UINT8 ubMercID)
 {
-	SOLDIERTYPE* const pSoldier = FindSoldierByProfileID(ArmsDealerInfo[gbSelectedArmsDealerID].ubShopKeeperID);
+	SOLDIERTYPE* const pSoldier = FindSoldierByProfileID(SelectedArmsDealer()->profileID);
 	FACETYPE& f = InitFace(ubMercID, pSoldier, FACE_BIGFACE);
 	giShopKeeperFaceIndex = &f;
 
@@ -816,7 +835,7 @@ static void ExitShopKeeperInterface(void)
 	//if there is a temp inventory array, destroy it
 	if( gpTempDealersInventory )
 	{
-		MemFree( gpTempDealersInventory );
+		delete[] gpTempDealersInventory;
 		gpTempDealersInventory = NULL;
 	}
 
@@ -829,6 +848,7 @@ static void ExitShopKeeperInterface(void)
 	gRadarRegion.Enable();
 
 	gfSMDisableForItems = FALSE;
+	ShopKeeperInterface_SetSMpanelButtonsState(true);
 }
 
 static void DisplayArmsDealerCurrentInventoryPage(void);
@@ -850,7 +870,7 @@ static void HandleShopKeeperInterface(void)
 	//if we are in the item desc panel, disable the buttons
 	if( InItemDescriptionBox( ) && pShopKeeperItemDescObject != NULL )
 	{
-		DisableSMPpanelButtonsWhenInShopKeeperInterface();
+		ShopKeeperInterface_SetSMpanelButtonsState(false);
 		DisableButton( guiSKI_InvPageUpButton );
 		DisableButton( guiSKI_InvPageDownButton );
 		DisableButton( guiSKI_TransactionButton );
@@ -960,8 +980,6 @@ static void RestoreTacticalBackGround(void);
 
 static void RenderShopKeeperInterface(void)
 {
-	wchar_t	zMoney[128];
-
 	if (InItemDescriptionBox() && pShopKeeperItemDescObject != NULL) return;
 
 	//RenderTacticalInterface( );
@@ -974,7 +992,7 @@ static void RenderShopKeeperInterface(void)
 	DrawTextToScreen(SKI_Text[SKI_TEXT_MERCHADISE_IN_STOCK], SKI_MAIN_TITLE_X, SKI_MAIN_TITLE_Y, SKI_MAIN_TITLE_WIDTH, SKI_TITLE_FONT, SKI_TITLE_COLOR, FONT_MCOLOR_BLACK, CENTER_JUSTIFIED);
 
 	//if the dealer repairs
-	if( ArmsDealerInfo[ gbSelectedArmsDealerID ].ubTypeOfArmsDealer == ARMS_DEALER_REPAIRS )
+	if (DoesDealerDoRepairs(gbSelectedArmsDealerID))
 	{
 		//Display the Repair cost text
 		DisplayWrappedString(SKI_TOTAL_COST_X, SKI_TOTAL_COST_Y, SKI_TOTAL_COST_WIDTH, 2, SKI_LABEL_FONT, SKI_TITLE_COLOR, SKI_Text[SKI_TEXT_REPAIR_COST], FONT_MCOLOR_BLACK, CENTER_JUSTIFIED);
@@ -993,8 +1011,7 @@ static void RenderShopKeeperInterface(void)
 	DisplayWrappedString(SKI_PLAYERS_CURRENT_BALANCE_X, SKI_PLAYERS_CURRENT_BALANCE_Y, SKI_PLAYERS_CURRENT_BALANCE_WIDTH, 2, SKI_LABEL_FONT, SKI_TITLE_COLOR, SkiMessageBoxText[SKI_PLAYERS_CURRENT_BALANCE], FONT_MCOLOR_BLACK, CENTER_JUSTIFIED);
 
 	//Display the players current balance value
-	SPrintMoney(zMoney, LaptopSaveInfo.iCurrentBalance);
-	DrawTextToScreen(zMoney, SKI_PLAYERS_CURRENT_BALANCE_X, SKI_PLAYERS_CURRENT_BALANCE_OFFSET_TO_VALUE, SKI_PLAYERS_CURRENT_BALANCE_WIDTH, FONT10ARIAL, SKI_ITEM_PRICE_COLOR, FONT_MCOLOR_BLACK, CENTER_JUSTIFIED | MARK_DIRTY);
+	DrawTextToScreen(SPrintMoney(LaptopSaveInfo.iCurrentBalance), SKI_PLAYERS_CURRENT_BALANCE_X, SKI_PLAYERS_CURRENT_BALANCE_OFFSET_TO_VALUE, SKI_PLAYERS_CURRENT_BALANCE_WIDTH, FONT10ARIAL, SKI_ITEM_PRICE_COLOR, FONT_MCOLOR_BLACK, CENTER_JUSTIFIED | MARK_DIRTY);
 
 	BlitBufferToBuffer(FRAME_BUFFER, guiSAVEBUFFER, 0, 0, SKI_TACTICAL_BACKGROUND_START_X, SKI_TACTICAL_BACKGROUND_START_HEIGHT);
 
@@ -1058,7 +1075,7 @@ static void GetShopKeeperInterfaceUserInput(void)
 {
 	InputAtom Event;
 
-	while( DequeueEvent( &Event ) )
+	while( DequeueSpecificEvent(&Event, KEYBOARD_EVENTS) )
 	{
 		if( !HandleTextInput( &Event ) && Event.usEvent == KEY_DOWN )
 		{
@@ -1117,18 +1134,18 @@ static void ShopInventoryPageDown()
 }
 
 
-static void BtnSKI_InvPageUpButtonCallback(GUI_BUTTON* btn, INT32 reason)
+static void BtnSKI_InvPageUpButtonCallback(GUI_BUTTON* btn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		ShopInventoryPageUp();
 	}
 }
 
 
-static void BtnSKI_InvPageDownButtonCallback(GUI_BUTTON* btn, INT32 reason)
+static void BtnSKI_InvPageDownButtonCallback(GUI_BUTTON* btn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		ShopInventoryPageDown();
 	}
@@ -1138,9 +1155,9 @@ static void BtnSKI_InvPageDownButtonCallback(GUI_BUTTON* btn, INT32 reason)
 static void PerformTransaction(UINT32 uiMoneyFromPlayersAccount);
 
 
-static void BtnSKI_TransactionButtonCallback(GUI_BUTTON* btn, INT32 reason)
+static void BtnSKI_TransactionButtonCallback(GUI_BUTTON* btn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		// if not already doing it (multiple clicks can be queued up while shopkeeper is still talking)
 		if ( !gfPerformTransactionInProgress )
@@ -1156,16 +1173,16 @@ static void BtnSKI_TransactionButtonCallback(GUI_BUTTON* btn, INT32 reason)
 }
 
 
-static void BtnSKI_DoneButtonCallback(GUI_BUTTON* btn, INT32 reason)
+static void BtnSKI_DoneButtonCallback(GUI_BUTTON* btn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		ExitSKIRequested();
 	}
 }
 
 
-static void DealerInventoryScrollRegionCallback(MOUSE_REGION* const, INT32 const reason)
+static void DealerInventoryScrollRegionCallback(MOUSE_REGION* const, UINT32 const reason)
 {
 	if (reason & MSYS_CALLBACK_REASON_WHEEL_UP)
 	{
@@ -1178,19 +1195,23 @@ static void DealerInventoryScrollRegionCallback(MOUSE_REGION* const, INT32 const
 }
 
 
-static void SelectDealersInventoryMovementRegionCallBack(MOUSE_REGION* pRegion, INT32 iReason);
-static void SelectDealersInventoryRegionCallBack(MOUSE_REGION* pRegion, INT32 iReason);
-static void SelectDealersOfferSlotsMovementRegionCallBack(MOUSE_REGION* pRegion, INT32 iReason);
-static void SelectDealersOfferSlotsRegionCallBack(MOUSE_REGION* pRegion, INT32 iReason);
-static void SelectPlayersOfferSlotsMovementRegionCallBack(MOUSE_REGION* pRegion, INT32 iReason);
-static void SelectPlayersOfferSlotsRegionCallBack(MOUSE_REGION* pRegion, INT32 iReason);
+static void SelectDealersInventoryMovementRegionCallBack(MOUSE_REGION* pRegion, UINT32 iReason);
+static void SelectDealersInventoryRegionCallBackPrimary(MOUSE_REGION* pRegion, UINT32 iReason);
+static void SelectDealersInventoryRegionCallBackSecondary(MOUSE_REGION* pRegion, UINT32 iReason);
+static void SelectDealersInventoryRegionCallBackScroll(MOUSE_REGION* pRegion, UINT32 iReason);
+static void SelectDealersOfferSlotsMovementRegionCallBack(MOUSE_REGION* pRegion, UINT32 iReason);
+static void SelectDealersOfferSlotsRegionCallBackPrimary(MOUSE_REGION* pRegion, UINT32 iReason);
+static void SelectDealersOfferSlotsRegionCallBackSecondary(MOUSE_REGION* pRegion, UINT32 iReason);
+static void SelectPlayersOfferSlotsMovementRegionCallBack(MOUSE_REGION* pRegion, UINT32 iReason);
+static void SelectPlayersOfferSlotsRegionCallBackPrimary(MOUSE_REGION* pRegion, UINT32 iReason);
+static void SelectPlayersOfferSlotsRegionCallBackSecondary(MOUSE_REGION* pRegion, UINT32 iReason);
 
 
 static void CreateSkiInventorySlotMouseRegions(void)
 {
-	MSYS_DefineRegion(&g_dealer_inventory_scroll_region, 161, 27, 532, 137, MSYS_PRIORITY_HIGH, CURSOR_NORMAL, NULL, DealerInventoryScrollRegionCallback);
+	MSYS_DefineRegion(&g_dealer_inventory_scroll_region, 161, 27, 532, 137, MSYS_PRIORITY_HIGH, CURSOR_NORMAL, MSYS_NO_CALLBACK, DealerInventoryScrollRegionCallback);
 
-	bool const does_repairs = ArmsDealerInfo[gbSelectedArmsDealerID].ubTypeOfArmsDealer == ARMS_DEALER_REPAIRS;
+	bool const does_repairs = DoesDealerDoRepairs(gbSelectedArmsDealerID);
 
 	// Create the mouse regions for the shopkeeper's inventory
 	for (UINT32 i = 0; i != SKI_NUM_ARMS_DEALERS_INV_SLOTS; ++i)
@@ -1199,38 +1220,40 @@ static void CreateSkiInventorySlotMouseRegions(void)
 		UINT16 const y = SKI_ARMS_DEALERS_INV_START_Y + i / SKI_NUM_ARMS_DEALERS_INV_COLS * SKI_INV_OFFSET_Y;
 		{
 			MOUSE_REGION* const r = &gDealersInventoryMouseRegions[i];
-			MSYS_DefineRegion(r, x, y, x + SKI_INV_SLOT_WIDTH, y + SKI_INV_SLOT_HEIGHT, MSYS_PRIORITY_HIGH, CURSOR_NORMAL, SelectDealersInventoryMovementRegionCallBack, SelectDealersInventoryRegionCallBack);
+			MSYS_DefineRegion(r, x, y, x + SKI_INV_SLOT_WIDTH, y + SKI_INV_SLOT_HEIGHT, MSYS_PRIORITY_HIGH, CURSOR_NORMAL, SelectDealersInventoryMovementRegionCallBack, MouseCallbackPrimarySecondary(SelectDealersInventoryRegionCallBackPrimary, SelectDealersInventoryRegionCallBackSecondary, SelectDealersInventoryRegionCallBackScroll));
 			MSYS_SetRegionUserData(r, 0, i);
 		}
 		if (does_repairs)
 		{
 			// Small Faces
 			MOUSE_REGION* const r = &gRepairmanInventorySmallFaceMouseRegions[i];
-			MSYS_DefineRegion(r, x + SKI_SMALL_FACE_OFFSET_X, y, x + SKI_SMALL_FACE_OFFSET_X + SKI_SMALL_FACE_WIDTH, y + SKI_SMALL_FACE_HEIGHT, MSYS_PRIORITY_HIGH + 1, CURSOR_NORMAL, NULL, NULL);
+			MSYS_DefineRegion(r, x + SKI_SMALL_FACE_OFFSET_X, y, x + SKI_SMALL_FACE_OFFSET_X + SKI_SMALL_FACE_WIDTH, y + SKI_SMALL_FACE_HEIGHT, MSYS_PRIORITY_HIGH + 1, CURSOR_NORMAL, MSYS_NO_CALLBACK, MSYS_NO_CALLBACK);
 			MSYS_SetRegionUserData(r, 0, i);
 		}
 	}
 
 	// Create the mouse regions for the shopkeeper's trading slots
+	MOUSE_CALLBACK selectDealersOfferSlotsRegionCallBack = MouseCallbackPrimarySecondary(SelectDealersOfferSlotsRegionCallBackPrimary, SelectDealersOfferSlotsRegionCallBackSecondary);
 	for (UINT32 i = 0; i != SKI_NUM_TRADING_INV_SLOTS; ++i)
 	{
 		UINT16 const x = SKI_ARMS_DEALERS_TRADING_INV_X + i % SKI_NUM_TRADING_INV_COLS * SKI_INV_OFFSET_X;
 		UINT16 const y = SKI_ARMS_DEALERS_TRADING_INV_Y + i / SKI_NUM_TRADING_INV_COLS * SKI_INV_OFFSET_Y;
 		{
 			MOUSE_REGION* const r = &gDealersOfferSlotsMouseRegions[i];
-			MSYS_DefineRegion(r, x, y, x + SKI_INV_SLOT_WIDTH, y + SKI_INV_SLOT_HEIGHT, MSYS_PRIORITY_HIGH, CURSOR_NORMAL, SelectDealersOfferSlotsMovementRegionCallBack, SelectDealersOfferSlotsRegionCallBack);
+			MSYS_DefineRegion(r, x, y, x + SKI_INV_SLOT_WIDTH, y + SKI_INV_SLOT_HEIGHT, MSYS_PRIORITY_HIGH, CURSOR_NORMAL, SelectDealersOfferSlotsMovementRegionCallBack, selectDealersOfferSlotsRegionCallBack);
 			MSYS_SetRegionUserData(r, 0, i);
 		}
 		if (does_repairs)
 		{
 			// Small Faces
 			MOUSE_REGION* const r = &gDealersOfferSlotsSmallFaceMouseRegions[i];
-			MSYS_DefineRegion(r, x + SKI_SMALL_FACE_OFFSET_X, y, x + SKI_SMALL_FACE_OFFSET_X + SKI_SMALL_FACE_WIDTH, y + SKI_SMALL_FACE_HEIGHT, MSYS_PRIORITY_HIGH + 1, CURSOR_NORMAL, SelectDealersOfferSlotsMovementRegionCallBack, SelectDealersOfferSlotsRegionCallBack);
+			MSYS_DefineRegion(r, x + SKI_SMALL_FACE_OFFSET_X, y, x + SKI_SMALL_FACE_OFFSET_X + SKI_SMALL_FACE_WIDTH, y + SKI_SMALL_FACE_HEIGHT, MSYS_PRIORITY_HIGH + 1, CURSOR_NORMAL, SelectDealersOfferSlotsMovementRegionCallBack, selectDealersOfferSlotsRegionCallBack);
 			MSYS_SetRegionUserData(r, 0, i);
 		}
 	}
 
 	// Create the mouse regions for the Players trading slots
+	MOUSE_CALLBACK selectPlayersOfferSlotsRegionCallBack = MouseCallbackPrimarySecondary(SelectPlayersOfferSlotsRegionCallBackPrimary, SelectPlayersOfferSlotsRegionCallBackSecondary);
 	for (UINT32 i = 0; i != SKI_NUM_TRADING_INV_SLOTS; ++i)
 	{
 		UINT16 const x = SKI_PLAYERS_TRADING_INV_X + i % SKI_NUM_TRADING_INV_COLS * SKI_INV_OFFSET_X;
@@ -1238,13 +1261,13 @@ static void CreateSkiInventorySlotMouseRegions(void)
 		{
 			// Trading Slots
 			MOUSE_REGION* const r = &gPlayersOfferSlotsMouseRegions[i];
-			MSYS_DefineRegion(r, x, y, x + SKI_INV_SLOT_WIDTH, y + SKI_INV_SLOT_HEIGHT, MSYS_PRIORITY_HIGH, CURSOR_NORMAL, SelectPlayersOfferSlotsMovementRegionCallBack, SelectPlayersOfferSlotsRegionCallBack);
+			MSYS_DefineRegion(r, x, y, x + SKI_INV_SLOT_WIDTH, y + SKI_INV_SLOT_HEIGHT, MSYS_PRIORITY_HIGH, CURSOR_NORMAL, SelectPlayersOfferSlotsMovementRegionCallBack, selectPlayersOfferSlotsRegionCallBack);
 			MSYS_SetRegionUserData(r, 0, i);
 		}
 		{
 			// Small Faces
 			MOUSE_REGION* const r = &gPlayersOfferSlotsSmallFaceMouseRegions[i];
-			MSYS_DefineRegion(r, x + SKI_SMALL_FACE_OFFSET_X, y, x + SKI_SMALL_FACE_OFFSET_X + SKI_SMALL_FACE_WIDTH, y + SKI_SMALL_FACE_HEIGHT, MSYS_PRIORITY_HIGH + 1, CURSOR_NORMAL, SelectPlayersOfferSlotsMovementRegionCallBack, SelectPlayersOfferSlotsRegionCallBack);
+			MSYS_DefineRegion(r, x + SKI_SMALL_FACE_OFFSET_X, y, x + SKI_SMALL_FACE_OFFSET_X + SKI_SMALL_FACE_WIDTH, y + SKI_SMALL_FACE_HEIGHT, MSYS_PRIORITY_HIGH + 1, CURSOR_NORMAL, SelectPlayersOfferSlotsMovementRegionCallBack, selectPlayersOfferSlotsRegionCallBack);
 			MSYS_SetRegionUserData(r, 0, i);
 		}
 	}
@@ -1255,7 +1278,7 @@ static void DestroySkiInventorySlotMouseRegions(void)
 {
 	MSYS_RemoveRegion(&g_dealer_inventory_scroll_region);
 
-	bool const does_repairs = ArmsDealerInfo[gbSelectedArmsDealerID].ubTypeOfArmsDealer == ARMS_DEALER_REPAIRS;
+	bool const does_repairs = DoesDealerDoRepairs(gbSelectedArmsDealerID);
 
 	for (UINT32 i = 0; i != SKI_NUM_ARMS_DEALERS_INV_SLOTS; ++i)
 	{
@@ -1279,137 +1302,138 @@ static void InitShopKeeperItemDescBox(OBJECTTYPE* pObject, UINT8 ubPocket, UINT8
 
 
 //Mouse Call back for the Arms traders inventory slot
-static void SelectDealersInventoryRegionCallBack(MOUSE_REGION* pRegion, INT32 iReason)
+static void SelectDealersInventoryRegionCallBackPrimary(MOUSE_REGION* pRegion, UINT32 iReason)
 {
-	if (iReason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	UINT8 ubSelectedInvSlot = (UINT8)MSYS_GetRegionUserData( pRegion, 0 );
+	INT8  ubLocation;
+
+	if( gpTempDealersInventory == NULL )
+		return;
+
+	ubSelectedInvSlot += gSelectArmsDealerInfo.ubFirstItemIndexOnPage;
+
+	//if the selected slot is above any inventory we have, return
+	if( ubSelectedInvSlot >= gSelectArmsDealerInfo.uiNumDistinctInventoryItems )
+		return;
+
+	//if there are any items still there
+	if( gpTempDealersInventory[ ubSelectedInvSlot ].ItemObject.ubNumberOfObjects > 0 )
 	{
-		UINT8 ubSelectedInvSlot = (UINT8)MSYS_GetRegionUserData( pRegion, 0 );
-		INT8  ubLocation;
-
-		if( gpTempDealersInventory == NULL )
-			return;
-
-		ubSelectedInvSlot += gSelectArmsDealerInfo.ubFirstItemIndexOnPage;
-
-		//if the selected slot is above any inventory we have, return
-		if( ubSelectedInvSlot >= gSelectArmsDealerInfo.uiNumDistinctInventoryItems )
-			return;
-
-		//if there are any items still there
-		if( gpTempDealersInventory[ ubSelectedInvSlot ].ItemObject.ubNumberOfObjects > 0 )
+		//If the item type has not already been placed
+		if( !( gpTempDealersInventory[ ubSelectedInvSlot ].uiFlags & ARMS_INV_ITEM_SELECTED ) )
 		{
-			//If the item type has not already been placed
-			if( !( gpTempDealersInventory[ ubSelectedInvSlot ].uiFlags & ARMS_INV_ITEM_SELECTED ) )
+			//if the dealer repairs
+			if (DoesDealerDoRepairs(gbSelectedArmsDealerID))
 			{
-				//if the dealer repairs
-				if( ArmsDealerInfo[ gbSelectedArmsDealerID ].ubTypeOfArmsDealer == ARMS_DEALER_REPAIRS )
-				{
-					// ignore left clicks on items under repair.  Fully repaired items are moved out to player's slots automatically
-				}
-				else // not a repairman
-				{
-					ubLocation = AddItemToArmsDealerOfferArea( &gpTempDealersInventory[ ubSelectedInvSlot ], ubSelectedInvSlot );
+				// ignore left clicks on items under repair.  Fully repaired items are moved out to player's slots automatically
+			}
+			else // not a repairman
+			{
+				ubLocation = AddItemToArmsDealerOfferArea( &gpTempDealersInventory[ ubSelectedInvSlot ], ubSelectedInvSlot );
 
-					//if the item was added to the Dealer Offer Area correctly
-					if( ubLocation != -1 )
+				//if the item was added to the Dealer Offer Area correctly
+				if( ubLocation != -1 )
+				{
+					//Set the flag indicating the item has been selected
+					gpTempDealersInventory[ ubSelectedInvSlot ].uiFlags |= ARMS_INV_ITEM_SELECTED;
+
+					//Specify the location the items went to
+					gpTempDealersInventory[ ubSelectedInvSlot ].ubLocationOfObject = ARMS_DEALER_OFFER_AREA;
+					gpTempDealersInventory[ ubSelectedInvSlot ].bSlotIdInOtherLocation = ubLocation;
+
+					//if the shift key is being pressed, remove them all
+					if (_KeyDown(SHIFT))
 					{
-						//Set the flag indicating the item has been selected
-						gpTempDealersInventory[ ubSelectedInvSlot ].uiFlags |= ARMS_INV_ITEM_SELECTED;
-
-						//Specify the location the items went to
-						gpTempDealersInventory[ ubSelectedInvSlot ].ubLocationOfObject = ARMS_DEALER_OFFER_AREA;
-						gpTempDealersInventory[ ubSelectedInvSlot ].bSlotIdInOtherLocation = ubLocation;
-
-						//if the shift key is being pressed, remove them all
-						if (_KeyDown(SHIFT))
-						{
-							gpTempDealersInventory[ ubSelectedInvSlot ].ItemObject.ubNumberOfObjects = 0;
-						}
-						else
-						{
-							gpTempDealersInventory[ ubSelectedInvSlot ].ItemObject.ubNumberOfObjects --;
-						}
-
-						gubSkiDirtyLevel = SKI_DIRTY_LEVEL2;
+						gpTempDealersInventory[ ubSelectedInvSlot ].ItemObject.ubNumberOfObjects = 0;
 					}
-				}
-			}
-			else // some of this item are already in dealer's offer area
-			{
-				UINT8 ubNumToMove;
+					else
+					{
+						gpTempDealersInventory[ ubSelectedInvSlot ].ItemObject.ubNumberOfObjects --;
+					}
 
-				//if the shift key is being pressed, remove them all
-				if (_KeyDown(SHIFT))
-				{
-					ubNumToMove = gpTempDealersInventory[ ubSelectedInvSlot ].ItemObject.ubNumberOfObjects;
+					gubSkiDirtyLevel = SKI_DIRTY_LEVEL2;
 				}
-				else
-				{
-					ubNumToMove = 1;
-				}
-
-				//Reduce the number in dealer's inventory
-				gpTempDealersInventory[ ubSelectedInvSlot ].ItemObject.ubNumberOfObjects -= ubNumToMove;
-				//Increase the number in dealer's offer area
-				ArmsDealerOfferArea[ gpTempDealersInventory[ ubSelectedInvSlot ].bSlotIdInOtherLocation ].ItemObject.ubNumberOfObjects += ubNumToMove;
-
-				gubSkiDirtyLevel = SKI_DIRTY_LEVEL2;
 			}
 		}
-	}
+		else // some of this item are already in dealer's offer area
+		{
+			UINT8 ubNumToMove;
 
-	else if (iReason & MSYS_CALLBACK_REASON_RBUTTON_UP)
+			//if the shift key is being pressed, remove them all
+			if (_KeyDown(SHIFT))
+			{
+				ubNumToMove = gpTempDealersInventory[ ubSelectedInvSlot ].ItemObject.ubNumberOfObjects;
+			}
+			else
+			{
+				ubNumToMove = 1;
+			}
+
+			//Reduce the number in dealer's inventory
+			gpTempDealersInventory[ ubSelectedInvSlot ].ItemObject.ubNumberOfObjects -= ubNumToMove;
+			//Increase the number in dealer's offer area
+			ArmsDealerOfferArea[ gpTempDealersInventory[ ubSelectedInvSlot ].bSlotIdInOtherLocation ].ItemObject.ubNumberOfObjects += ubNumToMove;
+
+			gubSkiDirtyLevel = SKI_DIRTY_LEVEL2;
+		}
+	}
+}
+
+static void SelectDealersInventoryRegionCallBackSecondary(MOUSE_REGION* pRegion, UINT32 iReason)
+{
+	UINT8 ubSelectedInvSlot = (UINT8)MSYS_GetRegionUserData( pRegion, 0 );
+
+	if( gpTempDealersInventory == NULL )
+		return;
+
+	ubSelectedInvSlot += gSelectArmsDealerInfo.ubFirstItemIndexOnPage;
+
+	//if the selected slot is above any inventory we have, return
+	if( ubSelectedInvSlot >= gSelectArmsDealerInfo.uiNumDistinctInventoryItems )
+		return;
+
+	//DEF:
+	//bring up the item description box
+	if ( !InItemDescriptionBox( ) )
 	{
-		UINT8 ubSelectedInvSlot = (UINT8)MSYS_GetRegionUserData( pRegion, 0 );
-
-		if( gpTempDealersInventory == NULL )
-			return;
-
-		ubSelectedInvSlot += gSelectArmsDealerInfo.ubFirstItemIndexOnPage;
-
-		//if the selected slot is above any inventory we have, return
-		if( ubSelectedInvSlot >= gSelectArmsDealerInfo.uiNumDistinctInventoryItems )
-			return;
-
-		//DEF:
-		//bring up the item description box
-		if ( !InItemDescriptionBox( ) )
-		{
-			InitShopKeeperItemDescBox( &gpTempDealersInventory[ ubSelectedInvSlot ].ItemObject, ubSelectedInvSlot, ARMS_DEALER_INVENTORY );
-		}
-		else
-		{
-			DeleteItemDescriptionBox( );
-		}
-
-
-
-		/*
-		//if the item has been seleceted
-		if( gpTempDealersInventory[ ubSelectedInvSlot ].uiFlags & ARMS_INV_ITEM_SELECTED )
-		{
-			//Check to see it there is more then 1 item in the location
-			INVENTORY_IN_SLOT* const a = &ArmsDealerOfferArea[gpTempDealersInventory[ubSelectedInvSlot].bSlotIdInOtherLocation];
-			if (a->ItemObject.ubNumberOfObjects > 0)
-			{
-				//Increase the number in the dealer inventory
-				gpTempDealersInventory[ ubSelectedInvSlot ].ItemObject.ubNumberOfObjects ++;
-
-				//Decrease the number in the dealer offer area
-				a->ItemObject.ubNumberOfObjects--;
-
-				//if there is nothing left in the arms dealer offer area
-				if (a->ItemObject.ubNumberOfObjects == 0)
-				{
-					RemoveItemFromArmsDealerOfferArea( gpTempDealersInventory[ ubSelectedInvSlot ].bSlotIdInOtherLocation, FALSE );
-				}
-
-				//redraw the screen
-				gubSkiDirtyLevel = SKI_DIRTY_LEVEL2;
-			}
-		}*/
+		InitShopKeeperItemDescBox( &gpTempDealersInventory[ ubSelectedInvSlot ].ItemObject, ubSelectedInvSlot, ARMS_DEALER_INVENTORY );
 	}
-	else if (iReason & MSYS_CALLBACK_REASON_WHEEL_UP)
+	else
+	{
+		DeleteItemDescriptionBox( );
+	}
+
+
+
+	/*
+	//if the item has been seleceted
+	if( gpTempDealersInventory[ ubSelectedInvSlot ].uiFlags & ARMS_INV_ITEM_SELECTED )
+	{
+		//Check to see it there is more then 1 item in the location
+		INVENTORY_IN_SLOT* const a = &ArmsDealerOfferArea[gpTempDealersInventory[ubSelectedInvSlot].bSlotIdInOtherLocation];
+		if (a->ItemObject.ubNumberOfObjects > 0)
+		{
+			//Increase the number in the dealer inventory
+			gpTempDealersInventory[ ubSelectedInvSlot ].ItemObject.ubNumberOfObjects ++;
+
+			//Decrease the number in the dealer offer area
+			a->ItemObject.ubNumberOfObjects--;
+
+			//if there is nothing left in the arms dealer offer area
+			if (a->ItemObject.ubNumberOfObjects == 0)
+			{
+				RemoveItemFromArmsDealerOfferArea( gpTempDealersInventory[ ubSelectedInvSlot ].bSlotIdInOtherLocation, FALSE );
+			}
+
+			//redraw the screen
+			gubSkiDirtyLevel = SKI_DIRTY_LEVEL2;
+		}
+	}*/
+}
+
+static void SelectDealersInventoryRegionCallBackScroll(MOUSE_REGION* pRegion, UINT32 iReason)
+{
+	if (iReason & MSYS_CALLBACK_REASON_WHEEL_UP)
 	{
 		ShopInventoryPageUp();
 	}
@@ -1420,7 +1444,7 @@ static void SelectDealersInventoryRegionCallBack(MOUSE_REGION* pRegion, INT32 iR
 }
 
 
-static void SelectDealersInventoryMovementRegionCallBack(MOUSE_REGION* pRegion, INT32 iReason)
+static void SelectDealersInventoryMovementRegionCallBack(MOUSE_REGION* pRegion, UINT32 iReason)
 {
 	UINT8 ubSelectedInvSlot = (UINT8)MSYS_GetRegionUserData( pRegion, 0 );
 	ubSelectedInvSlot += gSelectArmsDealerInfo.ubFirstItemIndexOnPage;
@@ -1454,7 +1478,7 @@ static void SelectDealersInventoryMovementRegionCallBack(MOUSE_REGION* pRegion, 
 }
 
 
-static void SelectDealersOfferSlotsMovementRegionCallBack(MOUSE_REGION* pRegion, INT32 iReason)
+static void SelectDealersOfferSlotsMovementRegionCallBack(MOUSE_REGION* pRegion, UINT32 iReason)
 {
 	UINT8 ubSelectedInvSlot = (UINT8)MSYS_GetRegionUserData( pRegion, 0 );
 	const INVENTORY_IN_SLOT* const a = &ArmsDealerOfferArea[ubSelectedInvSlot];
@@ -1479,7 +1503,7 @@ static void SelectDealersOfferSlotsMovementRegionCallBack(MOUSE_REGION* pRegion,
 }
 
 
-static void SelectPlayersOfferSlotsMovementRegionCallBack(MOUSE_REGION* pRegion, INT32 iReason)
+static void SelectPlayersOfferSlotsMovementRegionCallBack(MOUSE_REGION* pRegion, UINT32 iReason)
 {
 	UINT8 ubSelectedInvSlot = (UINT8)MSYS_GetRegionUserData( pRegion, 0 );
 	const INVENTORY_IN_SLOT* const o = &PlayersOfferArea[ubSelectedInvSlot];
@@ -1511,120 +1535,120 @@ static BOOLEAN RemoveItemFromArmsDealerOfferArea(INT8 bSlotId, BOOLEAN fKeepItem
 static BOOLEAN RemoveRepairItemFromDealersOfferArea(INT8 bSlot);
 
 
-//Mouse Call back for the dealer's OFFER slot
-static void SelectDealersOfferSlotsRegionCallBack(MOUSE_REGION* pRegion, INT32 iReason)
+static void SelectDealersOfferSlotsRegionCallBackPrimary(MOUSE_REGION* pRegion, UINT32 iReason)
 {
 	UINT8	ubSelectedInvSlot = (UINT8)MSYS_GetRegionUserData( pRegion, 0 );
 	INVENTORY_IN_SLOT* const a = &ArmsDealerOfferArea[ubSelectedInvSlot];
 
-	if (iReason & MSYS_CALLBACK_REASON_RBUTTON_UP)
+	/*
+	//if the current merc is disabled for whatever reason
+	if( gfSMDisableForItems )
+		// the
+		return;*/
+	//if there is something here
+	if (a->fActive)
 	{
-		//if there is something here
-		if (a->fActive)
+		//if this is a repair dealer
+		if (DoesDealerDoRepairs(gbSelectedArmsDealerID))
 		{
-			//if the dealer repairs
-			if( ArmsDealerInfo[ gbSelectedArmsDealerID ].ubTypeOfArmsDealer == ARMS_DEALER_REPAIRS )
+			//if we don't have an item, pick one up
+			if( gMoveingItem.sItemIndex == 0 )
 			{
-				// return item to player
-				RemoveRepairItemFromDealersOfferArea( ubSelectedInvSlot );
+				//if the dealer is a repair dealer, allow the player to pick up the item
+				if (DoesDealerDoRepairs(gbSelectedArmsDealerID))
+				{
+					BeginSkiItemPointer( ARMS_DEALER_OFFER_AREA, ubSelectedInvSlot, FALSE );
+				}
 			}
 			else
 			{
-				//bring up the item description box
-				if ( !InItemDescriptionBox( ) )
+				//swap what is in the cursor with what is in the player offer slot
+
+				// if the slot is overloaded (holds more objects than we have room for valid statuses of)
+				if (a->ItemObject.ubNumberOfObjects > MAX_OBJECTS_PER_SLOT)
 				{
-					InitShopKeeperItemDescBox(&a->ItemObject, ubSelectedInvSlot, ARMS_DEALER_OFFER_AREA);
+					// then ignore the click - we can't do the swap, or anything very useful, because we can't allow overloaded
+					// items into the player's cursor - if he put them into a merc's inventory, the extra statuses are missing!
+					// At best, we could do some sort of message here.
+					return;
 				}
-				else
-				{
-					DeleteItemDescriptionBox( );
-				}
+
+				IfMercOwnedCopyItemToMercInv( &gMoveingItem );
+
+				const INVENTORY_IN_SLOT TempSlot = *a;
+				*a = gMoveingItem;
+				gMoveingItem = TempSlot;
+
+				IfMercOwnedRemoveItemFromMercInv( &gMoveingItem );
+
+				// Change mouse cursor
+				gpItemPointer = &gMoveingItem.ItemObject;
+				SetSkiCursor( EXTERN_CURSOR );
+
+				gubSkiDirtyLevel = SKI_DIRTY_LEVEL2;
 			}
+		}
+		else //non-repairman
+		{
+			//if the shift key is being pressed, remove them all
+			if (_KeyDown(SHIFT) || a->ItemObject.ubNumberOfObjects == 1)
+			{
+				RemoveItemFromArmsDealerOfferArea(ubSelectedInvSlot, TRUE);//a->bSlotIdInOtherLocation
+			}
+			else	// multiple items there, SHIFT isn't being pressed
+			{
+				// remove only one at a time
+				a->ItemObject.ubNumberOfObjects--;
+				gpTempDealersInventory[a->bSlotIdInOtherLocation].ItemObject.ubNumberOfObjects++;
+			}
+
+			gubSkiDirtyLevel = SKI_DIRTY_LEVEL2;
 		}
 	}
-	else if( iReason & MSYS_CALLBACK_REASON_LBUTTON_UP ) //MSYS_CALLBACK_REASON_LBUTTON_UP)
+	else // empty slot
 	{
-		/*
-		//if the current merc is disabled for whatever reason
-		if( gfSMDisableForItems )
-			// the
-			return;*/
-		//if there is something here
-		if (a->fActive)
+		//if the cursor has something in it
+		if( gMoveingItem.sItemIndex > 0 )
 		{
-			//if this is a repair dealer
-			if( ArmsDealerInfo[ gbSelectedArmsDealerID ].ubTypeOfArmsDealer == ARMS_DEALER_REPAIRS )
-			{
-				//if we don't have an item, pick one up
-				if( gMoveingItem.sItemIndex == 0 )
-				{
-					//if the dealer is a repair dealer, allow the player to pick up the item
-					if( ArmsDealerInfo[ gbSelectedArmsDealerID ].ubTypeOfArmsDealer == ARMS_DEALER_REPAIRS )
-					{
-						BeginSkiItemPointer( ARMS_DEALER_OFFER_AREA, ubSelectedInvSlot, FALSE );
-					}
-				}
-				else
-				{
-					//swap what is in the cursor with what is in the player offer slot
+			// we'd better talking to a repairman, cursor is locked out of this area while full for non-repairmen!
+			Assert(DoesDealerDoRepairs(gbSelectedArmsDealerID));
 
-					// if the slot is overloaded (holds more objects than we have room for valid statuses of)
-					if (a->ItemObject.ubNumberOfObjects > MAX_OBJECTS_PER_SLOT)
-					{
-						// then ignore the click - we can't do the swap, or anything very useful, because we can't allow overloaded
-						// items into the player's cursor - if he put them into a merc's inventory, the extra statuses are missing!
-						// At best, we could do some sort of message here.
-						return;
-					}
+			//Drop the item into the current slot
+			AddInventoryToSkiLocation( &gMoveingItem, ubSelectedInvSlot, ARMS_DEALER_OFFER_AREA );
 
-					IfMercOwnedCopyItemToMercInv( &gMoveingItem );
+			//Reset the cursor
+			SetSkiCursor( CURSOR_NORMAL );
 
-					const INVENTORY_IN_SLOT TempSlot = *a;
-					*a = gMoveingItem;
-					gMoveingItem = TempSlot;
-
-					IfMercOwnedRemoveItemFromMercInv( &gMoveingItem );
-
-					// Change mouse cursor
-					gpItemPointer = &gMoveingItem.ItemObject;
-					SetSkiCursor( EXTERN_CURSOR );
-
-					gubSkiDirtyLevel = SKI_DIRTY_LEVEL2;
-				}
-			}
-			else //non-repairman
-			{
-				//if the shift key is being pressed, remove them all
-				if (_KeyDown(SHIFT) || a->ItemObject.ubNumberOfObjects == 1)
-				{
-					RemoveItemFromArmsDealerOfferArea(ubSelectedInvSlot, TRUE);//a->bSlotIdInOtherLocation
-				}
-				else	// multiple items there, SHIFT isn't being pressed
-				{
-					// remove only one at a time
-					a->ItemObject.ubNumberOfObjects--;
-					gpTempDealersInventory[a->bSlotIdInOtherLocation].ItemObject.ubNumberOfObjects++;
-				}
-
-				gubSkiDirtyLevel = SKI_DIRTY_LEVEL2;
-			}
+			//refresh the screen
+			gubSkiDirtyLevel = SKI_DIRTY_LEVEL2;
 		}
-		else // empty slot
+	}
+}
+
+static void SelectDealersOfferSlotsRegionCallBackSecondary(MOUSE_REGION* pRegion, UINT32 iReason)
+{
+	UINT8	ubSelectedInvSlot = (UINT8)MSYS_GetRegionUserData( pRegion, 0 );
+	INVENTORY_IN_SLOT* const a = &ArmsDealerOfferArea[ubSelectedInvSlot];
+
+	//if there is something here
+	if (a->fActive)
+	{
+		//if the dealer repairs
+		if (DoesDealerDoRepairs(gbSelectedArmsDealerID))
 		{
-			//if the cursor has something in it
-			if( gMoveingItem.sItemIndex > 0 )
+			// return item to player
+			RemoveRepairItemFromDealersOfferArea( ubSelectedInvSlot );
+		}
+		else
+		{
+			//bring up the item description box
+			if ( !InItemDescriptionBox( ) )
 			{
-				// we'd better talking to a repairman, cursor is locked out of this area while full for non-repairmen!
-				Assert( ArmsDealerInfo[ gbSelectedArmsDealerID ].ubTypeOfArmsDealer == ARMS_DEALER_REPAIRS );
-
-				//Drop the item into the current slot
-				AddInventoryToSkiLocation( &gMoveingItem, ubSelectedInvSlot, ARMS_DEALER_OFFER_AREA );
-
-				//Reset the cursor
-				SetSkiCursor( CURSOR_NORMAL );
-
-				//refresh the screen
-				gubSkiDirtyLevel = SKI_DIRTY_LEVEL2;
+				InitShopKeeperItemDescBox(&a->ItemObject, ubSelectedInvSlot, ARMS_DEALER_OFFER_AREA);
+			}
+			else
+			{
+				DeleteItemDescriptionBox( );
 			}
 		}
 	}
@@ -1635,107 +1659,108 @@ static BOOLEAN RemoveItemFromPlayersOfferArea(INT8 bSlot);
 
 
 //Mouse Call back for the Players OFFER slot
-static void SelectPlayersOfferSlotsRegionCallBack(MOUSE_REGION* pRegion, INT32 iReason)
+static void SelectPlayersOfferSlotsRegionCallBackPrimary(MOUSE_REGION* pRegion, UINT32 iReason)
 {
 	UINT8 ubSelectedInvSlot = (UINT8)MSYS_GetRegionUserData( pRegion, 0 );
 	INVENTORY_IN_SLOT* const o = &PlayersOfferArea[ubSelectedInvSlot];
 	INT8 bAddedToSlotID = -1;
 
-	if (iReason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	//if the cursor has no item in it
+	if( gMoveingItem.sItemIndex == 0 )
 	{
-		//if the cursor has no item in it
-		if( gMoveingItem.sItemIndex == 0 )
-		{
-			//if there is nothing here, return
-			if (!o->fActive)
-				return;
+		//if there is nothing here, return
+		if (!o->fActive)
+			return;
 
-			// pick it up into the cursor
-			BeginSkiItemPointer( PLAYERS_OFFER_AREA, ubSelectedInvSlot, FALSE );
-		}
-		else	// we have something in the cursor
-		{
-			//Drop the item into the current slot
-			//if there is something already there
-			if (o->fActive)
-			{
-				//swap what is in the cursor with what is in the player offer slot
-
-				// if the slot is overloaded (holds more objects than we have room for valid statuses of)
-				if (o->ItemObject.ubNumberOfObjects > MAX_OBJECTS_PER_SLOT)
-				{
-					// then ignore the click - we can't do the swap, or anything very useful, because we can't allow overloaded
-					// items into the player's cursor - if he put them into a merc's inventory, the extra statuses are missing!
-					// At best, we could do some sort of message here.
-					return;
-				}
-
-				IfMercOwnedCopyItemToMercInv( &gMoveingItem );
-
-				const INVENTORY_IN_SLOT TempSlot = *o;
-				*o = gMoveingItem;
-				gMoveingItem = TempSlot;
-
-				IfMercOwnedRemoveItemFromMercInv( &gMoveingItem );
-
-				// Change mouse cursor
-				gpItemPointer = &gMoveingItem.ItemObject;
-				SetSkiCursor( EXTERN_CURSOR );
-
-				//if the item we are adding is money
-				if (GCM->getItem(o->sItemIndex)->getItemClass() == IC_MONEY)
-				{
-					//Since money is always evaluated
-					o->uiFlags     |= ARMS_INV_PLAYERS_ITEM_HAS_VALUE;
-					o->uiItemPrice  = o->ItemObject.bMoneyStatus;
-				}
-			}
-			else	// slot is empty
-			{
-				// if the item has already been evaluated, or has just been purchased
-				if ( ( gMoveingItem.uiFlags & ARMS_INV_PLAYERS_ITEM_HAS_BEEN_EVALUATED ) ||
-					( gMoveingItem.uiFlags & ARMS_INV_JUST_PURCHASED ) )
-				{
-					//place the item that is in the player's hand into this player offer area slot
-					bAddedToSlotID = AddInventoryToSkiLocation( &gMoveingItem, ubSelectedInvSlot, PLAYERS_OFFER_AREA );
-					Assert ( bAddedToSlotID != -1 );
-				}
-				else
-				{
-					// this splits complex items for repairs.  Also puts things into the first free POA slot
-					OfferObjectToDealer( &gMoveingItem.ItemObject, gMoveingItem.ubIdOfMercWhoOwnsTheItem, gMoveingItem.bSlotIdInOtherLocation );
-				}
-
-				//Reset the cursor
-				SetSkiCursor( CURSOR_NORMAL );
-			}
-
-			//Dirty the interface
-			gubSkiDirtyLevel = SKI_DIRTY_LEVEL2;
-		}
+		// pick it up into the cursor
+		BeginSkiItemPointer( PLAYERS_OFFER_AREA, ubSelectedInvSlot, FALSE );
 	}
-	else if(iReason & MSYS_CALLBACK_REASON_RBUTTON_UP ) //MSYS_CALLBACK_REASON_LBUTTON_UP)
+	else	// we have something in the cursor
 	{
-		//if the box is active
+		//Drop the item into the current slot
+		//if there is something already there
 		if (o->fActive)
 		{
-			RemoveItemFromPlayersOfferArea( ubSelectedInvSlot );
-			/*
-			item description
+			//swap what is in the cursor with what is in the player offer slot
+
+			// if the slot is overloaded (holds more objects than we have room for valid statuses of)
+			if (o->ItemObject.ubNumberOfObjects > MAX_OBJECTS_PER_SLOT)
+			{
+				// then ignore the click - we can't do the swap, or anything very useful, because we can't allow overloaded
+				// items into the player's cursor - if he put them into a merc's inventory, the extra statuses are missing!
+				// At best, we could do some sort of message here.
+				return;
+			}
+
+			IfMercOwnedCopyItemToMercInv( &gMoveingItem );
+
+			const INVENTORY_IN_SLOT TempSlot = *o;
+			*o = gMoveingItem;
+			gMoveingItem = TempSlot;
+
+			IfMercOwnedRemoveItemFromMercInv( &gMoveingItem );
+
+			// Change mouse cursor
+			gpItemPointer = &gMoveingItem.ItemObject;
+			SetSkiCursor( EXTERN_CURSOR );
+
+			//if the item we are adding is money
+			if (GCM->getItem(o->sItemIndex)->getItemClass() == IC_MONEY)
+			{
+				//Since money is always evaluated
+				o->uiFlags     |= ARMS_INV_PLAYERS_ITEM_HAS_VALUE;
+				o->uiItemPrice  = o->ItemObject.uiMoneyAmount;
+			}
+		}
+		else	// slot is empty
+		{
+			// if the item has already been evaluated, or has just been purchased
+			if ( ( gMoveingItem.uiFlags & ARMS_INV_PLAYERS_ITEM_HAS_BEEN_EVALUATED ) ||
+				( gMoveingItem.uiFlags & ARMS_INV_JUST_PURCHASED ) )
+			{
+				//place the item that is in the player's hand into this player offer area slot
+				bAddedToSlotID = AddInventoryToSkiLocation( &gMoveingItem, ubSelectedInvSlot, PLAYERS_OFFER_AREA );
+				Assert ( bAddedToSlotID != -1 );
+			}
 			else
 			{
-				if ( !InItemDescriptionBox( ) )
-				{
-					InitItemDescriptionBox(gpSMCurrentMerc, o->bSlotIdInOtherLocation, 214, 1 + INV_INTERFACE_START_Y, 0);
-				}
-				else
-				{
-					DeleteItemDescriptionBox( );
-				}
-			}*/
+				// this splits complex items for repairs.  Also puts things into the first free POA slot
+				OfferObjectToDealer( &gMoveingItem.ItemObject, gMoveingItem.ubIdOfMercWhoOwnsTheItem, gMoveingItem.bSlotIdInOtherLocation );
+			}
+
+			//Reset the cursor
+			SetSkiCursor( CURSOR_NORMAL );
 		}
+
+		//Dirty the interface
 		gubSkiDirtyLevel = SKI_DIRTY_LEVEL2;
 	}
+}
+
+static void SelectPlayersOfferSlotsRegionCallBackSecondary(MOUSE_REGION* pRegion, UINT32 iReason)
+{
+	UINT8 ubSelectedInvSlot = (UINT8)MSYS_GetRegionUserData( pRegion, 0 );
+	INVENTORY_IN_SLOT* const o = &PlayersOfferArea[ubSelectedInvSlot];
+
+	//if the box is active
+	if (o->fActive)
+	{
+		RemoveItemFromPlayersOfferArea( ubSelectedInvSlot );
+		/*
+		item description
+		else
+		{
+			if ( !InItemDescriptionBox( ) )
+			{
+				InitItemDescriptionBox(gpSMCurrentMerc, o->bSlotIdInOtherLocation, 214, 1 + INV_INTERFACE_START_Y, 0);
+			}
+			else
+			{
+				DeleteItemDescriptionBox( );
+			}
+		}*/
+	}
+	gubSkiDirtyLevel = SKI_DIRTY_LEVEL2;
 }
 
 
@@ -1746,7 +1771,7 @@ void EnterShopKeeperInterfaceScreen( UINT8 ubArmsDealer )
 
 	if( gbSelectedArmsDealerID == -1 )
 	{
-		SLOGW(DEBUG_TAG_INTERFACE, "Failed to find Arms Dealer ID From Merc ID #%d", ubArmsDealer );
+		SLOGW("Failed to find Arms Dealer ID From Merc ID #{}", ubArmsDealer);
 		gfSKIScreenExit = TRUE;
 	}
 
@@ -1848,7 +1873,7 @@ static void SetSkiRegionHelpText(const INVENTORY_IN_SLOT* pInv, MOUSE_REGION* pR
 
 static void DisplayArmsDealerCurrentInventoryPage(void)
 {
-	wchar_t zTemp[32];
+	ST::string zTemp;
 	UINT16  uiFontHeight;
 	UINT16  usCnt=0;
 	UINT16  usPosX, usPosY;
@@ -1878,7 +1903,7 @@ static void DisplayArmsDealerCurrentInventoryPage(void)
 
 			//Display the Current Page number
 			uiFontHeight = GetFontHeight( SKI_LABEL_FONT );
-			swprintf( zTemp, lengthof(zTemp), L"%d/%d", gSelectArmsDealerInfo.ubCurrentPage, gSelectArmsDealerInfo.ubNumberOfPages );
+			zTemp = ST::format("{}/{}", gSelectArmsDealerInfo.ubCurrentPage, gSelectArmsDealerInfo.ubNumberOfPages);
 			DrawTextToScreen(zTemp, SKI_PAGE_X, SKI_PAGE_Y + uiFontHeight + 6, SKI_PAGE_WIDTH, SKI_LABEL_FONT, SKI_TITLE_COLOR, FONT_MCOLOR_BLACK, CENTER_JUSTIFIED);
 		}
 
@@ -1894,13 +1919,10 @@ static void DisplayArmsDealerCurrentInventoryPage(void)
 					fDisplayHatchOnItem = TRUE;
 				}
 				//if the dealer repairs
-				else if( ArmsDealerInfo[ gbSelectedArmsDealerID ].ubTypeOfArmsDealer == ARMS_DEALER_REPAIRS )
+				else if (DoesDealerDoRepairs(gbSelectedArmsDealerID))
 				{
-					//if the item is damaged
-					if( ArmsDealerInfo[ gbSelectedArmsDealerID ].uiFlags & ARMS_INV_ITEM_NOT_REPAIRED_YET )
-						fDisplayHatchOnItem = TRUE;
-					else
-						fDisplayHatchOnItem = FALSE;
+					// not displaying the hatch, because it would obscure the repair ETA
+					fDisplayHatchOnItem = FALSE;
 				}
 				else // non-repairman
 				{
@@ -1924,7 +1946,7 @@ static void DisplayArmsDealerCurrentInventoryPage(void)
 					SetSkiRegionHelpText( &gpTempDealersInventory[ usCnt ], &gDealersInventoryMouseRegions[sItemCount], ARMS_DEALER_INVENTORY );
 
 					//if the dealer repairs
-					if( ArmsDealerInfo[ gbSelectedArmsDealerID ].ubTypeOfArmsDealer == ARMS_DEALER_REPAIRS )
+					if (DoesDealerDoRepairs(gbSelectedArmsDealerID))
 					{
 						SetSkiFaceRegionHelpText( &gpTempDealersInventory[ usCnt ], &gRepairmanInventorySmallFaceMouseRegions[sItemCount], ARMS_DEALER_INVENTORY );
 					}
@@ -1953,7 +1975,7 @@ static void DisplayArmsDealerCurrentInventoryPage(void)
 			SetSkiRegionHelpText( NULL, &gDealersInventoryMouseRegions[ sItemCount ], ARMS_DEALER_INVENTORY );
 
 			//if the dealer repairs
-			if( ArmsDealerInfo[ gbSelectedArmsDealerID ].ubTypeOfArmsDealer == ARMS_DEALER_REPAIRS )
+			if (DoesDealerDoRepairs(gbSelectedArmsDealerID))
 			{
 				SetSkiFaceRegionHelpText( NULL, &gRepairmanInventorySmallFaceMouseRegions[ sItemCount ], ARMS_DEALER_INVENTORY );
 			}
@@ -1979,7 +2001,7 @@ static void DisplayArmsDealerCurrentInventoryPage(void)
 }
 
 
-static void BuildDoneWhenTimeString(wchar_t sString[], size_t Length, ArmsDealerID, UINT16 usItemIndex, UINT8 ubElement);
+static ST::string BuildDoneWhenTimeString(ArmsDealerID, UINT16 usItemIndex, UINT8 ubElement);
 static UINT32 CalcShopKeeperItemPrice(BOOLEAN fDealerSelling, BOOLEAN fUnitPriceOnly, UINT16 usItemID, FLOAT dModifier, const OBJECTTYPE* pItemObject);
 static INT8 GetSlotNumberForMerc(UINT8 ubProfile);
 static bool IsGunOrAmmoOfSameTypeSelected(OBJECTTYPE const&);
@@ -1987,7 +2009,7 @@ static bool IsGunOrAmmoOfSameTypeSelected(OBJECTTYPE const&);
 
 static UINT32 DisplayInvSlot(UINT8 const slot_num, UINT16 const item_idx, UINT16 const x, UINT16 const y, OBJECTTYPE const& item_o, bool const hatched_out, UINT8 const item_area)
 {
-	wchar_t buf[64];
+	ST::string buf;
 
 	UINT16 outline;
 	if (IsGunOrAmmoOfSameTypeSelected(item_o))
@@ -2010,15 +2032,17 @@ static UINT32 DisplayInvSlot(UINT8 const slot_num, UINT16 const item_idx, UINT16
 	{
 		// Display the item graphic
 		const ItemModel * item = GCM->getItem(item_idx);
-		SGPVObject  const& item_vo = GetInterfaceGraphicForItem(item);
-		ETRLEObject const& e       = item_vo.SubregionProperties(item->getGraphicNum());
-		INT16              cen_x   = x + 7 + ABS(SKI_INV_WIDTH - 3 - e.usWidth)  / 2 - e.sOffsetX;
-		INT16              cen_y   = y +     ABS(SKI_INV_HEIGHT    - e.usHeight) / 2 - e.sOffsetY;
+		auto graphic = GetSmallInventoryGraphicForItem(item);
+		auto item_vo = graphic.first;
+		auto index = graphic.second;
+		ETRLEObject const& e       = item_vo->SubregionProperties(index);
+		INT16              cen_x   = x + 7 + std::abs(SKI_INV_WIDTH - 3 - e.usWidth)  / 2 - e.sOffsetX;
+		INT16              cen_y   = y +     std::abs(SKI_INV_HEIGHT    - e.usHeight) / 2 - e.sOffsetY;
 		if (gamepolicy(f_draw_item_shadow))
 		{
-			BltVideoObjectOutlineShadow(FRAME_BUFFER, &item_vo, item->getGraphicNum(), cen_x - 2, cen_y + 2);
+			BltVideoObjectOutlineShadow(FRAME_BUFFER, item_vo, index, cen_x - 2, cen_y + 2);
 		}
-		BltVideoObjectOutline(      FRAME_BUFFER, &item_vo, item->getGraphicNum(), cen_x,     cen_y, outline);	}
+		BltVideoObjectOutline(      FRAME_BUFFER, item_vo, index, cen_x,     cen_y, outline);	}
 
 	{
 		// Display the status of the item
@@ -2039,13 +2063,13 @@ static UINT32 DisplayInvSlot(UINT8 const slot_num, UINT16 const item_idx, UINT16
 	}
 	else if (item_area == ARMS_DEALER_INVENTORY)
 	{
-		ARMS_DEALER_INFO const& dealer_info = ArmsDealerInfo[gbSelectedArmsDealerID];
-		if (dealer_info.ubTypeOfArmsDealer != ARMS_DEALER_REPAIRS)
+		const DealerModel* dealer_info = SelectedArmsDealer();
+		if (!DoesDealerDoRepairs(gbSelectedArmsDealerID))
 		{
 			if (!hatched_out || item_o.ubNumberOfObjects != 0)
 			{
 				// Show the unit price, not the total value of all if stacked
-				item_cost = CalcShopKeeperItemPrice(DEALER_SELLING, TRUE, item_idx, dealer_info.u.price.sell, &item_o);
+				item_cost = CalcShopKeeperItemPrice(DEALER_SELLING, TRUE, item_idx, dealer_info->sellingPrice, &item_o);
 			}
 		}
 		else
@@ -2053,15 +2077,15 @@ static UINT32 DisplayInvSlot(UINT8 const slot_num, UINT16 const item_idx, UINT16
 			// Display the length of time needed to repair the item
 			INVENTORY_IN_SLOT const& inv = gpTempDealersInventory[slot_num];
 			Assert(inv.sSpecialItemElement != -1);
-			BuildDoneWhenTimeString(buf, lengthof(buf), gbSelectedArmsDealerID, item_idx, inv.sSpecialItemElement);
+			buf = BuildDoneWhenTimeString(gbSelectedArmsDealerID, item_idx, inv.sSpecialItemElement);
 			DrawTextToScreen(buf, x + SKI_INV_PRICE_OFFSET_X, y + SKI_INV_PRICE_OFFSET_Y, SKI_INV_SLOT_WIDTH, SKI_ITEM_DESC_FONT, SKI_ITEM_PRICE_COLOR, FONT_MCOLOR_BLACK, CENTER_JUSTIFIED);
 			owner = inv.ubIdOfMercWhoOwnsTheItem;
 		}
 	}
 	else // Dealer's offer area
 	{
-		ARMS_DEALER_INFO const& dealer_info = ArmsDealerInfo[gbSelectedArmsDealerID];
-		if (dealer_info.ubTypeOfArmsDealer == ARMS_DEALER_REPAIRS)
+		const DealerModel* dealer_info = SelectedArmsDealer();
+		if (DoesDealerDoRepairs(gbSelectedArmsDealerID))
 		{
 			// The dealer repairs, there is an item here, therefore display the item's owner's face
 			owner     = ArmsDealerOfferArea[slot_num].ubIdOfMercWhoOwnsTheItem;
@@ -2069,15 +2093,14 @@ static UINT32 DisplayInvSlot(UINT8 const slot_num, UINT16 const item_idx, UINT16
 		}
 		else
 		{
-			item_cost = CalcShopKeeperItemPrice(DEALER_SELLING, FALSE, item_idx, dealer_info.u.price.sell, &item_o);
+			item_cost = CalcShopKeeperItemPrice(DEALER_SELLING, FALSE, item_idx, dealer_info->sellingPrice, &item_o);
 		}
 	}
 
 	if (item_cost != 0)
 	{
 		// Display the item's price
-		SPrintMoney(buf, item_cost);
-		DrawTextToScreen(buf, x + SKI_INV_PRICE_OFFSET_X, y + SKI_INV_PRICE_OFFSET_Y, SKI_INV_SLOT_WIDTH, SKI_ITEM_DESC_FONT, SKI_ITEM_PRICE_COLOR, FONT_MCOLOR_BLACK, CENTER_JUSTIFIED);
+		DrawTextToScreen(SPrintMoney(item_cost), x + SKI_INV_PRICE_OFFSET_X, y + SKI_INV_PRICE_OFFSET_Y, SKI_INV_SLOT_WIDTH, SKI_ITEM_DESC_FONT, SKI_ITEM_PRICE_COLOR, FONT_MCOLOR_BLACK, CENTER_JUSTIFIED);
 	}
 
 	// If the there is more then 1 or if the item is stackable and some of it has been bought and only 1 remains
@@ -2087,7 +2110,7 @@ static UINT32 DisplayInvSlot(UINT8 const slot_num, UINT16 const item_idx, UINT16
 		item_area == ARMS_DEALER_INVENTORY &&
 		gpTempDealersInventory[slot_num].uiFlags & ARMS_INV_ITEM_SELECTED))
 	{
-		swprintf(buf, lengthof(buf), L"x%d", item_o.ubNumberOfObjects);
+		buf = ST::format("x{}", item_o.ubNumberOfObjects);
 		DrawTextToScreen(buf, x + SKI_ITEM_NUMBER_TEXT_OFFSET_X, y + SKI_ITEM_NUMBER_TEXT_OFFSET_Y, SKI_ITEM_NUMBER_TEXT_WIDTH, SKIT_NUMBER_FONT, SKI_ITEM_PRICE_COLOR, FONT_MCOLOR_BLACK, RIGHT_JUSTIFIED);
 	}
 
@@ -2105,16 +2128,16 @@ static UINT32 DisplayInvSlot(UINT8 const slot_num, UINT16 const item_idx, UINT16
 	{
 		// Display the '*' in the bottom right corner of the square
 		UINT8 attachmentHintColor = GetAttachmentHintColor(&item_o);
-		DrawTextToScreen(L"*", x + SKI_ATTACHMENT_SYMBOL_X_OFFSET, y + SKI_ATTACHMENT_SYMBOL_Y_OFFSET, 0, TINYFONT1, attachmentHintColor, FONT_MCOLOR_BLACK, LEFT_JUSTIFIED);
+		DrawTextToScreen("*", x + SKI_ATTACHMENT_SYMBOL_X_OFFSET, y + SKI_ATTACHMENT_SYMBOL_Y_OFFSET, 0, TINYFONT1, attachmentHintColor, FONT_MCOLOR_BLACK, LEFT_JUSTIFIED);
 	}
 
 	{
 		// Display 'JAMMED' or 'REPAIRED', if appropriate
-		wchar_t const* const overlay_text =
-			item_o.bGunAmmoStatus < 0 ? TacticalStr[JAMMED_ITEM_STR] :
-			print_repaired            ? SKI_Text[SKI_TEXT_REPAIRED]  :
-			0;
-		if (overlay_text)
+		ST::string overlay_text =
+			item_o.bGunAmmoStatus < 0 ? ST::string(TacticalStr[JAMMED_ITEM_STR]) :
+			print_repaired            ? ST::string(SKI_Text[SKI_TEXT_REPAIRED]) :
+			ST::null;
+		if (!overlay_text.empty())
 		{
 			INT16 cen_x;
 			INT16 cen_y;
@@ -2165,12 +2188,12 @@ static void DetermineArmsDealersSellingInventory(void)
 	//if there is an old inventory, delete it
 	if( gpTempDealersInventory )
 	{
-		MemFree( gpTempDealersInventory );
+		delete[] gpTempDealersInventory;
 		gpTempDealersInventory = NULL;
 	}
 
 	//allocate memory to hold the inventory in memory
-	gpTempDealersInventory = MALLOCNZ(INVENTORY_IN_SLOT, gSelectArmsDealerInfo.uiNumDistinctInventoryItems);
+	gpTempDealersInventory = new INVENTORY_IN_SLOT[gSelectArmsDealerInfo.uiNumDistinctInventoryItems]{};
 	guiNextFreeInvSlot     = 0;
 
 	//loop through the dealer's permanent inventory items, adding them all to the temp inventory list
@@ -2190,7 +2213,8 @@ static void DetermineArmsDealersSellingInventory(void)
 			}
 
 			// add all active special items
-			for( ubElement=0; ubElement< gArmsDealersInventory[ gbSelectedArmsDealerID ][ usItemIndex ].ubElementsAlloced; ubElement++ )
+			Assert(gArmsDealersInventory[ gbSelectedArmsDealerID ][ usItemIndex ].SpecialItem.size() <= UINT8_MAX);
+			for (ubElement = 0; ubElement < static_cast<UINT8>(gArmsDealersInventory[ gbSelectedArmsDealerID ][ usItemIndex ].SpecialItem.size()); ubElement++)
 			{
 				pSpecialItem = &(gArmsDealersInventory[ gbSelectedArmsDealerID ][ usItemIndex ].SpecialItem[ ubElement ]);
 
@@ -2224,7 +2248,7 @@ static void DetermineArmsDealersSellingInventory(void)
 					{
 						UINT8 ubOwner;
 
-						if ( ArmsDealerInfo[ gbSelectedArmsDealerID ].ubTypeOfArmsDealer != ARMS_DEALER_REPAIRS )
+						if (!DoesDealerDoRepairs(gbSelectedArmsDealerID))
 						{
 							// no merc is the owner
 							ubOwner = NO_PROFILE;
@@ -2246,7 +2270,7 @@ static void DetermineArmsDealersSellingInventory(void)
 	if ( guiNextFreeInvSlot > 1 )
 	{
 		// repairmen sort differently from merchants
-		if ( ArmsDealerInfo[ gbSelectedArmsDealerID ].ubTypeOfArmsDealer == ARMS_DEALER_REPAIRS )
+		if (DoesDealerDoRepairs(gbSelectedArmsDealerID))
 		{
 			// sort this list by object category, and by ascending price within each category
 			qsort( gpTempDealersInventory, guiNextFreeInvSlot, sizeof( INVENTORY_IN_SLOT ), RepairmanItemQsortCompare );
@@ -2319,7 +2343,7 @@ static void StoreObjectsInNextFreeDealerInvSlot(UINT16 usItemIndex, SPECIAL_ITEM
 
 	// Create the item object ( with no more than MAX_OBJECTS_PER_SLOT )
 	// can't use the real #, because CreateItems() will blindly set the bStatus for however many we tell it, beyond 8
-	MakeObjectOutOfDealerItems( usItemIndex, pSpclItemInfo, &(pDealerInvSlot->ItemObject), ( UINT8 ) MIN( ubHowMany, MAX_OBJECTS_PER_SLOT ) );
+	MakeObjectOutOfDealerItems(usItemIndex, pSpclItemInfo, &(pDealerInvSlot->ItemObject), (UINT8) std::min(int(ubHowMany), MAX_OBJECTS_PER_SLOT));
 
 	if ( ubHowMany > MAX_OBJECTS_PER_SLOT )
 	{
@@ -2344,7 +2368,7 @@ static BOOLEAN RepairIsDone(UINT16 usItemIndex, UINT8 ubElement)
 
 
 	// make a new shopkeeper invslot item out of it
-	memset( &RepairItem, 0, sizeof( INVENTORY_IN_SLOT ) );
+	RepairItem = INVENTORY_IN_SLOT{};
 
 	RepairItem.fActive = TRUE;
 	RepairItem.sItemIndex = usItemIndex;
@@ -2378,10 +2402,10 @@ static BOOLEAN RepairIsDone(UINT16 usItemIndex, UINT8 ubElement)
 		}
 	}
 
-	// if the item is imprinted (by anyone, even player's mercs), and it's Fredo repairing it
+	// if the item is imprinted (by anyone, even player's mercs), and it's the elctronics guy repairing it
 	if (
 		/*( gArmsDealersInventory[ gbSelectedArmsDealerID ][ usItemIndex ].SpecialItem[ ubElement ].Info.ubImprintID == (NO_PROFILE + 1) ) && */
-		gbSelectedArmsDealerID == ARMS_DEALER_FREDO)
+		GetDealer(gbSelectedArmsDealerID)->hasFlag(ArmsDealerFlag::REPAIRS_ELECTRONICS))
 	{
 		// then reset the imprinting!
 		RepairItem.ItemObject.ubImprintID = NO_PROFILE;
@@ -2432,9 +2456,6 @@ static UINT32 CalcShopKeeperItemPrice(BOOLEAN fDealerSelling, BOOLEAN fUnitPrice
 	UINT32 uiTotalPrice = 0;
 	UINT8  ubItemsToCount = 0;
 	UINT8  ubItemsNotCounted = 0;
-	UINT32 uiDiscountValue;
-	//UINT32 uiDifFrom10 = 0;
-
 
 	// add up value of the main item(s), exact procedure depends on its item class
 	switch ( GCM->getItem(usItemID)->getItemClass() )
@@ -2516,37 +2537,40 @@ static UINT32 CalcShopKeeperItemPrice(BOOLEAN fDealerSelling, BOOLEAN fUnitPrice
 		}
 	}
 
-
-	// if Flo is doing the dealin' and wheelin'
-	if ( gpSMCurrentMerc->ubProfile == FLO )
+	// if it's a GUN or AMMO (but not Launchers, and all attachments and payload is included)
+	switch (GCM->getItem(usItemID)->getItemClass())
 	{
-		// if it's a GUN or AMMO (but not Launchers, and all attachments and payload is included)
-		switch ( GCM->getItem(usItemID)->getItemClass() )
-		{
-			// start components of IC_WEAPON:
-			case IC_GUN:
-			case IC_BLADE:
-			case IC_THROWING_KNIFE:
-			case IC_LAUNCHER:
-			// end components of IC_WEAPON
-			case IC_AMMO:
-				uiDiscountValue = ( uiUnitPrice * FLO_DISCOUNT_PERCENTAGE ) / 100;
+		// start components of IC_WEAPON:
+		case IC_GUN:
+		case IC_BLADE:
+		case IC_THROWING_KNIFE:
+		case IC_LAUNCHER:
+		// end components of IC_WEAPON
+		case IC_AMMO:
+			// Get the weapons sale multiplicator for this person.
+			// In Vanilla, this was hardcoded to give Flo a 10% bonus.
+			// Now everyone gets at least 10% of the normal price or 1.8 times it at most when selling.
+			int const weaponSaleModifier = MercProfile{gpSMCurrentMerc->ubProfile}.getInfo().weaponSaleModifier;
+			int unitPrice = uiUnitPrice; // need this value signed, discountValue is negative for modifiers < 100
+			int const discountValue = unitPrice * (weaponSaleModifier - 100) / 100;
 
-				// she gets a discount!  Read her M.E.R.C. profile to understand why
-				if ( fDealerSelling )
-				{
-					// she buys for less...
-					uiUnitPrice -= uiDiscountValue;
-				}
-				else
-				{
-					// and sells for more!
-					uiUnitPrice += uiDiscountValue;
-				}
-				break;
-		}
+			// she gets a discount!  Read her M.E.R.C. profile to understand why
+			if (fDealerSelling)
+			{
+				// she buys for less...
+				uiUnitPrice = std::max(1, unitPrice - discountValue);
+			}
+			else
+			{
+				// and sells for more!
+				uiUnitPrice = unitPrice + discountValue;
+			}
+			break;
 	}
 
+	UINT32_S uiUnitPriceAdjusted = uiUnitPrice;
+	OnItemPriced((INT8)gbSelectedArmsDealerID, usItemID, fDealerSelling, &uiUnitPriceAdjusted);
+	uiUnitPrice = uiUnitPriceAdjusted.val;
 
 	// if it's the dealer selling this, make sure the item is worth at least $1
 	// if he is buying this from a player, then we allow a value of 0, since that has a special "worthless" quote #18
@@ -2616,7 +2640,6 @@ static FLOAT ItemConditionModifier(UINT16 usItemIndex, INT8 bStatus)
 static void DisplayArmsDealerOfferArea(void)
 {
 	INT16   sCnt, sCount;
-	wchar_t zTemp[32];
 	UINT32  uiTotalCost;
 	UINT16  usPosX, usPosY;
 	BOOLEAN fDisplayHatchOnItem;
@@ -2686,8 +2709,7 @@ static void DisplayArmsDealerOfferArea(void)
 		RestoreExternBackgroundRect( SKI_ARMS_DEALER_TOTAL_COST_X, SKI_ARMS_DEALER_TOTAL_COST_Y, SKI_ARMS_DEALER_TOTAL_COST_WIDTH, SKI_ARMS_DEALER_TOTAL_COST_HEIGHT );
 
 		//Display the total cost text
-		SPrintMoney(zTemp, uiTotalCost);
-		DrawTextToScreen(zTemp, SKI_ARMS_DEALER_TOTAL_COST_X, SKI_ARMS_DEALER_TOTAL_COST_Y + 5, SKI_INV_SLOT_WIDTH, SKI_LABEL_FONT, SKI_ITEM_PRICE_COLOR, FONT_MCOLOR_BLACK, CENTER_JUSTIFIED);
+		DrawTextToScreen(SPrintMoney(uiTotalCost), SKI_ARMS_DEALER_TOTAL_COST_X, SKI_ARMS_DEALER_TOTAL_COST_Y + 5, SKI_INV_SLOT_WIDTH, SKI_LABEL_FONT, SKI_ITEM_PRICE_COLOR, FONT_MCOLOR_BLACK, CENTER_JUSTIFIED);
 	}
 }
 
@@ -2767,37 +2789,35 @@ static BOOLEAN RemoveItemFromArmsDealerOfferArea(INT8 bSlotId, BOOLEAN fKeepItem
 }
 
 
-static void BuildItemHelpTextString(wchar_t sString[], size_t Length, const INVENTORY_IN_SLOT* pInv, UINT8 ubScreenArea);
+static ST::string BuildItemHelpTextString(const INVENTORY_IN_SLOT* pInv, UINT8 ubScreenArea);
 
 
 static void SetSkiRegionHelpText(const INVENTORY_IN_SLOT* pInv, MOUSE_REGION* pRegion, UINT8 ubScreenArea)
 {
-	wchar_t zHelpText[ 512 ];
-
 	Assert( pRegion );
 
-	BuildItemHelpTextString( zHelpText, lengthof(zHelpText), pInv, ubScreenArea );
+	ST::string zHelpText = BuildItemHelpTextString(pInv, ubScreenArea );
 	pRegion->SetFastHelpText(zHelpText);
 }
 
 
 static void SetSkiFaceRegionHelpText(const INVENTORY_IN_SLOT* pInv, MOUSE_REGION* pRegion, UINT8 ubScreenArea)
 {
-	wchar_t zTempText[ 512 ];
-	wchar_t zHelpText[ 512 ];
+	ST::string zTempText;
+	ST::string zHelpText;
 
 	Assert( pRegion );
 
 	//if the item isn't NULL, and is owned by a merc
 	if( ( pInv != NULL ) && ( pInv->ubIdOfMercWhoOwnsTheItem != NO_PROFILE ) )
 	{
-		BuildItemHelpTextString( zTempText, lengthof(zTempText), pInv, ubScreenArea );
+		zTempText = BuildItemHelpTextString(pInv, ubScreenArea);
 		// add who owns it
-		swprintf( zHelpText, lengthof(zHelpText), L"%ls%ls %ls", gMercProfiles[ pInv->ubIdOfMercWhoOwnsTheItem ].zNickname, pMessageStrings[ MSG_DASH_S ], zTempText );
+		zHelpText = ST::format("{}{} {}", gMercProfiles[ pInv->ubIdOfMercWhoOwnsTheItem ].zNickname, pMessageStrings[ MSG_DASH_S ], zTempText);
 	}
 	else
 	{
-		zHelpText[ 0 ] = '\0';
+		zHelpText = ST::null;
 	}
 	pRegion->SetFastHelpText(zHelpText);
 }
@@ -2889,7 +2909,6 @@ static BOOLEAN WillShopKeeperRejectObjectsFromPlayer(INT8 bDealerId, INT8 bSlotI
 static void DisplayPlayersOfferArea(void)
 {
 	INT16   sCnt, sCount;
-	wchar_t zTemp[32];
 	UINT32  uiTotalCost;
 	UINT16  usPosX, usPosY;
 	BOOLEAN fDisplayHatchOnItem=FALSE;
@@ -2929,7 +2948,7 @@ static void DisplayPlayersOfferArea(void)
 			else	// not money
 			{
 				//if non-repairman
-				if( ArmsDealerInfo[ gbSelectedArmsDealerID ].ubTypeOfArmsDealer != ARMS_DEALER_REPAIRS )
+				if(!DoesDealerDoRepairs(gbSelectedArmsDealerID))
 				{
 					// don't evaluate anything he wouldn't buy!
 					if (!WillShopKeeperRejectObjectsFromPlayer(gbSelectedArmsDealerID, sCnt))
@@ -2977,8 +2996,7 @@ static void DisplayPlayersOfferArea(void)
 		RestoreExternBackgroundRect( SKI_PLAYERS_TOTAL_VALUE_X, SKI_PLAYERS_TOTAL_VALUE_Y, SKI_PLAYERS_TOTAL_VALUE_WIDTH, SKI_PLAYERS_TOTAL_VALUE_HEIGHT );
 
 		//Display the total cost text
-		SPrintMoney(zTemp, uiTotalCost);
-		DrawTextToScreen(zTemp, SKI_PLAYERS_TOTAL_VALUE_X, SKI_PLAYERS_TOTAL_VALUE_Y + 5, SKI_INV_SLOT_WIDTH, SKI_LABEL_FONT, SKI_ITEM_PRICE_COLOR, FONT_MCOLOR_BLACK, CENTER_JUSTIFIED);
+		DrawTextToScreen(SPrintMoney(uiTotalCost), SKI_PLAYERS_TOTAL_VALUE_X, SKI_PLAYERS_TOTAL_VALUE_Y + 5, SKI_INV_SLOT_WIDTH, SKI_LABEL_FONT, SKI_ITEM_PRICE_COLOR, FONT_MCOLOR_BLACK, CENTER_JUSTIFIED);
 	}
 
 	CrossOutUnwantedItems( );
@@ -3039,13 +3057,13 @@ static UINT32 CalculateTotalArmsDealerCost(void)
 		if (a->fActive)
 		{
 			//if the dealer repairs
-			if( ArmsDealerInfo[ gbSelectedArmsDealerID ].ubTypeOfArmsDealer == ARMS_DEALER_REPAIRS )
+			if (DoesDealerDoRepairs(gbSelectedArmsDealerID))
 			{
 				uiTotal += CalculateObjectItemRepairCost(gbSelectedArmsDealerID, &a->ItemObject);
 			}
 			else
 			{
-				uiTotal += CalcShopKeeperItemPrice(DEALER_SELLING, FALSE, a->sItemIndex, ArmsDealerInfo[gbSelectedArmsDealerID].u.price.sell, &a->ItemObject);
+				uiTotal += CalcShopKeeperItemPrice(DEALER_SELLING, FALSE, a->sItemIndex, SelectedArmsDealer()->sellingPrice, &a->ItemObject);
 			}
 		}
 	}
@@ -3108,7 +3126,7 @@ class DialogueEventShopkeeperLockTransactionButton : public DialogueEvent
 class DialogueEventShopkeeperMoney : public DialogueEvent
 {
 	public:
-		DialogueEventShopkeeperMoney(wchar_t const* const message, UINT32 const money_amount, MessageBoxFlags const flags, MSGBOX_CALLBACK callback) :
+		DialogueEventShopkeeperMoney(const ST::string& message, UINT32 money_amount, MessageBoxFlags flags, MSGBOX_CALLBACK callback) :
 			message_(message),
 			money_amount_(money_amount),
 			flags_(flags),
@@ -3117,16 +3135,14 @@ class DialogueEventShopkeeperMoney : public DialogueEvent
 
 		bool Execute()
 		{
-			wchar_t zMoney[128];
-			SPrintMoney(zMoney, money_amount_);
-			wchar_t zText[512];
-			swprintf(zText, lengthof(zText), message_, zMoney);
+			ST::string zMoney = SPrintMoney(money_amount_);
+			ST::string zText = st_format_printf(message_, zMoney);
 			DoSkiMessageBox(zText, SHOPKEEPER_SCREEN, flags_, callback_);
 			return false;
 		}
 
 	private:
-		wchar_t const*  const message_;
+		ST::string      const message_;
 		UINT32          const money_amount_;
 		MessageBoxFlags const flags_;
 		MSGBOX_CALLBACK const callback_;
@@ -3142,7 +3158,7 @@ static BOOLEAN IsMoneyTheOnlyItemInThePlayersOfferArea(void);
 static void MoveAllArmsDealersItemsInOfferAreaToPlayersOfferArea(void);
 static void MovePlayerOfferedItemsOfValueToArmsDealersInventory(void);
 static void MovePlayersItemsToBeRepairedToArmsDealersInventory(void);
-static BOOLEAN StartShopKeeperTalking(UINT16 usQuoteNum);
+BOOLEAN StartShopKeeperTalking(UINT16 usQuoteNum);
 
 
 static void PerformTransaction(UINT32 uiMoneyFromPlayersAccount)
@@ -3166,18 +3182,18 @@ static void PerformTransaction(UINT32 uiMoneyFromPlayersAccount)
 		StartShopKeeperTalking( SK_QUOTES_DEALER_OFFERED_MONEY_AS_A_GIFT );
 
 		// if the arms dealer is the kind of person who accepts gifts
-		if( ArmsDealerInfo[ gbSelectedArmsDealerID ].uiFlags & ARMS_DEALER_ACCEPTS_GIFTS )
+		if( SelectedArmsDealer()->hasFlag(ArmsDealerFlag::ACCEPTS_GIFTS) )
 		{
 			//Move all the players evaluated items to the dealer (also adds it to dealer's cash)
 			MovePlayerOfferedItemsOfValueToArmsDealersInventory();
 
-			DealerGetsBribed( ArmsDealerInfo[ gbSelectedArmsDealerID ].ubShopKeeperID, uiMoneyInPlayersOfferArea );
+			DealerGetsBribed( SelectedArmsDealer()->profileID, uiMoneyInPlayersOfferArea );
 		}
 	}
 	else // not a bribe
 	{
 		//if the dealer is not a repairman
-		if( ArmsDealerInfo[ gbSelectedArmsDealerID ].ubTypeOfArmsDealer != ARMS_DEALER_REPAIRS )
+		if(!DoesDealerDoRepairs(gbSelectedArmsDealerID))
 		{
 			uiAvailablePlayerOfferSlots = ( SKI_NUM_TRADING_INV_SLOTS - CountNumberOfValuelessItemsInThePlayersOfferArea( ) );
 
@@ -3217,7 +3233,7 @@ static void PerformTransaction(UINT32 uiMoneyFromPlayersAccount)
 				DialogueEvent::Add(new DialogueEventSkipAFrame());
 				DialogueEvent::Add(new DialogueEventShopkeeperLockTransactionButton(true));
 
-				wchar_t const* const message =
+				ST::string message =
 					uiPlayersTotalMoneyValue != 0 ? SkiMessageBoxText[SKI_QUESTION_TO_DEDUCT_MONEY_FROM_PLAYERS_ACCOUNT_TO_COVER_DIFFERENCE] :
 					SkiMessageBoxText[SKI_QUESTION_TO_DEDUCT_MONEY_FROM_PLAYERS_ACCOUNT_TO_COVER_COST];
 				UINT32 const amount = uiArmsDealersItemsCost - uiPlayersTotalMoneyValue;
@@ -3240,7 +3256,7 @@ static void PerformTransaction(UINT32 uiMoneyFromPlayersAccount)
 
 
 		//if the dealer repairs
-		if( ArmsDealerInfo[ gbSelectedArmsDealerID ].ubTypeOfArmsDealer == ARMS_DEALER_REPAIRS )
+		if (DoesDealerDoRepairs(gbSelectedArmsDealerID))
 		{
 			//Make sure there is enough money in the Player's offer area to cover the repair charge
 			if( ( uiMoneyFromPlayersAccount + uiMoneyInPlayersOfferArea ) >= uiArmsDealersItemsCost )
@@ -3249,7 +3265,7 @@ static void PerformTransaction(UINT32 uiMoneyFromPlayersAccount)
 				MovePlayerOfferedItemsOfValueToArmsDealersInventory();
 
 				//if the arms dealer is the type of person to give change
-				if( ArmsDealerInfo[ gbSelectedArmsDealerID ].uiFlags & ARMS_DEALER_GIVES_CHANGE )
+				if( SelectedArmsDealer()->hasFlag(ArmsDealerFlag::GIVES_CHANGE) )
 				{
 					//determine the amount of change to give
 					iChangeToGiveToPlayer = ( uiMoneyFromPlayersAccount + uiMoneyInPlayersOfferArea ) - uiArmsDealersItemsCost;
@@ -3287,8 +3303,8 @@ static void PerformTransaction(UINT32 uiMoneyFromPlayersAccount)
 
 
 			//if the arms dealer buys stuff
-			if( ( ArmsDealerInfo[ gbSelectedArmsDealerID ].ubTypeOfArmsDealer == ARMS_DEALER_BUYS_ONLY ) ||
-				( ArmsDealerInfo[ gbSelectedArmsDealerID ].ubTypeOfArmsDealer == ARMS_DEALER_BUYS_SELLS ) )
+			if( ( SelectedArmsDealer()->type == ARMS_DEALER_BUYS_ONLY ) ||
+				( SelectedArmsDealer()->type == ARMS_DEALER_BUYS_SELLS ) )
 			{
 				// but the dealer can't afford this transaction
 				if( iChangeToGiveToPlayer > ( INT32 ) gArmsDealerStatus[ gbSelectedArmsDealerID ].uiArmsDealersCash )
@@ -3314,7 +3330,7 @@ static void PerformTransaction(UINT32 uiMoneyFromPlayersAccount)
 
 
 			//if the arms dealer is the type of person to give change
-			if( ArmsDealerInfo[ gbSelectedArmsDealerID ].uiFlags & ARMS_DEALER_GIVES_CHANGE )
+			if( SelectedArmsDealer()->hasFlag(ArmsDealerFlag::GIVES_CHANGE) )
 			{
 				if( iChangeToGiveToPlayer > 0 )
 				{
@@ -3394,6 +3410,8 @@ static void MoveAllArmsDealersItemsInOfferAreaToPlayersOfferArea(void)
 					// set a special flag
 					gArmsDealerStatus[ gbSelectedArmsDealerID ].ubSpecificDealerFlags |= ARMS_DEALER_FLAG__FRANZ_HAS_SOLD_VIDEO_CAMERA_TO_PLAYER;
 				}
+
+				OnItemTransacted((INT8)gbSelectedArmsDealerID, a->sItemIndex, TRUE);
 			}
 
 			//Remove the items out of the dealers inventory
@@ -3401,7 +3419,7 @@ static void MoveAllArmsDealersItemsInOfferAreaToPlayersOfferArea(void)
 
 			//Remove the items from the Shopkeepers Offer area
 			if( !RemoveItemFromArmsDealerOfferArea( (UINT8)uiCnt, FALSE ) )//a->bSlotIdInOtherLocation
-				SLOGE(DEBUG_TAG_ASSERTS, "MoveAllArmsDealersItemsInOfferAreaToPlayersOfferArea: problem removing an item from dealers offer area");
+				SLOGA("MoveAllArmsDealersItemsInOfferAreaToPlayersOfferArea: problem removing an item from dealers offer area");
 
 			Assert(!a->fActive);
 		}
@@ -3459,12 +3477,13 @@ static void MovePlayerOfferedItemsOfValueToArmsDealersInventory(void)
 				else
 				{
 					//if the dealer doesn't strictly buy items from the player, give the item to the dealer
-					if( ArmsDealerInfo[ gbSelectedArmsDealerID ].ubTypeOfArmsDealer != ARMS_DEALER_BUYS_ONLY )
+					if( SelectedArmsDealer()->type != ARMS_DEALER_BUYS_ONLY )
 					{
 						// item cease to be merc-owned during this operation
 						AddObjectToArmsDealerInventory(gbSelectedArmsDealerID, &o->ItemObject);
 					}
 				}
+				OnItemTransacted((INT8)gbSelectedArmsDealerID, o->sItemIndex, FALSE);
 
 				//erase the item from the player's offer area
 				ClearPlayersOfferSlot( uiCnt );
@@ -3495,6 +3514,7 @@ static void DisableAllDealersOfferSlots(void);
 
 void BeginSkiItemPointer( UINT8 ubSource, INT8 bSlotNum, BOOLEAN fOfferToDealerFirst )
 {
+	BOOLEAN fRestrictMouseToRect = FALSE;
 	SGPRect Rect;
 	OBJECTTYPE TempObject;
 
@@ -3509,7 +3529,7 @@ void BeginSkiItemPointer( UINT8 ubSource, INT8 bSlotNum, BOOLEAN fOfferToDealerF
 	{
 		case ARMS_DEALER_INVENTORY:
 			//Should never get in here
-			SLOGE(DEBUG_TAG_ASSERTS, "BeginSkiItemPointer: invalid Source");
+			SLOGA("BeginSkiItemPointer: invalid Source");
 			return;
 
 		case ARMS_DEALER_OFFER_AREA:
@@ -3527,6 +3547,7 @@ void BeginSkiItemPointer( UINT8 ubSource, INT8 bSlotNum, BOOLEAN fOfferToDealerF
 			Rect.iTop = SKI_DEALER_OFFER_AREA_Y;
 			Rect.iRight = SKI_ITEM_MOVEMENT_AREA_X + SKI_ITEM_MOVEMENT_AREA_WIDTH;
 			Rect.iBottom = SKI_ITEM_MOVEMENT_AREA_Y + SKI_ITEM_MOVEMENT_AREA_HEIGHT;
+			fRestrictMouseToRect = TRUE;
 
 			SOLDIERTYPE* const owner = GetMovingItemOwner();
 			SetItemPointer(&gMoveingItem.ItemObject, owner);
@@ -3563,6 +3584,7 @@ void BeginSkiItemPointer( UINT8 ubSource, INT8 bSlotNum, BOOLEAN fOfferToDealerF
 			Rect.iTop = SKI_ITEM_MOVEMENT_AREA_Y;
 			Rect.iRight = SKI_ITEM_MOVEMENT_AREA_X + SKI_ITEM_MOVEMENT_AREA_WIDTH;
 			Rect.iBottom = SKI_ITEM_MOVEMENT_AREA_Y + SKI_ITEM_MOVEMENT_AREA_HEIGHT;
+			fRestrictMouseToRect = TRUE;
 
 			SOLDIERTYPE* const owner = GetMovingItemOwner();
 			SetItemPointer(&gMoveingItem.ItemObject, owner);
@@ -3599,7 +3621,7 @@ void BeginSkiItemPointer( UINT8 ubSource, INT8 bSlotNum, BOOLEAN fOfferToDealerF
 				// items in an inventory slot.  However, that leads to other bugs: if you picked the thing you're swapping in from
 				// a restricted inv slot (headgear, vest, etc.), the item swapped out will end up belonging to an illegal slot, and
 				// return there with a right click on it in the player's offer area.  So now ALL items picked up here are unowned.
-				memset( &gMoveingItem, 0, sizeof( INVENTORY_IN_SLOT ) );
+				gMoveingItem = INVENTORY_IN_SLOT{};
 
 				//Get the item from the pointer
 				gMoveingItem.ItemObject = TempObject;
@@ -3618,6 +3640,7 @@ void BeginSkiItemPointer( UINT8 ubSource, INT8 bSlotNum, BOOLEAN fOfferToDealerF
 				Rect.iTop = SKI_ITEM_MOVEMENT_AREA_Y;
 				Rect.iRight = SKI_ITEM_MOVEMENT_AREA_X + SKI_ITEM_MOVEMENT_AREA_WIDTH;
 				Rect.iBottom = SKI_ITEM_MOVEMENT_AREA_Y + SKI_ITEM_MOVEMENT_AREA_HEIGHT;
+				fRestrictMouseToRect = TRUE;
 
 				SetItemPointer(&gMoveingItem.ItemObject, gpSMCurrentMerc);
 			}
@@ -3637,7 +3660,10 @@ void BeginSkiItemPointer( UINT8 ubSource, INT8 bSlotNum, BOOLEAN fOfferToDealerF
 		//Enable the region that limits the movement of the cursor with the item
 		gSkiInventoryMovementAreaMouseRegions.Enable();
 
-		RestrictMouseCursor( &Rect );
+		if ( fRestrictMouseToRect )
+		{
+			RestrictMouseCursor( &Rect );
+		}
 
 		DisableAllDealersInventorySlots();
 
@@ -3710,7 +3736,7 @@ void SetSkiCursor( UINT16 usCursor )
 			gDealersOfferSlotsMouseRegions[ubCnt].ChangeCursor(usCursor);
 
 			//if the dealer repairs
-			if( ArmsDealerInfo[ gbSelectedArmsDealerID ].ubTypeOfArmsDealer == ARMS_DEALER_REPAIRS )
+			if (DoesDealerDoRepairs(gbSelectedArmsDealerID))
 			{
 				gDealersOfferSlotsSmallFaceMouseRegions[ubCnt].ChangeCursor(usCursor);
 			}
@@ -3722,7 +3748,7 @@ void SetSkiCursor( UINT16 usCursor )
 	//else we are restoring the old cursor
 	else
 	{
-		memset( &gMoveingItem, 0, sizeof( INVENTORY_IN_SLOT ) );
+		gMoveingItem = INVENTORY_IN_SLOT{};
 
 		gpItemPointer = NULL;
 
@@ -3749,7 +3775,7 @@ void SetSkiCursor( UINT16 usCursor )
 			gDealersOfferSlotsMouseRegions[ubCnt].ChangeCursor(usCursor);
 
 			//if the dealer repairs
-			if( ArmsDealerInfo[ gbSelectedArmsDealerID ].ubTypeOfArmsDealer == ARMS_DEALER_REPAIRS )
+			if (DoesDealerDoRepairs(gbSelectedArmsDealerID))
 			{
 				gDealersOfferSlotsSmallFaceMouseRegions[ubCnt].ChangeCursor(usCursor);
 			}
@@ -3797,7 +3823,7 @@ static INT8 AddInventoryToSkiLocation(const INVENTORY_IN_SLOT* pInv, UINT8 ubSpo
 		case ARMS_DEALER_INVENTORY:
 		case PLAYERS_INVENTORY:
 			// not used this way
-			SLOGE(DEBUG_TAG_ASSERTS, "AddInventoryToSkiLocation: invalid Where");
+			SLOGA("AddInventoryToSkiLocation: invalid Where");
 			return( bSlotAddedTo );
 
 		case ARMS_DEALER_OFFER_AREA:
@@ -3997,7 +4023,7 @@ static void HandleShopKeeperDialog(UINT8 ubInit)
 				// first check if one of the situation warrants one of the more precise quotes
 
 				//if the dealer repairs
-				if( ArmsDealerInfo[ gbSelectedArmsDealerID ].ubTypeOfArmsDealer == ARMS_DEALER_REPAIRS )
+				if (DoesDealerDoRepairs(gbSelectedArmsDealerID))
 				{
 					// if there are items in the arms dealer's offer area (must be awaiting repairs)
 					if ( CountNumberOfItemsInTheArmsDealersOfferArea() > 0)
@@ -4051,7 +4077,7 @@ static void HandleShopKeeperDialog(UINT8 ubInit)
 }
 
 
-static BOOLEAN StartShopKeeperTalking(UINT16 usQuoteNum)
+BOOLEAN StartShopKeeperTalking(UINT16 usQuoteNum)
 {
 	// if already in the process of leaving, don't start any additional quotes
 	if ( gfSKIScreenExit || gfRemindedPlayerToPickUpHisStuff || gfUserHasRequestedToLeave )
@@ -4078,7 +4104,7 @@ static BOOLEAN StartShopKeeperTalking(UINT16 usQuoteNum)
 	DialogueEvent::Add(new DialogueEventShopkeeperSetQuote(usQuoteNum));
 
 	// post quote dialogue
-	CharacterDialogue(ArmsDealerInfo[gbSelectedArmsDealerID].ubShopKeeperID, usQuoteNum, giShopKeeperFaceIndex, DIALOGUE_SHOPKEEPER_UI, FALSE);
+	CharacterDialogue(SelectedArmsDealer()->profileID, usQuoteNum, giShopKeeperFaceIndex, DIALOGUE_SHOPKEEPER_UI, FALSE);
 
 	// post event to mark shopkeeper dialogue as ended
 	DialogueEvent::Add(new DialogueEventShopkeeperSetQuote(-1));
@@ -4127,10 +4153,10 @@ static bool IsGunOrAmmoOfSameTypeSelected(OBJECTTYPE const& o)
 }
 
 
-static void ShopKeeperSubTitleRegionCallBack(MOUSE_REGION* pRegion, INT32 iReason);
+static void ShopKeeperSubTitleRegionCallBack(MOUSE_REGION* pRegion, UINT32 iReason);
 
 
-void InitShopKeeperSubTitledText(const wchar_t* pString)
+void InitShopKeeperSubTitledText(const ST::string& str)
 {
 	//Now setup the popup box
 	if( gGameSettings.fOptions[ TOPTION_SUBTITLES ] )
@@ -4139,8 +4165,7 @@ void InitShopKeeperSubTitledText(const wchar_t* pString)
 		UINT16 usActualHeight=0;
 
 		// The subutitled text for what the merc is saying
-		wchar_t ShopKeeperTalkingText[SKI_SUBTITLE_TEXT_SIZE];
-		swprintf(ShopKeeperTalkingText, lengthof(ShopKeeperTalkingText), L"\"%ls\"", pString);
+		ST::string ShopKeeperTalkingText = ST::format("\"{}\"", str);
 		g_popup_box = PrepareMercPopupBox(g_popup_box, BASIC_MERC_POPUP_BACKGROUND, BASIC_MERC_POPUP_BORDER, ShopKeeperTalkingText, 300, 0, 0, 0, &usActualWidth, &usActualHeight);
 
 		//position it to start under the guys face
@@ -4203,9 +4228,9 @@ static bool AreThereItemsInThePlayersOfferArea()
 
 
 //Mouse Call back for the Arms traders inventory slot
-static void ShopKeeperSubTitleRegionCallBack(MOUSE_REGION* pRegion, INT32 iReason)
+static void ShopKeeperSubTitleRegionCallBack(MOUSE_REGION* pRegion, UINT32 iReason)
 {
-	if (iReason & MSYS_CALLBACK_REASON_LBUTTON_UP || iReason & MSYS_CALLBACK_REASON_RBUTTON_UP)
+	if (iReason & MSYS_CALLBACK_REASON_ANY_BUTTON_UP)
 	{
 		ShutUpShopKeeper();
 	}
@@ -4213,9 +4238,9 @@ static void ShopKeeperSubTitleRegionCallBack(MOUSE_REGION* pRegion, INT32 iReaso
 
 
 //Mouse Call back for the Arms delaers face
-static void SelectArmsDealersFaceRegionCallBack(MOUSE_REGION* pRegion, INT32 iReason)
+static void SelectArmsDealersFaceRegionCallBack(MOUSE_REGION* pRegion, UINT32 iReason)
 {
-	if (iReason & MSYS_CALLBACK_REASON_LBUTTON_UP || iReason & MSYS_CALLBACK_REASON_RBUTTON_UP)
+	if (iReason & MSYS_CALLBACK_REASON_ANY_BUTTON_UP)
 	{
 		ShutUpShopKeeper();
 	}
@@ -4319,7 +4344,7 @@ static void EnableDisableEvaluateAndTransactionButtons(void)
 				{
 					fItemEvaluated = TRUE;
 				}
-				else if (ArmsDealerInfo[gbSelectedArmsDealerID].ubTypeOfArmsDealer != ARMS_DEALER_REPAIRS && GCM->getItem(o->sItemIndex)->getItemClass() == IC_MONEY)
+				else if (!DoesDealerDoRepairs(gbSelectedArmsDealerID) && GCM->getItem(o->sItemIndex)->getItemClass() == IC_MONEY)
 				{
 					//else if it is not a repair dealer, and the item is money
 					fItemEvaluated = TRUE;
@@ -4328,7 +4353,7 @@ static void EnableDisableEvaluateAndTransactionButtons(void)
 		}
 
 		//if the dealer is a repair dealer
-		if( ArmsDealerInfo[ gbSelectedArmsDealerID ].ubTypeOfArmsDealer == ARMS_DEALER_REPAIRS )
+		if (DoesDealerDoRepairs(gbSelectedArmsDealerID))
 		{
 			//if there is an item here, the item has to have been evaluated
 			if( ArmsDealerOfferArea[ ubCnt ].fActive )
@@ -4353,7 +4378,7 @@ static void EnableDisableEvaluateAndTransactionButtons(void)
 			DisableButton( guiSKI_TransactionButton );*/
 
 		//If its a repair dealer, and there is no items in the Dealer Offer area,
-		if( ArmsDealerInfo[ gbSelectedArmsDealerID ].ubTypeOfArmsDealer == ARMS_DEALER_REPAIRS &&
+		if(DoesDealerDoRepairs(gbSelectedArmsDealerID)&&
 				CountNumberOfItemsInTheArmsDealersOfferArea( ) == 0 &&
 				uiPlayersOfferAreaTotalMoney < uiArmsDealerTotalCost
 			)
@@ -4395,7 +4420,7 @@ static void EnableDisableEvaluateAndTransactionButtons(void)
 
 	//ARM: Always permit trying bribes, even if they don't work on a given dealer!
 	// if the arms dealer is the kind of person who accepts gifts, and there is stuff to take
-	//if( ArmsDealerInfo[ gbSelectedArmsDealerID ].uiFlags & ARMS_DEALER_ACCEPTS_GIFTS )
+	//if( SelectedArmsDealer()->hasFlag(ArmsDealerFlag::ACCEPTS_GIFTS )
 	{
 		//if the player is giving the dealer money, without buying anything
 		if( IsMoneyTheOnlyItemInThePlayersOfferArea( ) && CountNumberOfItemsInTheArmsDealersOfferArea( ) == 0 )
@@ -4564,15 +4589,15 @@ static INT8 GetInvSlotOfUnfullMoneyInMercInventory(SOLDIERTYPE* pSoldier)
 static void ClearArmsDealerOfferSlot(INT32 ubSlotToClear)
 {
 	// Clear the contents
-	memset( &ArmsDealerOfferArea[ ubSlotToClear ], 0, sizeof( INVENTORY_IN_SLOT ) );
+	ArmsDealerOfferArea[ ubSlotToClear ] = INVENTORY_IN_SLOT{};
 
 	//Remove the mouse help text from the region
-	gDealersOfferSlotsMouseRegions[ubSlotToClear].SetFastHelpText(L"");
+	gDealersOfferSlotsMouseRegions[ubSlotToClear].SetFastHelpText(ST::null);
 
 	//if the dealer repairs
-	if( ArmsDealerInfo[ gbSelectedArmsDealerID ].ubTypeOfArmsDealer == ARMS_DEALER_REPAIRS )
+	if (DoesDealerDoRepairs(gbSelectedArmsDealerID))
 	{
-		gDealersOfferSlotsSmallFaceMouseRegions[ubSlotToClear].SetFastHelpText(L"");
+		gDealersOfferSlotsSmallFaceMouseRegions[ubSlotToClear].SetFastHelpText(ST::null);
 	}
 }
 
@@ -4583,11 +4608,11 @@ static void CheckAndHandleClearingOfPlayerOfferArea(void);
 static void ClearPlayersOfferSlot(INT32 ubSlotToClear)
 {
 	// Clear the contents
-	memset( &PlayersOfferArea[ ubSlotToClear ], 0, sizeof( INVENTORY_IN_SLOT ) );
+	PlayersOfferArea[ ubSlotToClear ] = INVENTORY_IN_SLOT{};
 
 	//Clear the text for the item
-	gPlayersOfferSlotsMouseRegions[ubSlotToClear].SetFastHelpText(L"");
-	gPlayersOfferSlotsSmallFaceMouseRegions[ubSlotToClear].SetFastHelpText(L"");
+	gPlayersOfferSlotsMouseRegions[ubSlotToClear].SetFastHelpText(ST::null);
+	gPlayersOfferSlotsSmallFaceMouseRegions[ubSlotToClear].SetFastHelpText(ST::null);
 
 	// if the player offer area is clear, reset flags for transaction
 	CheckAndHandleClearingOfPlayerOfferArea( );
@@ -4627,7 +4652,7 @@ static void EvaluateItemAddedToPlayersOfferArea(INT8 bSlotID, BOOLEAN fFirstOne)
 	if (!WillShopKeeperRejectObjectsFromPlayer(gbSelectedArmsDealerID, bSlotID))
 	{
 		//if the dealer repairs
-		if( ArmsDealerInfo[ gbSelectedArmsDealerID ].ubTypeOfArmsDealer == ARMS_DEALER_REPAIRS )
+		if (DoesDealerDoRepairs(gbSelectedArmsDealerID))
 		{
 			UINT32 uiNumberOfItemsInForRepairs = CountTotalItemsRepairDealerHasInForRepairs( gbSelectedArmsDealerID );
 			UINT32 uiNumberOfItemsAlreadyEvaluated = CountNumberOfItemsInTheArmsDealersOfferArea();
@@ -4682,8 +4707,8 @@ static void EvaluateItemAddedToPlayersOfferArea(INT8 bSlotID, BOOLEAN fFirstOne)
 						uiEvalResult = EVAL_RESULT_OK_BUT_REALLY_DAMAGED;
 					}
 
-					// check if it's the first time a rocket rifle is being submitted to Fredo
-					if( fRocketRifleWasEvaluated && ( gbSelectedArmsDealerID == ARMS_DEALER_FREDO ) )
+					// check if it's the first time a rocket rifle is being submitted to the electronics guy
+					if (fRocketRifleWasEvaluated && GetDealer(gbSelectedArmsDealerID)->hasFlag(ArmsDealerFlag::REPAIRS_ELECTRONICS))
 					{
 						//if he hasn't yet said his quote
 						if( !( gArmsDealerStatus[ gbSelectedArmsDealerID ].ubSpecificDealerFlags & ARMS_DEALER_FLAG__FREDO_HAS_SAID_ROCKET_RIFLE_QUOTE ) )
@@ -4695,7 +4720,7 @@ static void EvaluateItemAddedToPlayersOfferArea(INT8 bSlotID, BOOLEAN fFirstOne)
 				}
 				else
 				{
-					SLOGW(DEBUG_TAG_INTERFACE, "Failed to add repair item to ArmsDealerOfferArea.");
+					SLOGW("Failed to add repair item to ArmsDealerOfferArea.");
 					return;
 				}
 			}
@@ -4711,7 +4736,7 @@ static void EvaluateItemAddedToPlayersOfferArea(INT8 bSlotID, BOOLEAN fFirstOne)
 	}
 	else // dealer doesn't handle this type of object
 	{
-		if( ArmsDealerInfo[ gbSelectedArmsDealerID ].ubTypeOfArmsDealer == ARMS_DEALER_REPAIRS )
+		if (DoesDealerDoRepairs(gbSelectedArmsDealerID))
 		{
 			// only otherwise repairable items count as actual rejections
 			if (GCM->getItem(o->sItemIndex)->getFlags() & ITEM_REPAIRABLE)
@@ -4744,7 +4769,7 @@ static void EvaluateItemAddedToPlayersOfferArea(INT8 bSlotID, BOOLEAN fFirstOne)
 		switch ( uiEvalResult )
 		{
 			case EVAL_RESULT_DONT_HANDLE:
-				if( ArmsDealerInfo[ gbSelectedArmsDealerID ].ubTypeOfArmsDealer == ARMS_DEALER_SELLS_ONLY )
+				if( SelectedArmsDealer()->type == ARMS_DEALER_SELLS_ONLY )
 				{
 					// then he doesn't have quotes 17, 19, or 20, always use 4.  Devin doesn't have 18 either,
 					// while the text of 18 seems wrong for Sam & Howard if offered something they should consider valuable.
@@ -4795,7 +4820,7 @@ static void EvaluateItemAddedToPlayersOfferArea(INT8 bSlotID, BOOLEAN fFirstOne)
 				break;
 
 			default:
-				SLOGW(DEBUG_TAG_INTERFACE, "Invalid evaluation result of %d.", uiEvalResult );
+				SLOGW("Invalid evaluation result of {}.", uiEvalResult);
 				break;
 		}
 
@@ -4830,14 +4855,14 @@ static void EvaluateItemAddedToPlayersOfferArea(INT8 bSlotID, BOOLEAN fFirstOne)
 }
 
 
-void DoSkiMessageBox(wchar_t const* const zString, ScreenID const uiExitScreen, MessageBoxFlags const ubFlags, MSGBOX_CALLBACK const ReturnCallback)
+void DoSkiMessageBox(const ST::string& str, ScreenID uiExitScreen, MessageBoxFlags ubFlags, MSGBOX_CALLBACK ReturnCallback)
 {
 	// reset exit mode
 	gfExitSKIDueToMessageBox = TRUE;
 
 	// do message box and return
 	SGPBox const centering_rect = { 0, 0, SCREEN_WIDTH, 339 };
-	DoMessageBox(MSG_BOX_BASIC_STYLE, zString, uiExitScreen, ubFlags, ReturnCallback, &centering_rect);
+	DoMessageBox(MSG_BOX_BASIC_STYLE, str, uiExitScreen, ubFlags, ReturnCallback, &centering_rect);
 }
 
 
@@ -4867,7 +4892,7 @@ void ConfirmToDeductMoneyFromPlayersAccountMessageBoxCallBack(MessageBoxReturnVa
 		//Perform the transaction with the extra money from the players account
 		PerformTransaction( iMoneyToDeduct );
 
-		AddTransactionToPlayersBook( PURCHASED_ITEM_FROM_DEALER, ArmsDealerInfo[ gbSelectedArmsDealerID ].ubShopKeeperID, GetWorldTotalMin(), -iMoneyToDeduct );
+		AddTransactionToPlayersBook( PURCHASED_ITEM_FROM_DEALER, SelectedArmsDealer()->profileID, GetWorldTotalMin(), -iMoneyToDeduct );
 	}
 
 	// done, re-enable calls to PerformTransaction()
@@ -4987,26 +5012,24 @@ static void CrossOutUnwantedItems(void)
 
 static void HandleCheckIfEnoughOnTheTable(void)
 {
-	static INT32 iLastTime = 0;
-	INT32  iDifference = 0, iRand = 0;
+	static UINT32 uiLastTime = 0;
 	UINT32 uiPlayersOfferAreaValue = CalculateTotalPlayersValue();
 	UINT32 uiArmsDealersItemsCost = CalculateTotalArmsDealerCost();
 
-	if( ( iLastTime == 0 ) || gfResetShopKeepIdleQuote )
+	if (uiLastTime == 0 || gfResetShopKeepIdleQuote)
 	{
-		iLastTime = GetJA2Clock();
+		uiLastTime = GetJA2Clock();
 		gfResetShopKeepIdleQuote = FALSE;
 	}
 
-	iDifference = GetJA2Clock() - iLastTime;
-
-	iRand = Random( 100 );
+	UINT32 uiDifference = GetJA2Clock() - uiLastTime;
+	UINT32 uiRand = Random(100);
 
 	// delay for shopkeeper passed?
-	if( iDifference > DELAY_FOR_SHOPKEEPER_IDLE_QUOTE )
+	if (uiDifference > DELAY_FOR_SHOPKEEPER_IDLE_QUOTE)
 	{
 		// random chance enough?
-		if( iRand > CHANCE_FOR_SHOPKEEPER_IDLE_QUOTE )
+		if (uiRand > CHANCE_FOR_SHOPKEEPER_IDLE_QUOTE)
 		{
 			// is there enough on the table
 			if( ( uiArmsDealersItemsCost > uiPlayersOfferAreaValue ) && ( uiPlayersOfferAreaValue ) )
@@ -5083,14 +5106,14 @@ static void InitShopKeeperItemDescBox(OBJECTTYPE* pObject, UINT8 ubPocket, UINT8
 		break;
 
 		default:
-			SLOGE(DEBUG_TAG_ASSERTS, "InitShopKeeperItemDescBox: invalid FromLocation");
+			SLOGA("InitShopKeeperItemDescBox: invalid FromLocation");
 			return;
 	}
 
 
 	pShopKeeperItemDescObject = pObject;
 
-	InitItemDescriptionBox( gpSMCurrentMerc, 255, sPosX, sPosY, 0 );
+	InternalInitItemDescriptionBox(pObject, sPosX, sPosY, 0, gpSMCurrentMerc);
 
 	StartSKIDescriptionBox( );
 }
@@ -5188,7 +5211,7 @@ static BOOLEAN OfferObjectToDealer(OBJECTTYPE* pComplexObject, UINT8 ubOwnerProf
 	BOOLEAN fSuccess = FALSE;
 
 
-	if ( ArmsDealerInfo[ gbSelectedArmsDealerID ].ubTypeOfArmsDealer != ARMS_DEALER_REPAIRS )
+	if (!DoesDealerDoRepairs(gbSelectedArmsDealerID))
 	{
 		// if not actually doing repairs, there's no need to split objects up at all
 		if ( !AddObjectForEvaluation( pComplexObject, ubOwnerProfileId, bOwnerSlotId, TRUE ) )
@@ -5238,7 +5261,7 @@ static BOOLEAN OfferObjectToDealer(OBJECTTYPE* pComplexObject, UINT8 ubOwnerProf
 		if ( ( ubDealerOfferAreaSlotsNeeded + CountNumberOfItemsInTheArmsDealersOfferArea() ) > SKI_NUM_TRADING_INV_SLOTS )
 		{
 			// tell player there's not enough room in the dealer's offer area
-			DoSkiMessageBox(L"There is not enough room in the dealers repair area.", SHOPKEEPER_SCREEN, MSG_BOX_FLAG_OK, NULL);
+			DoSkiMessageBox("There is not enough room in the dealers repair area.", SHOPKEEPER_SCREEN, MSG_BOX_FLAG_OK, NULL);
 			return(FALSE);	// no room
 		}*/
 
@@ -5303,7 +5326,7 @@ static void SplitComplexObjectIntoSubObjects(OBJECTTYPE* pComplexObject)
 
 
 	// clear subobject array
-	memset (gSubObject, 0, sizeof( OBJECTTYPE ) * MAX_SUBOBJECTS_PER_OBJECT );
+	std::fill_n(gSubObject, MAX_SUBOBJECTS_PER_OBJECT, OBJECTTYPE{});
 
 
 	// if it isn't stacked
@@ -5467,7 +5490,7 @@ static BOOLEAN AddObjectForEvaluation(OBJECTTYPE* pObject, UINT8 ubOwnerProfileI
 	INT8 bAddedToSlotID;
 
 	// Make a new inv slot out of the subobject
-	memset( &InvSlot, 0, sizeof( INVENTORY_IN_SLOT ) );
+	InvSlot = INVENTORY_IN_SLOT{};
 	InvSlot.ItemObject = *pObject;
 
 	InvSlot.sItemIndex = pObject->usItem;
@@ -5508,7 +5531,7 @@ static BOOLEAN ShopkeeperAutoPlaceObject(SOLDIERTYPE* pSoldier, OBJECTTYPE* pObj
 	while ( ubObjectsLeftToPlace > 0 )
 	{
 		// figure out how many to place during this loop iteration.  Can't do more than MAX_OBJECTS_PER_SLOT at a time
-		pObject->ubNumberOfObjects = MIN( MAX_OBJECTS_PER_SLOT, ubObjectsLeftToPlace);
+		pObject->ubNumberOfObjects = std::min(MAX_OBJECTS_PER_SLOT, int(ubObjectsLeftToPlace));
 		ubObjectsLeftToPlace -= pObject->ubNumberOfObjects;
 
 		if (!AutoPlaceObject( pSoldier, pObject, fNewItem ))
@@ -5542,7 +5565,7 @@ static void ShopkeeperAddItemToPool(INT16 const sGridNo, OBJECTTYPE* const pObje
 	while ( ubObjectsLeftToPlace > 0 )
 	{
 		// figure out how many to place during this loop iteration.  Can't do more than MAX_OBJECTS_PER_SLOT at a time
-		pObject->ubNumberOfObjects = MIN( MAX_OBJECTS_PER_SLOT, ubObjectsLeftToPlace);
+		pObject->ubNumberOfObjects = std::min(MAX_OBJECTS_PER_SLOT, int(ubObjectsLeftToPlace));
 		ubObjectsLeftToPlace -= pObject->ubNumberOfObjects;
 
 		AddItemToPool(sGridNo, pObject, VISIBLE, ubLevel, 0, 0);
@@ -5702,7 +5725,7 @@ BOOLEAN CanMercInteractWithSelectedShopkeeper(const SOLDIERTYPE* pSoldier)
 	Assert( pSoldier!= NULL );
 	Assert( gbSelectedArmsDealerID != -1 );
 
-	const SOLDIERTYPE* const pShopkeeper = FindSoldierByProfileID(ArmsDealerInfo[gbSelectedArmsDealerID].ubShopKeeperID);
+	const SOLDIERTYPE* const pShopkeeper = FindSoldierByProfileID(SelectedArmsDealer()->profileID);
 	Assert( pShopkeeper != NULL );
 	Assert( pShopkeeper->bInSector );
 
@@ -5751,7 +5774,7 @@ static void ExitSKIRequested(void)
 			fPlayerOwnedStuffOnTable = TRUE;
 		}
 
-		if( ( ArmsDealerInfo[ gbSelectedArmsDealerID ].ubTypeOfArmsDealer == ARMS_DEALER_REPAIRS ) &&
+		if( (DoesDealerDoRepairs(gbSelectedArmsDealerID)) &&
 				AreThereItemsInTheArmsDealersOfferArea( ) )
 		{
 			fPlayerOwnedStuffOnTable = TRUE;
@@ -5845,7 +5868,7 @@ static void DealWithItemsStillOnTheTable(void)
 
 
 	//if the dealer repairs
-	if( ArmsDealerInfo[ gbSelectedArmsDealerID ].ubTypeOfArmsDealer == ARMS_DEALER_REPAIRS )
+	if (DoesDealerDoRepairs(gbSelectedArmsDealerID))
 	{
 		//loop through the arms dealers' offer area and return any items there to the player
 		for( ubCnt = 0; ubCnt < SKI_NUM_TRADING_INV_SLOTS; ubCnt++)
@@ -5882,7 +5905,7 @@ static void GivePlayerSomeChange(UINT32 uiAmount)
 {
 	INVENTORY_IN_SLOT MoneyInvSlot;
 
-	memset( &MoneyInvSlot, 0, sizeof ( MoneyInvSlot ) );
+	MoneyInvSlot = INVENTORY_IN_SLOT{};
 
 	CreateMoney( uiAmount, &MoneyInvSlot.ItemObject );
 	MoneyInvSlot.sItemIndex = MoneyInvSlot.ItemObject.usItem;
@@ -5944,7 +5967,7 @@ static void HandlePossibleRepairDelays(void)
 	// assume there won't be a delay
 	gfStartWithRepairsDelayedQuote = FALSE;
 
-	if (gbSelectedArmsDealerID != ARMS_DEALER_FREDO && gbSelectedArmsDealerID != ARMS_DEALER_PERKO) return;
+	if (!GetDealer(gbSelectedArmsDealerID)->hasFlag(ArmsDealerFlag::DELAYS_REPAIR)) return;
 
 	ARMS_DEALER_STATUS& status = gArmsDealerStatus[gbSelectedArmsDealerID];
 	// because the quotes are so specific, we'll only use them once per game per repairman
@@ -6001,7 +6024,8 @@ static BOOLEAN RepairmanFixingAnyItemsThatShouldBeDoneNow(UINT32* puiHoursSinceO
 		if( pDealerItem->ubTotalItems )
 		{
 			//loop through the array of items
-			for( ubElement=0; ubElement< pDealerItem->ubElementsAlloced; ubElement++ )
+			Assert(pDealerItem->SpecialItem.size() <= UINT8_MAX);
+			for (ubElement = 0; ubElement < static_cast<UINT8>(pDealerItem->SpecialItem.size()); ubElement++)
 			{
 				pSpecialItem = &( pDealerItem->SpecialItem[ ubElement ] );
 
@@ -6062,7 +6086,8 @@ static void DelayRepairsInProgressBy(UINT32 uiMinutesDelayed)
 		if( pDealerItem->ubTotalItems )
 		{
 			//loop through the array of items
-			for( ubElement=0; ubElement< pDealerItem->ubElementsAlloced; ubElement++ )
+			Assert(pDealerItem->SpecialItem.size() <= UINT8_MAX);
+			for (ubElement = 0; ubElement < static_cast<UINT8>(pDealerItem->SpecialItem.size()); ubElement++)
 			{
 				pSpecialItem = &( pDealerItem->SpecialItem[ ubElement ] );
 
@@ -6084,9 +6109,9 @@ static void DelayRepairsInProgressBy(UINT32 uiMinutesDelayed)
 
 
 //Mouse Call back for the Arms delaers face
-static void SelectArmsDealersDropItemToGroundRegionCallBack(MOUSE_REGION* pRegion, INT32 iReason)
+static void SelectArmsDealersDropItemToGroundRegionCallBack(MOUSE_REGION* pRegion, UINT32 iReason)
 {
-	if (iReason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (iReason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		SOLDIERTYPE *pDropSoldier;
 
@@ -6119,7 +6144,7 @@ static void SelectArmsDealersDropItemToGroundRegionCallBack(MOUSE_REGION* pRegio
 static BOOLEAN CanTheDropItemToGroundStringBeDisplayed(void);
 
 
-static void SelectArmsDealersDropItemToGroundMovementRegionCallBack(MOUSE_REGION* pRegion, INT32 iReason)
+static void SelectArmsDealersDropItemToGroundMovementRegionCallBack(MOUSE_REGION* pRegion, UINT32 iReason)
 {
 	if( iReason & MSYS_CALLBACK_REASON_LOST_MOUSE )
 	{
@@ -6173,21 +6198,21 @@ static UINT32 EvaluateInvSlot(INVENTORY_IN_SLOT* pInvSlot)
 	//if the dealer is Micky
 	if( gbSelectedArmsDealerID == ARMS_DEALER_MICKY )
 	{
-		const SOLDIERTYPE* const s = FindSoldierByProfileIDOnPlayerTeam(ArmsDealerInfo[gbSelectedArmsDealerID].ubShopKeeperID);
+		const SOLDIERTYPE* const s = FindSoldierByProfileIDOnPlayerTeam(SelectedArmsDealer()->profileID);
 		if (s != NULL && GetDrunkLevel(s) == DRUNK)
 		{
 			//Micky is DRUNK, pays more!
-			dPriceModifier = ArmsDealerInfo[gbSelectedArmsDealerID].u.price.sell;
+			dPriceModifier = SelectedArmsDealer()->sellingPrice;
 		}
 		else
 		{
 			// Micky isn't drunk, charge regular price
-			dPriceModifier = ArmsDealerInfo[gbSelectedArmsDealerID].u.price.buy;
+			dPriceModifier = SelectedArmsDealer()->buyingPrice;
 		}
 	}
 	else
 	{
-		dPriceModifier = ArmsDealerInfo[gbSelectedArmsDealerID].u.price.buy;
+		dPriceModifier = SelectedArmsDealer()->buyingPrice;
 	}
 
 
@@ -6227,7 +6252,7 @@ static UINT32 EvaluateInvSlot(INVENTORY_IN_SLOT* pInvSlot)
 #define REPAIR_MINUTES_INTERVAL 15
 
 
-static void BuildRepairTimeString(wchar_t sString[], size_t Length, UINT32 uiTimeInMinutesToFixItem)
+static ST::string BuildRepairTimeString(UINT32 uiTimeInMinutesToFixItem)
 {
 	UINT16 usNumberOfHoursToFixItem = 0;
 
@@ -6251,28 +6276,19 @@ static void BuildRepairTimeString(wchar_t sString[], size_t Length, UINT32 uiTim
 	if ( uiTimeInMinutesToFixItem <= 90 )
 	{
 		// show minutes
-		swprintf( sString, Length, SKI_Text[ SKI_TEXT_MINUTES ], uiTimeInMinutesToFixItem );
+		return st_format_printf(SKI_Text[ SKI_TEXT_MINUTES ], uiTimeInMinutesToFixItem);
 	}
 	else
 	{
 		// show hours
-
 		// round fractions of 15+ minutes up to next full hour
 		usNumberOfHoursToFixItem = (UINT16) ( ( uiTimeInMinutesToFixItem + 45 ) / 60 );
-
-		if ( usNumberOfHoursToFixItem > 1 )
-		{
-			swprintf( sString, Length, SKI_Text[ SKI_TEXT_PLURAL_HOURS ], usNumberOfHoursToFixItem );
-		}
-		else
-		{
-			wcscpy( sString, SKI_Text[ SKI_TEXT_ONE_HOUR ] );
-		}
+		return st_format_printf(SKI_Text[ SKI_TEXT_PLURAL_HOURS ], usNumberOfHoursToFixItem);
 	}
 }
 
 
-static void BuildDoneWhenTimeString(wchar_t sString[], size_t const Length, ArmsDealerID const ubArmsDealer, UINT16 const usItemIndex, UINT8 const ubElement)
+static ST::string BuildDoneWhenTimeString(ArmsDealerID ubArmsDealer, UINT16 usItemIndex, UINT8 ubElement)
 {
 	UINT32 uiDoneTime;
 	UINT32 uiDay, uiHour, uiMin;
@@ -6281,7 +6297,7 @@ static void BuildDoneWhenTimeString(wchar_t sString[], size_t const Length, Arms
 	//dealer must be a repair dealer
 	Assert( DoesDealerDoRepairs( ubArmsDealer ) );
 	// element index must be valid
-	Assert( ubElement < gArmsDealersInventory[ ubArmsDealer ][ usItemIndex ].ubElementsAlloced );
+	Assert( ubElement < gArmsDealersInventory[ ubArmsDealer ][ usItemIndex ].SpecialItem.size() );
 	// that item must be active
 	Assert( gArmsDealersInventory[ ubArmsDealer ][ usItemIndex ].SpecialItem[ ubElement ].fActive );
 	// that item must be in repair
@@ -6290,8 +6306,7 @@ static void BuildDoneWhenTimeString(wchar_t sString[], size_t const Length, Arms
 	//if the item has already been repaired
 	if( gArmsDealersInventory[ ubArmsDealer ][ usItemIndex ].SpecialItem[ ubElement ].uiRepairDoneTime <= GetWorldTotalMin() )
 	{
-		wcscpy( sString, L"" );
-		return;
+		return ST::null;
 	}
 
 	uiDoneTime = gArmsDealersInventory[ ubArmsDealer ][ usItemIndex ].SpecialItem[ ubElement ].uiRepairDoneTime;
@@ -6310,39 +6325,39 @@ static void BuildDoneWhenTimeString(wchar_t sString[], size_t const Length, Arms
 	// only show day if it's gonna take overnight
 	if ( GetWorldDay() != uiDay )
 	{
-		swprintf(sString, Length, L"%ls %d %02d:%02d", pDayStrings, uiDay, uiHour, uiMin);
+		return ST::format("{} {} {02d}:{02d}", pDayStrings, uiDay, uiHour, uiMin);
 	}
 	else
 	{
-		swprintf( sString, Length, L"%02d:%02d", uiHour, uiMin );
+		return ST::format("{02d}:{02d}", uiHour, uiMin);
 	}
 }
 
 
-static void BuildItemHelpTextString(wchar_t sString[], size_t Length, const INVENTORY_IN_SLOT* pInv, UINT8 ubScreenArea)
+static ST::string BuildItemHelpTextString(const INVENTORY_IN_SLOT* pInv, UINT8 ubScreenArea)
 {
-	wchar_t zHelpText[ 512 ];
-	wchar_t zRepairTime[ 64 ];
+	ST::string zHelpText;
+	ST::string zRepairTime;
 
 	if( pInv != NULL )
 	{
-		GetHelpTextForItem(zHelpText, lengthof(zHelpText), pInv->ItemObject);
+		zHelpText = GetHelpTextForItem(pInv->ItemObject);
 
 		// add repair time for items in a repairman's offer area
 		if ( ( ubScreenArea == ARMS_DEALER_OFFER_AREA ) &&
-			( ArmsDealerInfo[ gbSelectedArmsDealerID ].ubTypeOfArmsDealer == ARMS_DEALER_REPAIRS ) )
+			(DoesDealerDoRepairs(gbSelectedArmsDealerID)) )
 		{
-			BuildRepairTimeString( zRepairTime, lengthof(zRepairTime), CalculateObjectItemRepairTime( gbSelectedArmsDealerID, &( pInv->ItemObject ) ) );
-			swprintf(sString, Length, L"%ls\n(%ls: %ls)", zHelpText, gzLateLocalizedString[STR_LATE_44], zRepairTime);
+			zRepairTime = BuildRepairTimeString(CalculateObjectItemRepairTime( gbSelectedArmsDealerID, &( pInv->ItemObject ) ));
+			return ST::format("{}\n({}: {})", zHelpText, gzLateLocalizedString[STR_LATE_44], zRepairTime);
 		}
 		else
 		{
-			wcscpy( sString, zHelpText );
+			return zHelpText;
 		}
 	}
 	else
 	{
-		sString[ 0 ] = '\0';
+		return ST::null;
 	}
 }
 
@@ -6356,7 +6371,7 @@ static void DisableAllDealersInventorySlots(void)
 		gDealersInventoryMouseRegions[iCnt].Disable();
 
 		//if the dealer repairs
-		if( ArmsDealerInfo[ gbSelectedArmsDealerID ].ubTypeOfArmsDealer == ARMS_DEALER_REPAIRS )
+		if (DoesDealerDoRepairs(gbSelectedArmsDealerID))
 		{
 			gRepairmanInventorySmallFaceMouseRegions[iCnt].Disable();
 		}
@@ -6373,7 +6388,7 @@ static void EnableAllDealersInventorySlots(void)
 		gDealersInventoryMouseRegions[iCnt].Enable();
 
 		//if the dealer repairs
-		if( ArmsDealerInfo[ gbSelectedArmsDealerID ].ubTypeOfArmsDealer == ARMS_DEALER_REPAIRS )
+		if (DoesDealerDoRepairs(gbSelectedArmsDealerID))
 		{
 			gRepairmanInventorySmallFaceMouseRegions[iCnt].Enable();
 		}
@@ -6390,7 +6405,7 @@ static void DisableAllDealersOfferSlots(void)
 		gDealersOfferSlotsMouseRegions[iCnt].Disable();
 
 		//if the dealer repairs
-		if( ArmsDealerInfo[ gbSelectedArmsDealerID ].ubTypeOfArmsDealer == ARMS_DEALER_REPAIRS )
+		if (DoesDealerDoRepairs(gbSelectedArmsDealerID))
 		{
 			gDealersOfferSlotsSmallFaceMouseRegions[iCnt].Disable();
 		}
@@ -6407,7 +6422,7 @@ static void EnableAllDealersOfferSlots(void)
 		gDealersOfferSlotsMouseRegions[iCnt].Enable();
 
 		//if the dealer repairs
-		if( ArmsDealerInfo[ gbSelectedArmsDealerID ].ubTypeOfArmsDealer == ARMS_DEALER_REPAIRS )
+		if (DoesDealerDoRepairs(gbSelectedArmsDealerID))
 		{
 			gDealersOfferSlotsSmallFaceMouseRegions[iCnt].Enable();
 		}

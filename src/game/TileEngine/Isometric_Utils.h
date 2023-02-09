@@ -1,8 +1,11 @@
 #ifndef __ISOMETRIC_UTILSH
 #define __ISOMETRIC_UTILSH
 
+#include "JA2Types.h"
 #include "Overhead_Types.h"
+#include "Types.h"
 #include "WorldDef.h"
+struct SOLDIERTYPE;
 
 
 #define MAXCOL					WORLD_COLS
@@ -46,11 +49,6 @@ INT32 OutOfBounds(INT16 sGridno, INT16 sProposedGridno);
 BOOLEAN GetMouseXY( INT16 *psMouseX, INT16 *psMouseY );
 BOOLEAN GetMouseWorldCoords( INT16 *psMouseX, INT16 *psMouseY );
 
-/* Returns the GridNo of the tile the mouse cursor is currently over or NOWHERE
-	* if the cursor is not over any tile. */
-GridNo GetMouseMapPos(void);
-
-
 void   GetAbsoluteScreenXYFromMapPos(GridNo pos, INT16* psWorldScreenX, INT16* psWorldScreenY);
 GridNo GetMapPosFromAbsoluteScreenXY(INT16 sWorldScreenX, INT16 sWorldScreenY);
 
@@ -79,9 +77,7 @@ INT16 CardinalSpacesAway(INT16 sOrigin, INT16 sDest);
 bool FindHigherLevel(SOLDIERTYPE const*, UINT8* out_direction = 0);
 bool FindLowerLevel(SOLDIERTYPE const*, UINT8* out_direction = 0);
 
-INT16 QuickestDirection(INT16 origin, INT16 dest);
-INT16 ExtQuickestDirection(INT16 origin, INT16 dest);
-
+INT8 QuickestDirection(UINT8 origin, UINT8 dest, UINT8 maxDistance = 4);
 
 // Returns the (center ) cell coordinates in X
 INT16 CenterX( INT16 sGridno );
@@ -94,8 +90,6 @@ BOOLEAN IsFacingClimableWindow(SOLDIERTYPE const*);
 
 //Simply chooses a random gridno within valid boundaries (for dropping things in unloaded sectors)
 INT16 RandomGridNo(void);
-
-extern UINT32 guiForceRefreshMousePositionCalculation;
 
 extern const INT16 DirIncrementer[8];
 

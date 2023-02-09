@@ -1,5 +1,3 @@
-#include <stdexcept>
-
 #include "GameLoop.h"
 #include "GameVersion.h"
 #include "Local.h"
@@ -19,6 +17,8 @@
 #include "Tactical_Save.h"
 #include "Interface.h"
 #include "GameSettings.h"
+#include "GameInstance.h"
+#include "ContentManager.h"
 #include "Text.h"
 #include "HelpScreen.h"
 #include "SaveLoadGame.h"
@@ -26,13 +26,18 @@
 #include "Options_Screen.h"
 #include "Debug.h"
 #include "Video.h"
-#include "MemMan.h"
 #include "Button_System.h"
 #include "Font_Control.h"
 #include "UILayout.h"
-#include "GameState.h"
+#include "GameMode.h"
 #include "sgp/FileMan.h"
-#include "slog/slog.h"
+#include "Logger.h"
+
+#include <string_theory/format>
+#include <string_theory/string>
+
+#include <stdexcept>
+
 
 ScreenID guiCurrentScreen = ERROR_SCREEN; // XXX TODO001A had no explicit initialisation
 ScreenID guiPendingScreen = NO_PENDING_SCREEN;
@@ -56,8 +61,8 @@ void InitializeGame(void)
 
 	InitTacticalSave();
 
-	SLOGI(DEBUG_TAG_GAMELOOP, "Version Label: %s", g_version_label);
-	SLOGI(DEBUG_TAG_GAMELOOP, "Version #:     %s", g_version_number);
+	SLOGI("Version Label: {}", g_version_label);
+	SLOGI("Version #:     {}", g_version_number);
 
 	// Initialize Game Screens.
 	for (uiIndex = 0; uiIndex < MAX_SCREENS; uiIndex++)
@@ -114,12 +119,17 @@ try
 	SGPPoint MousePos;
 	GetMousePos(&MousePos);
 	// Hook into mouse stuff for MOVEMENT MESSAGES
-	MouseSystemHook(MOUSE_POS, MousePos.iX, MousePos.iY);
+	MouseSystemHook(MOUSE_POS, 0, MousePos.iX, MousePos.iY);
 	MusicPoll();
 
+	HandleSingleClicksAndButtonRepeats();
 	while (DequeueSpecificEvent(&InputEvent, MOUSE_EVENTS))
 	{
-		MouseSystemHook(InputEvent.usEvent, MousePos.iX, MousePos.iY);
+		MouseSystemHook(InputEvent.usEvent, InputEvent.usParam, MousePos.iX, MousePos.iY);
+	}
+	while (DequeueSpecificEvent(&InputEvent, TOUCH_EVENTS))
+	{
+		MouseSystemHook(InputEvent.usEvent, InputEvent.usParam, MousePos.iX, MousePos.iY);
 	}
 
 
@@ -135,16 +145,15 @@ try
 		//only if we are in a screen that can get this check
 		if( guiCurrentScreen == MAP_SCREEN || guiCurrentScreen == GAME_SCREEN || guiCurrentScreen == SAVE_LOAD_SCREEN )
 		{
-			// Make sure the user has enough hard drive space
-			uintmax_t uiSpaceOnDrive = GetFreeSpaceOnHardDriveWhereGameIsRunningFrom();
+			// Make sure the user has enough hard drive space in home and temp dir
+			uint64_t uiSpaceOnDrivePrivate = GCM->userPrivateFiles()->getFreeSpace("");
+			uint64_t uiSpaceOnDriveTemp = GCM->tempFiles()->getFreeSpace("");
+			uint64_t uiSpaceOnDrive = std::min(uiSpaceOnDrivePrivate, uiSpaceOnDriveTemp);
 			if( uiSpaceOnDrive < REQUIRED_FREE_SPACE )
 			{
-				wchar_t	zText[512];
-				wchar_t	zSpaceOnDrive[20];
+				ST::string zSpaceOnDrive = ST::format("{.2f}", uiSpaceOnDrive / (FLOAT)BYTESINMEGABYTE);
 
-				swprintf( zSpaceOnDrive, lengthof(zSpaceOnDrive), L"%.2f", uiSpaceOnDrive / (FLOAT)BYTESINMEGABYTE );
-
-				swprintf( zText, lengthof(zText), pMessageStrings[ MSG_LOWDISKSPACE_WARNING ], zSpaceOnDrive, L"20" );
+				ST::string zText = st_format_printf(pMessageStrings[ MSG_LOWDISKSPACE_WARNING ], zSpaceOnDrive, "20");
 
 				if( guiPreviousOptionScreen == MAP_SCREEN )
 					DoMapMessageBox( MSG_BOX_BASIC_STYLE, zText, MAP_SCREEN, MSG_BOX_FLAG_OK, NULL );
@@ -217,13 +226,13 @@ catch (std::exception const& e)
 {
 	guiPreviousOptionScreen = guiCurrentScreen;
 	char const* what;
-	char const* success = "failed";
-	char const* attach  = "";
+	ST::string success = "failed";
+	char const* attach = "";
 
-	if (gfEditMode && GameState::getInstance()->isEditorMode())
+	if (gfEditMode && GameMode::getInstance()->isEditorMode())
 	{
 		what = "map";
-		if (SaveWorld("error.dat"))
+		if (SaveWorldAbsolute("error.dat"))
 		{
 			success = "succeeded (error.dat)";
 			attach  = " Do not forget to attach the map.";
@@ -232,20 +241,18 @@ catch (std::exception const& e)
 	else
 	{
 		what = "savegame";
-		if (SaveGame(SAVE__ERROR_NUM, L"error savegame"))
+		auto saveName = GetErrorSaveName();
+		if (SaveGame(saveName, "error savegame"))
 		{
-			success = "succeeded (error.sav)";
+			success = ST::format("succeeded ({}.sav)", saveName);
 			attach  = " Do not forget to attach the savegame.";
 		}
 	}
-	char msg[2048];
-	snprintf(msg, lengthof(msg),
-		"%s\n"
-		"Creating an emergency %s %s.\n"
-		"Please report this error with a description of the circumstances.%s",
+	ST::string msg = ST::format(
+		"{}\nCreating an emergency {} {}.\nPlease report this error with a description of the circumstances. {}",
 		e.what(), what, success, attach
 	);
-	throw std::runtime_error(msg);
+	throw std::runtime_error(msg.c_str());
 }
 
 
@@ -269,7 +276,7 @@ static void HandleNewScreenChange(UINT32 uiNewScreen, UINT32 uiOldScreen)
 
 void HandleShortCutExitState()
 {
-	SLOGI(DEBUG_TAG_GAMELOOP, "User pressed ESCape, TERMINATING");
+	SLOGI("User pressed ESCape, TERMINATING");
 
 	// Use YES/NO pop up box, setup for particular screen
 	switch (guiCurrentScreen)

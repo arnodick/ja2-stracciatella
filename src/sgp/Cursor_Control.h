@@ -60,6 +60,7 @@ struct CursorData
 	UINT16		usWidth;
 	UINT8		bFlags;
 	UINT8		bFlashIndex;
+	BOOLEAN 	fHideOnTouch;
 };
 
 extern INT16 gsGlobalCursorYOffset;
@@ -67,6 +68,13 @@ extern INT16 gsGlobalCursorYOffset;
 // Globals for cursor database offset values
 extern UINT16 gsCurMouseHeight;
 extern UINT16 gsCurMouseWidth;
+
+void GetCursorPos(SGPPoint& Point);
+
+// Sets an override for the cursor position
+void SetManualCursorPos(SGPPoint Point);
+// Clears the override for the cursor position
+void ClearManualCursorPos();
 
 void SetExternMouseCursor(SGPVObject const&, UINT16 region_idx);
 
@@ -76,5 +84,7 @@ void InitCursorDatabase(CursorFileData* pCursorFileData, CursorData* pCursorData
 void SetMouseBltHook(MOUSEBLT_HOOK pMouseBltOverride);
 
 void SetExternVOData(UINT32 uiCursorIndex, HVOBJECT hVObject, UINT16 usSubIndex);
+
+UINT32 ModifyCursorIndex(UINT32 uiCursorIndex);
 
 #endif

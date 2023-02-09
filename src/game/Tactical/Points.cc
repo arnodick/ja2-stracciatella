@@ -32,7 +32,7 @@
 #include "MagazineModel.h"
 #include "WeaponModels.h"
 
-#include "slog/slog.h"
+#include "Logger.h"
 
 INT16 TerrainActionPoints(const SOLDIERTYPE* const pSoldier, const INT16 sGridno, const INT8 bDir, const INT8 bLevel)
 {
@@ -101,8 +101,7 @@ INT16 TerrainActionPoints(const SOLDIERTYPE* const pSoldier, const INT16 sGridno
 			return( 0 );
 
 		default:
-			SLOGD(DEBUG_TAG_POINTS,
-				"Calc AP: Unrecongnized MP type %d in %d, direction %d",
+			SLOGD("Calc AP: Unrecongnized MP type {} in {}, direction {}",
 				sSwitchValue, sGridno, bDir);
 			break;
 	}
@@ -294,6 +293,7 @@ INT16 ActionPointCost(const SOLDIERTYPE* const pSoldier, const INT16 sGridNo, co
 				sPoints = (sTileCost + WALKCOST);
 				break;
 
+			case CROW_WALK:
 			case START_SWAT:
 			case SWAT_BACKWARDS:
 			case SWATTING:
@@ -306,9 +306,7 @@ INT16 ActionPointCost(const SOLDIERTYPE* const pSoldier, const INT16 sGridNo, co
 			default:
 
 				// Invalid movement mode
-				SLOGW(DEBUG_TAG_POINTS,
-					"Invalid movement mode %d used in ActionPointCost",
-					usMovementMode);
+				SLOGW("Invalid movement mode {} used in ActionPointCost", usMovementMode);
 				sPoints = 1;
 		}
 	}
@@ -367,6 +365,7 @@ INT16 EstimateActionPointCost( SOLDIERTYPE *pSoldier, INT16 sGridNo, INT8 bDir, 
 				sPoints = (sTileCost + WALKCOST);
 				break;
 
+			case CROW_WALK:
 			case START_SWAT:
 			case SWAT_BACKWARDS:
 			case SWATTING:
@@ -379,9 +378,7 @@ INT16 EstimateActionPointCost( SOLDIERTYPE *pSoldier, INT16 sGridNo, INT8 bDir, 
 			default:
 
 				// Invalid movement mode
-				SLOGW(DEBUG_TAG_POINTS,
-					"Invalid movement mode %d used in EstimateActionPointCost",
-					usMovementMode);
+				SLOGW("Invalid movement mode {} used in EstimateActionPointCost", usMovementMode);
 				sPoints = 1;
 		}
 	}
@@ -454,6 +451,12 @@ BOOLEAN EnoughPoints(const SOLDIERTYPE* pSoldier, INT16 sAPCost, INT16 sBPCost, 
 		return( TRUE );
 	}
 
+	// can't do anything while collapsed
+	if (pSoldier->bCollapsed)
+	{
+		return FALSE;
+	}
+
 	if ( pSoldier->ubQuoteActionID >=QUOTE_ACTION_ID_TRAVERSE_EAST && pSoldier->ubQuoteActionID <= QUOTE_ACTION_ID_TRAVERSE_NORTH )
 	{
 		// AI guy on special move off map
@@ -516,7 +519,7 @@ void DeductPoints( SOLDIERTYPE *pSoldier, INT16 sAPCost, INT16 sBPCost )
 
 	pSoldier->bActionPoints = (INT8)sNewAP;
 
-	SLOGD(DEBUG_TAG_POINTS, "Deduct Points (%d at %d) %d %d",
+	SLOGD("Deduct Points ({} at {}) {} {}",
 				pSoldier->ubID, pSoldier->sGridNo, sAPCost, sBPCost);
 
 	if ( AM_A_ROBOT( pSoldier ) )
@@ -831,7 +834,7 @@ static INT16 GetBreathPerAP(SOLDIERTYPE* pSoldier, UINT16 usAnimState)
 
 	if ( !fAnimTypeFound )
 	{
-		SLOGD(DEBUG_TAG_POINTS, "Unknown end-of-turn breath anim: %hs",
+		SLOGD("Unknown end-of-turn breath anim: {}",
 			gAnimControl[usAnimState].zAnimStr);
 	}
 
@@ -852,11 +855,11 @@ UINT8 CalcAPsToBurst(INT8 const bBaseActionPoints, OBJECTTYPE const& o)
 		INT8 const bAttachPos = FindAttachment(&o, SPRING_AND_BOLT_UPGRADE );
 		if ( bAttachPos != -1 )
 		{
-			return (__max(3, (AP_BURST * bBaseActionPoints + (AP_MAXIMUM - 1)) / AP_MAXIMUM) * 100) / (100 + o.bAttachStatus[bAttachPos] / 5);
+			return (std::max(3, (AP_BURST * bBaseActionPoints + (AP_MAXIMUM - 1)) / AP_MAXIMUM) * 100) / (100 + o.bAttachStatus[bAttachPos] / 5);
 		}
 		else
 		{
-			return __max(3, (AP_BURST * bBaseActionPoints + (AP_MAXIMUM - 1)) / AP_MAXIMUM);
+			return std::max(3, (AP_BURST * bBaseActionPoints + (AP_MAXIMUM - 1)) / AP_MAXIMUM);
 		}
 	}
 }
@@ -872,11 +875,11 @@ UINT8 CalcTotalAPsToAttack(SOLDIERTYPE* const s, INT16 const grid_no, UINT8 cons
 		case IC_LAUNCHER:
 		case IC_TENTACLES:
 		case IC_THROWING_KNIFE:
-			ap_cost  = MinAPsToAttack(s, grid_no, ubAddTurningCost);
-			ap_cost +=
-				s->bDoBurst ? CalcAPsToBurst(CalcActionPoints(s), in_hand) :
-				aim_time;
-			break;
+			return MinAPsToAttack(s, grid_no, ubAddTurningCost) +
+				(s->bDoBurst ? CalcAPsToBurst(CalcActionPoints(s), in_hand) :
+				// WM_ATTACHED is already handled by MinAPsToAttack and the
+				// aim time cannot be refined further.
+				s->bWeaponMode == WM_ATTACHED ? 0 : aim_time);
 
 		case IC_GRENADE:
 		case IC_BOMB:
@@ -1068,7 +1071,7 @@ UINT8 MinAPsToShootOrStab(SOLDIERTYPE& s, GridNo gridno, bool const add_turning_
 	BOOLEAN	adding_raise_gun_cost;
 	GetAPChargeForShootOrStabWRTGunRaises(&s, gridno, add_turning_cost, &adding_turning_cost, &adding_raise_gun_cost);
 
-	UINT8	ap_cost = AP_MIN_AIM_ATTACK;
+	int	ap_cost = AP_MIN_AIM_ATTACK;
 
 	if (GCM->getItem(item)->getItemClass() == IC_THROWING_KNIFE ||
 		item == ROCKET_LAUNCHER)
@@ -1142,7 +1145,7 @@ UINT8 MinAPsToShootOrStab(SOLDIERTYPE& s, GridNo gridno, bool const add_turning_
 		// Charge the maximum of the two
 		UINT8 const ap_1st = BaseAPsToShootOrStab(full_aps, aim_skill, in_hand);
 		UINT8 const ap_2nd = BaseAPsToShootOrStab(full_aps, aim_skill, s.inv[SECONDHANDPOS]);
-		ap_cost += __max(ap_1st, ap_2nd);
+		ap_cost += std::max(ap_1st, ap_2nd);
 	}
 	else
 	{
@@ -1150,10 +1153,8 @@ UINT8 MinAPsToShootOrStab(SOLDIERTYPE& s, GridNo gridno, bool const add_turning_
 	}
 
 	// The minimum AP cost of ANY shot can NEVER be more than merc's maximum APs
-	if (ap_cost > full_aps) ap_cost = full_aps;
-
-	// this SHOULD be impossible, but nevertheless
-	if (ap_cost < 1) ap_cost = 1;
+	// nor it SHOULDN'T be 0, but nevertheless
+	ap_cost = std::clamp(ap_cost, 1, full_aps > 0 ? int(full_aps) : 1);
 
 	return ap_cost;
 }
@@ -1445,12 +1446,16 @@ INT8 GetAPsToAutoReload( SOLDIERTYPE * pSoldier )
 	if (GCM->getItem(pObj->usItem)->getItemClass() == IC_GUN || GCM->getItem(pObj->usItem)->getItemClass() == IC_LAUNCHER)
 	{
 		bSlot = FindAmmoToReload( pSoldier, HANDPOS, NO_SLOT );
-		if (bSlot != NO_SLOT)
+		if (bSlot == NO_SLOT)
 		{
-			// we would reload using this ammo!
-			bAPCost += GetAPsToReloadGunWithAmmo( pObj, &(pSoldier->inv[bSlot] ) );
+			// we would not reload
+			return( 0 );
 		}
 
+		// we would reload using this ammo!
+		bAPCost += GetAPsToReloadGunWithAmmo( pObj, &(pSoldier->inv[bSlot] ) );
+		// if we are valid for two-pistol shooting (reloading) and we have enough APs still
+		// then we would do a reload of both guns!
 		if ( IsValidSecondHandShotForReloadingPurposes( pSoldier ) )
 		{
 			pObj = &(pSoldier->inv[SECONDHANDPOS]);
@@ -1676,13 +1681,13 @@ INT16 MinAPsToThrow(SOLDIERTYPE const& s, GridNo gridno, bool const add_turning_
 	// Make sure the guy's actually got a throwable item in his hand
 	UINT16 const in_hand = s.inv[HANDPOS].usItem;
 	const ItemModel *item = GCM->getItem(in_hand);
-	// Gennady: This is a very strange piece of code.
-	//          Be very careful with it.
-	if (!item->getItemClass() & IC_GRENADE)
+	if (!item)
 	{
-		SLOGI(DEBUG_TAG_POINTS, "MinAPsToThrow - Called when in-hand item is %s",
-					item->getInternalName().c_str());
-		return 0;
+		SLOGW("MinAPsToThrow - in-hand item is missing");
+	}
+	else if (!(item->getItemClass() & (IC_GRENADE | IC_THROWN))) // match MinAPsToAttack
+	{
+		SLOGW("MinAPsToThrow - in-hand item '{}' has unexpected item class 0x{x}", item->getInternalName(), item->getItemClass());
 	}
 
 	if (gridno != NOWHERE)

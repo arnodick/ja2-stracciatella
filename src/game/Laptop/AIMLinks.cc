@@ -5,7 +5,7 @@
 #include "VObject.h"
 #include "WordWrap.h"
 #include "Text.h"
-#include "Multi_Language_Graphic_Utils.h"
+#include "GameRes.h"
 #include "Button_System.h"
 #include "Video.h"
 #include "VSurface.h"
@@ -46,7 +46,7 @@ static UINT8 const gubLinkPages[] = { BOBBYR_BOOKMARK, FUNERAL_BOOKMARK, INSURAN
 static MOUSE_REGION gSelectedLinkRegion[AIM_LINK_NUM_LINKS];
 
 
-static void SelectLinkRegionCallBack(MOUSE_REGION* pRegion, INT32 iReason);
+static void SelectLinkRegionCallBack(MOUSE_REGION* pRegion, UINT32 iReason);
 
 
 void EnterAimLinks()
@@ -55,11 +55,11 @@ void EnterAimLinks()
 	InitAimMenuBar();
 
 	// Load the Bobby link graphic.
-	guiBobbyLink = AddVideoObjectFromFile(GetMLGFilename(MLG_BOBBYRAYLINK));
+	guiBobbyLink = AddVideoObjectFromFile(MLG_BOBBYRAYLINK);
 	// Load the Funeral graphic.
-	guiFuneralLink = AddVideoObjectFromFile(GetMLGFilename(MLG_MORTUARYLINK));
+	guiFuneralLink = AddVideoObjectFromFile(MLG_MORTUARYLINK);
 	// Load the Insurance graphic.
-	guiInsuranceLink = AddVideoObjectFromFile(GetMLGFilename(MLG_INSURANCELINK));
+	guiInsuranceLink = AddVideoObjectFromFile(MLG_INSURANCELINK);
 
 	UINT16 const  x    = STD_SCREEN_X + AIM_LINK_LINK_OFFSET_X;
 	UINT16        y    = AIM_LINK_BOBBY_LINK_Y;
@@ -107,9 +107,9 @@ void RenderAimLinks()
 }
 
 
-static void SelectLinkRegionCallBack(MOUSE_REGION* pRegion, INT32 iReason)
+static void SelectLinkRegionCallBack(MOUSE_REGION* pRegion, UINT32 iReason)
 {
-	if (iReason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (iReason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		UINT32	gNextLaptopPage;
 

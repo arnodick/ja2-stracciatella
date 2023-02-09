@@ -16,7 +16,7 @@
 #include "Campaign.h"
 #include "MapScreen.h"
 #include "Soldier_Macros.h"
-#include "slog/slog.h"
+#include "Logger.h"
 
 #define MORALE_MOD_MAX				50 // morale *mod* range is -50 to 50, if you change this, check the decay formulas!
 
@@ -26,12 +26,6 @@
 #define HOURS_BETWEEN_STRATEGIC_DECAY		3
 
 #define PHOBIC_LIMIT				-20
-
-
-// macros
-#define SOLDIER_IN_SECTOR(s, x, y, z)		(!(s)->fBetweenSectors && (s)->sSectorX == (x) && (s)->sSectorY == (y) && (s)->bSectorZ == (z))
-
-
 
 MoraleEvent gbMoraleEvent[NUM_MORALE_EVENTS] =
 {
@@ -120,11 +114,11 @@ static void DecayTacticalMorale(SOLDIERTYPE* pSoldier)
 		// decay the modifier!
 		if (pSoldier->bTacticalMoraleMod > 0)
 		{
-			pSoldier->bTacticalMoraleMod = __max( 0, pSoldier->bTacticalMoraleMod - (8 - pSoldier->bTacticalMoraleMod / 10) );
+			pSoldier->bTacticalMoraleMod = std::max(0, pSoldier->bTacticalMoraleMod - (8 - pSoldier->bTacticalMoraleMod / 10));
 		}
 		else
 		{
-			pSoldier->bTacticalMoraleMod = __min( 0, pSoldier->bTacticalMoraleMod + (6 + pSoldier->bTacticalMoraleMod / 10) );
+			pSoldier->bTacticalMoraleMod = std::min(0, pSoldier->bTacticalMoraleMod + (6 + pSoldier->bTacticalMoraleMod / 10));
 		}
 	}
 }
@@ -135,11 +129,11 @@ static void DecayStrategicMorale(SOLDIERTYPE* pSoldier)
 	// decay the modifier!
 	if (pSoldier->bStrategicMoraleMod > 0)
 	{
-		pSoldier->bStrategicMoraleMod = __max( 0, pSoldier->bStrategicMoraleMod - (8 - pSoldier->bStrategicMoraleMod / 10) );
+		pSoldier->bStrategicMoraleMod = std::max(0, pSoldier->bStrategicMoraleMod - (8 - pSoldier->bStrategicMoraleMod / 10));
 	}
 	else
 	{
-		pSoldier->bStrategicMoraleMod = __min( 0, pSoldier->bStrategicMoraleMod + (6 + pSoldier->bStrategicMoraleMod / 10) );
+		pSoldier->bStrategicMoraleMod = std::min(0, pSoldier->bStrategicMoraleMod + (6 + pSoldier->bStrategicMoraleMod / 10));
 	}
 }
 
@@ -160,12 +154,12 @@ void DecayTacticalMoraleModifiers(void)
 		switch (GetProfile(s->ubProfile).bPersonalityTrait)
 		{
 			case CLAUSTROPHOBIC:
-				if (s->bSectorZ > 0)
+				if (s->sSector.z > 0)
 				{
 					// underground, no recovery... in fact, if tact morale is high, decay
 					if (s->bTacticalMoraleMod > PHOBIC_LIMIT)
 					{
-						HandleMoraleEvent(s, MORALE_CLAUSTROPHOBE_UNDERGROUND, s->sSectorX, s->sSectorY, s->bSectorZ);
+						HandleMoraleEvent(s, MORALE_CLAUSTROPHOBE_UNDERGROUND, s->sSector);
 					}
 					continue;
 				}
@@ -175,7 +169,7 @@ void DecayTacticalMoraleModifiers(void)
 				if (s->bMorale < 50)
 				{
 					BOOLEAN handle_nervous;
-					if (s->ubGroupID != 0 && PlayerIDGroupInMotion(s->ubGroupID))
+					if (s->ubGroupID != 0 && s->bAssignment <= SQUAD_20 && PlayerIDGroupInMotion(s->ubGroupID))
 					{
 						handle_nervous = NumberOfPeopleInSquad(s->bAssignment) == 1;
 					}
@@ -190,9 +184,7 @@ void DecayTacticalMoraleModifiers(void)
 						CFOR_EACH_IN_TEAM(other, OUR_TEAM)
 						{
 							if (other != s &&
-									other->sSectorX == s->sSectorX &&
-									other->sSectorY == s->sSectorY &&
-									other->bSectorZ == s->bSectorZ)
+									other->sSector == s->sSector)
 							{
 								// found someone!
 								handle_nervous = FALSE;
@@ -215,7 +207,7 @@ void DecayTacticalMoraleModifiers(void)
 							TacticalCharacterDialogue(s, QUOTE_PERSONALITY_TRAIT);
 							s->usQuoteSaidFlags |= SOLDIER_QUOTE_SAID_PERSONALITY;
 						}
-						HandleMoraleEvent(s, MORALE_NERVOUS_ALONE, s->sSectorX, s->sSectorY, s->bSectorZ);
+						HandleMoraleEvent(s, MORALE_NERVOUS_ALONE, s->sSector);
 						continue;
 					}
 				}
@@ -269,9 +261,7 @@ void RefreshSoldierMorale( SOLDIERTYPE * pSoldier )
 	iActualMorale  += ( ( pSoldier->bDrugEffect[ DRUG_TYPE_ADRENALINE ] * DRUG_EFFECT_MORALE_MOD ) / 100 );
 	iActualMorale  += ( ( pSoldier->bDrugEffect[ DRUG_TYPE_ALCOHOL ] * ALCOHOL_EFFECT_MORALE_MOD ) / 100 );
 
-	iActualMorale = __min( 100, iActualMorale );
-	iActualMorale = __max( 0, iActualMorale );
-	pSoldier->bMorale = (INT8) iActualMorale;
+	pSoldier->bMorale = (INT8) std::clamp(iActualMorale, 0, 100);
 
 	// update mapscreen as needed
 	fCharacterInfoPanelDirty = TRUE;
@@ -280,7 +270,7 @@ void RefreshSoldierMorale( SOLDIERTYPE * pSoldier )
 
 static void UpdateSoldierMorale(SOLDIERTYPE* pSoldier, UINT8 ubType, INT8 bMoraleMod)
 {
-	INT32 iMoraleModTotal;
+	int iMoraleModTotal;
 
 	if (!pSoldier->bActive)              return;
 	if (pSoldier->bLife < CONSCIOUSNESS) return;
@@ -316,11 +306,7 @@ static void UpdateSoldierMorale(SOLDIERTYPE* pSoldier, UINT8 ubType, INT8 bMoral
 			default:
 				break;
 		}
-		if (bMoraleMod < 0)
-		{
-			// can't change a positive event into a negative one!
-			bMoraleMod = 0;
-		}
+		// bMoraleMod is always >= 0 at this point
 	}
 	else
 	{
@@ -355,22 +341,19 @@ static void UpdateSoldierMorale(SOLDIERTYPE* pSoldier, UINT8 ubType, INT8 bMoral
 	if (ubType == TACTICAL_MORALE_EVENT)
 	{
 		iMoraleModTotal = (INT32) pSoldier->bTacticalMoraleMod + (INT32) bMoraleMod;
-		iMoraleModTotal = __min( iMoraleModTotal, MORALE_MOD_MAX );
-		iMoraleModTotal = __max( iMoraleModTotal, -MORALE_MOD_MAX );
+		iMoraleModTotal = std::clamp(iMoraleModTotal, -MORALE_MOD_MAX, MORALE_MOD_MAX);
 		pSoldier->bTacticalMoraleMod = (INT8) iMoraleModTotal;
 	}
 	else if ( gTacticalStatus.fEnemyInSector && !pSoldier->bInSector ) // delayed strategic
 	{
 		iMoraleModTotal = (INT32) pSoldier->bDelayedStrategicMoraleMod + (INT32) bMoraleMod;
-		iMoraleModTotal = __min( iMoraleModTotal, MORALE_MOD_MAX );
-		iMoraleModTotal = __max( iMoraleModTotal, -MORALE_MOD_MAX );
+		iMoraleModTotal = std::clamp(iMoraleModTotal, -MORALE_MOD_MAX, MORALE_MOD_MAX);
 		pSoldier->bDelayedStrategicMoraleMod = (INT8) iMoraleModTotal;
 	}
 	else // strategic
 	{
 		iMoraleModTotal = (INT32) pSoldier->bStrategicMoraleMod + (INT32) bMoraleMod;
-		iMoraleModTotal = __min( iMoraleModTotal, MORALE_MOD_MAX );
-		iMoraleModTotal = __max( iMoraleModTotal, -MORALE_MOD_MAX );
+		iMoraleModTotal = std::clamp(iMoraleModTotal, -MORALE_MOD_MAX, MORALE_MOD_MAX);
 		pSoldier->bStrategicMoraleMod = (INT8) iMoraleModTotal;
 	}
 
@@ -411,7 +394,7 @@ static void HandleMoraleEventForSoldier(SOLDIERTYPE* pSoldier, INT8 bMoraleEvent
 }
 
 
-void HandleMoraleEvent( SOLDIERTYPE *pSoldier, INT8 bMoraleEvent, INT16 sMapX, INT16 sMapY, INT8 bMapZ )
+void HandleMoraleEvent(SOLDIERTYPE *pSoldier, INT8 bMoraleEvent, const SGPSector& sMap)
 {
 	gfSomeoneSaidMoraleQuote = FALSE;
 
@@ -419,15 +402,11 @@ void HandleMoraleEvent( SOLDIERTYPE *pSoldier, INT8 bMoraleEvent, INT16 sMapX, I
 	// Those that do need it have Asserts on a case by case basis below
 	if (pSoldier == NULL)
 	{
-		SLOGD(DEBUG_TAG_MORALE,
-			"Handling morale event %d at X=%d, Y=%d,Z=%d",
-			bMoraleEvent, sMapX, sMapY, bMapZ);
+		SLOGD("Handling morale event {} at {}", bMoraleEvent, sMap);
 	}
 	else
 	{
-		SLOGD(DEBUG_TAG_MORALE,
-			"Handling morale event %d for %ls at X=%d, Y=%d, Z=%d",
-			bMoraleEvent, pSoldier->name, sMapX, sMapY, bMapZ);
+		SLOGD("Handling morale event {} for {} at {}", bMoraleEvent, pSoldier->name, sMap);
 	}
 
 
@@ -463,7 +442,7 @@ void HandleMoraleEvent( SOLDIERTYPE *pSoldier, INT8 bMoraleEvent, INT16 sMapX, I
 			// affects everyone to varying degrees
 			FOR_EACH_IN_TEAM(s, OUR_TEAM)
 			{
-				if (SOLDIER_IN_SECTOR(s, sMapX, sMapY, bMapZ))
+				if (!s->fBetweenSectors && s->sSector == sMap)
 				{
 					HandleMoraleEventForSoldier(s, MORALE_BATTLE_WON);
 				}
@@ -479,14 +458,11 @@ void HandleMoraleEvent( SOLDIERTYPE *pSoldier, INT8 bMoraleEvent, INT16 sMapX, I
 			FOR_EACH_IN_TEAM(i, OUR_TEAM)
 			{
 				SOLDIERTYPE& s = *i;
-				// CJC: adding to SOLDIER_IN_SECTOR check special stuff because the old
-				// sector values might be appropriate (because in transit going out of
+				// the old sector values might be appropriate (because in transit going out of
 				// that sector!)
-				if (SOLDIER_IN_SECTOR(&s, sMapX, sMapY, bMapZ) ||
-					(s.fBetweenSectors &&
-					s.ubPrevSectorID % 16 + 1 == sMapX &&
-					s.ubPrevSectorID / 16 + 1 == sMapY &&
-					s.bSectorZ == bMapZ))
+				if ((!s.fBetweenSectors && s.sSector == sMap) ||
+					(s.fBetweenSectors && s.sSector.z == sMap.z &&
+					SGPSector(s.ubPrevSectorID) == sMap))
 				{
 					switch (GetProfile(s.ubProfile).bAttitude)
 					{
@@ -535,7 +511,7 @@ void HandleMoraleEvent( SOLDIERTYPE *pSoldier, INT8 bMoraleEvent, INT16 sMapX, I
 			// affects every in sector
 			FOR_EACH_IN_TEAM(s, OUR_TEAM)
 			{
-				if (SOLDIER_IN_SECTOR(s, sMapX, sMapY, bMapZ))
+				if (!s->fBetweenSectors && s->sSector == sMap)
 				{
 					HandleMoraleEventForSoldier(s, bMoraleEvent);
 				}
@@ -571,7 +547,7 @@ void HandleMoraleEvent( SOLDIERTYPE *pSoldier, INT8 bMoraleEvent, INT16 sMapX, I
 				}
 				else
 				{
-					if (SOLDIER_IN_SECTOR(&other, sMapX, sMapY, bMapZ))
+					if (!other.fBetweenSectors && other.sSector == sMap)
 					{
 						// Mate died in my sector! tactical morale mod
 						HandleMoraleEventForSoldier(&other, MORALE_SQUADMATE_DIED);
@@ -590,6 +566,9 @@ void HandleMoraleEvent( SOLDIERTYPE *pSoldier, INT8 bMoraleEvent, INT16 sMapX, I
 			break;
 
 		case MORALE_MERC_MARRIED:
+			// needs specific soldier!
+			Assert(pSoldier);
+
 			// Female mercs get unhappy based on how sexist they are (=hate men),
 			// gentlemen males get unhappy too
 			FOR_EACH_IN_TEAM(i, OUR_TEAM)
@@ -627,7 +606,7 @@ void HandleMoraleEvent( SOLDIERTYPE *pSoldier, INT8 bMoraleEvent, INT16 sMapX, I
 
 		default:
 			// debug message
-			SLOGI(DEBUG_TAG_MORALE, "Invalid morale event type = %d.", bMoraleEvent);
+			SLOGI("Invalid morale event type = {}.", bMoraleEvent);
 			break;
 	}
 
@@ -732,9 +711,7 @@ void HourlyMoraleUpdate()
 			else
 			{
 				// Check to see if the location is the same
-				if (other->sSectorX != s->sSectorX) continue;
-				if (other->sSectorY != s->sSectorY) continue;
-				if (other->bSectorZ != s->bSectorZ) continue;
+				if (other->sSector != s->sSector) continue;
 
 				// If the OTHER soldier is in motion then we don't do anything!
 				if (other->ubGroupID != 0 && PlayerIDGroupInMotion(other->ubGroupID)) continue;
@@ -744,18 +721,32 @@ void HourlyMoraleUpdate()
 			if (opinion == HATED_OPINION)
 			{
 				INT8 const hated = WhichHated(s->ubProfile, other->ubProfile);
-				if (hated >= 2 || // Learn to hate which has become full-blown hatred, full strength
-					p.bHatedCount[hated] <= p.bHatedTime[hated] / 2)
+				INT8 hated_time = 0;
+				if (hated > 2)
 				{
-					// We're teamed with someone we hate! We HATE this! Ignore everyone else!
+					// Learn to hate which has become full-blown hatred, full strength
 					found_hated = true;
 					break;
 				}
+				else if (hated >= 0)
+				{
+					hated_time = p.bHatedTime[hated];
+					if (p.bHatedCount[hated] <= hated_time)
+					{
+						// We're teamed with someone we hate! We HATE this! Ignore everyone else!
+						found_hated = true;
+						break;
+					}
+				}
+				else
+				{
+					SLOGW("Unexpected WhichHated() result");
+				}
+
 				// Otherwise just mix this opinion in with everyone else
 
 				// Scale according to how close to we are to snapping
 				//KM : Divide by 0 error found.  Wrapped into an if statement.
-				INT8 const hated_time = p.bHatedTime[hated];
 				if (hated_time != 0)
 				{
 					opinion = (INT32)opinion * (hated_time - p.bHatedCount[hated]) / hated_time;
@@ -803,16 +794,14 @@ void HourlyMoraleUpdate()
 			team_morale_mod_diff < 0 ? -1 + team_morale_mod_diff / 10 :
 			0;
 		s->bTeamMoraleMod += team_morale_mod_change;
-		s->bTeamMoraleMod = __min(s->bTeamMoraleMod,  MORALE_MOD_MAX);
-		s->bTeamMoraleMod = __max(s->bTeamMoraleMod, -MORALE_MOD_MAX);
+		s->bTeamMoraleMod = std::clamp(int(s->bTeamMoraleMod), -MORALE_MOD_MAX, MORALE_MOD_MAX);
 
 		// New, December 3rd, 1998, by CJC --
 		// If delayed strategic modifier exists then incorporate it in strategic mod
 		if (s->bDelayedStrategicMoraleMod != 0)
 		{
 			s->bStrategicMoraleMod       += s->bDelayedStrategicMoraleMod;
-			s->bStrategicMoraleMod        = __min(s->bStrategicMoraleMod,  MORALE_MOD_MAX);
-			s->bStrategicMoraleMod        = __max(s->bStrategicMoraleMod, -MORALE_MOD_MAX);
+			s->bStrategicMoraleMod        = std::clamp(int(s->bStrategicMoraleMod), -MORALE_MOD_MAX, MORALE_MOD_MAX);
 			s->bDelayedStrategicMoraleMod = 0;
 		}
 
@@ -852,19 +841,19 @@ void DailyMoraleUpdate(SOLDIERTYPE *pSoldier)
 	if (MercThinksDeathRateTooHigh(GetProfile(pSoldier->ubProfile)))
 	{
 		// too high, morale takes a hit
-		HandleMoraleEvent( pSoldier, MORALE_HIGH_DEATHRATE, pSoldier->sSectorX, pSoldier->sSectorY, pSoldier->bSectorZ );
+		HandleMoraleEvent(pSoldier, MORALE_HIGH_DEATHRATE, pSoldier->sSector);
 	}
 
 	// check his morale vs. his morale tolerance once/day (ignores buddies!)
 	if ( MercThinksHisMoraleIsTooLow( pSoldier ) )
 	{
 		// too low, morale sinks further (merc's in a funk and things aren't getting better)
-		HandleMoraleEvent( pSoldier, MORALE_POOR_MORALE, pSoldier->sSectorX, pSoldier->sSectorY, pSoldier->bSectorZ );
+		HandleMoraleEvent(pSoldier, MORALE_POOR_MORALE, pSoldier->sSector);
 	}
 	else if ( pSoldier->bMorale >= 75 )
 	{
 		// very high morale, merc is cheerleading others
-		HandleMoraleEvent( pSoldier, MORALE_GREAT_MORALE, pSoldier->sSectorX, pSoldier->sSectorY, pSoldier->bSectorZ );
+		HandleMoraleEvent(pSoldier, MORALE_GREAT_MORALE, pSoldier->sSector);
 	}
 
 }

@@ -13,6 +13,8 @@
 #include "Button_System.h"
 #include "Font_Control.h"
 
+#include <string_theory/string>
+
 
 // buttons
 static BUTTON_PICS* giIMPAttributeFinishButtonImage[2];
@@ -22,8 +24,8 @@ GUIButtonRef giIMPAttributeFinishButton[2];
 extern void SetGeneratedCharacterAttributes( void );
 
 
-static void BtnIMPAttributeFinishYesCallback(GUI_BUTTON *btn, INT32 reason);
-static void BtnIMPAttributeFinishNoCallback(GUI_BUTTON *btn, INT32 reason);
+static void BtnIMPAttributeFinishYesCallback(GUI_BUTTON *btn, UINT32 reason);
+static void BtnIMPAttributeFinishNoCallback(GUI_BUTTON *btn, UINT32 reason);
 
 
 static void CreateAttributeFinishButtons(void);
@@ -63,7 +65,7 @@ void HandleIMPAttributeFinish( void )
 }
 
 
-static void MakeButton(UINT idx, const wchar_t* text, INT16 y, GUI_CALLBACK click)
+static void MakeButton(UINT idx, const ST::string& text, INT16 y, GUI_CALLBACK click)
 {
 	BUTTON_PICS* const img = LoadButtonImage(LAPTOPDIR "/button_2.sti", 0, 1);
 	giIMPAttributeFinishButtonImage[idx] = img;
@@ -99,9 +101,9 @@ static void DestroyAttributeFinishButtons(void)
 }
 
 
-static void BtnIMPAttributeFinishYesCallback(GUI_BUTTON *btn, INT32 reason)
+static void BtnIMPAttributeFinishYesCallback(GUI_BUTTON *btn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		// gone far enough
 		iCurrentImpPage = IMP_MAIN_PAGE;
@@ -122,9 +124,9 @@ static void BtnIMPAttributeFinishYesCallback(GUI_BUTTON *btn, INT32 reason)
 }
 
 
-static void BtnIMPAttributeFinishNoCallback(GUI_BUTTON *btn, INT32 reason)
+static void BtnIMPAttributeFinishNoCallback(GUI_BUTTON *btn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		// if no, return to attribute
 		iCurrentImpPage = IMP_ATTRIBUTE_PAGE;

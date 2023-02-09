@@ -28,6 +28,9 @@
 #include "WordWrap.h"
 #include "UILayout.h"
 
+#include <string_theory/string>
+
+
 #define GIO_TITLE_FONT			FONT16ARIAL//FONT14ARIAL
 #define GIO_TITLE_COLOR		FONT_MCOLOR_WHITE
 
@@ -136,37 +139,37 @@ static SGPVObject* guiGIOMainBackGroundImage;
 
 
 // Done Button
-static void BtnGIODoneCallback(GUI_BUTTON *btn,INT32 reason);
+static void BtnGIODoneCallback(GUI_BUTTON *btn,UINT32 reason);
 static GUIButtonRef guiGIODoneButton;
 static BUTTON_PICS* giGIODoneBtnImage;
 
 // Cancel Button
-static void BtnGIOCancelCallback(GUI_BUTTON *btn, INT32 reason);
+static void BtnGIOCancelCallback(GUI_BUTTON *btn, UINT32 reason);
 static GUIButtonRef guiGIOCancelButton;
 static BUTTON_PICS* giGIOCancelBtnImage;
 
 
 //checkbox to toggle the Diff level
 static GUIButtonRef guiDifficultySettingsToggles[NUM_DIF_LEVELS];
-static void BtnDifficultyTogglesCallback(GUI_BUTTON *btn, INT32 reason);
+static void BtnDifficultyTogglesCallback(GUI_BUTTON *btn, UINT32 reason);
 
 //checkbox to toggle Game style
 static GUIButtonRef guiGameStyleToggles[NUM_GAME_STYLES];
-static void BtnGameStyleTogglesCallback(GUI_BUTTON *btn,INT32 reason);
+static void BtnGameStyleTogglesCallback(GUI_BUTTON *btn,UINT32 reason);
 
 //checkbox to toggle Gun options
 static GUIButtonRef guiGunOptionToggles[NUM_GUN_OPTIONS];
-static void BtnGunOptionsTogglesCallback(GUI_BUTTON *btn, INT32 reason);
+static void BtnGunOptionsTogglesCallback(GUI_BUTTON *btn, UINT32 reason);
 
 #if 0// JA2Gold: no more timed turns setting
 //checkbox to toggle Timed turn option on or off
 static UINT32 guiTimedTurnToggles[GIO_NUM_TIMED_TURN_OPTIONS];
-static void BtnTimedTurnsTogglesCallback(GUI_BUTTON *btn, INT32 reason);
+static void BtnTimedTurnsTogglesCallback(GUI_BUTTON *btn, UINT32 reason);
 #endif
 
 //checkbox to toggle Save style
 static GUIButtonRef guiGameSaveToggles[NUM_SAVE_OPTIONS];
-static void BtnGameSaveTogglesCallback(GUI_BUTTON *btn, INT32 reason);
+static void BtnGameSaveTogglesCallback(GUI_BUTTON *btn, UINT32 reason);
 
 
 static void EnterGIOScreen();
@@ -177,7 +180,7 @@ static void GetGIOScreenUserInput(void);
 static void RestoreGIOButtonBackGrounds(void);
 static void DoneFadeOutForExitGameInitOptionScreen(void);
 static void DisplayMessageToUserAboutGameDifficulty(void);
-static void DisplayMessageToUserAboutDeadIsDeadSaveScreen(const wchar_t, MSGBOX_CALLBACK);
+static void DisplayMessageToUserAboutDeadIsDeadSaveScreen(const ST::string& zString, MSGBOX_CALLBACK ReturnCallback);
 static void ConfirmGioDifSettingMessageBoxCallBack(MessageBoxReturnValue);
 static BOOLEAN DisplayMessageToUserAboutIronManMode(void);
 static void ConfirmGioIronManMessageBoxCallBack(MessageBoxReturnValue);
@@ -206,7 +209,6 @@ ScreenID GameInitOptionsScreenHandle(void)
 #if 0 // XXX was commented out
 	// render help
 	RenderFastHelp();
-	RenderButtonsFastHelp();
 #endif
 
 	ExecuteBaseDirtyRectQueue();
@@ -240,7 +242,7 @@ ScreenID GameInitOptionsScreenHandle(void)
 }
 
 
-static GUIButtonRef MakeButton(BUTTON_PICS* const img, const wchar_t* const text, const INT16 x, const GUI_CALLBACK click)
+static GUIButtonRef MakeButton(BUTTON_PICS* img, const ST::string& text, INT16 x, GUI_CALLBACK click)
 {
 	GUIButtonRef const btn = CreateIconAndTextButton(img, text, OPT_BUTTON_FONT, OPT_BUTTON_ON_COLOR, DEFAULT_SHADOW, OPT_BUTTON_OFF_COLOR, DEFAULT_SHADOW, x, GIO_BTN_OK_Y, MSYS_PRIORITY_HIGH, click);
 	SpecifyButtonSoundScheme(btn, BUTTON_SOUND_SCHEME_BIGSWITCH3);
@@ -250,7 +252,7 @@ static GUIButtonRef MakeButton(BUTTON_PICS* const img, const wchar_t* const text
 
 static void MakeCheckBoxes(GUIButtonRef* const btns, size_t const n, INT16 const x, INT16 y, GUI_CALLBACK const click, size_t const def)
 {
-	for (INT32 i = 0; i != n; y += GIO_GAP_BN_SETTINGS, ++i)
+	for (size_t i = 0; i != n; y += GIO_GAP_BN_SETTINGS, ++i)
 	{
 		GUIButtonRef const b = CreateCheckBoxButton(x, y, INTERFACEDIR "/optionscheck.sti", MSYS_PRIORITY_HIGH + 10, click);
 		btns[i] = b;
@@ -364,7 +366,7 @@ static void ExitGIOScreen()
 	gfGIOScreenEntry = TRUE;
 }
 
-static void DisplayMessageToUserAboutDeadIsDeadSaveScreen(const wchar_t *zString, MSGBOX_CALLBACK ReturnCallback)
+static void DisplayMessageToUserAboutDeadIsDeadSaveScreen(const ST::string& zString, MSGBOX_CALLBACK ReturnCallback)
 {
 	gubGameOptionScreenHandler = GIO_EXIT;
 	DoMessageBox(MSG_BOX_BASIC_STYLE, zString, GAME_INIT_OPTIONS_SCREEN, MSG_BOX_FLAG_OK, ReturnCallback, NULL);
@@ -496,7 +498,7 @@ static void GetGIOScreenUserInput(void)
 {
 	InputAtom Event;
 
-	while (DequeueEvent(&Event))
+	while (DequeueSpecificEvent(&Event, KEYBOARD_EVENTS))
 	{
 		if (Event.usEvent == KEY_DOWN)
 		{
@@ -530,36 +532,36 @@ template<typename T> static inline void SelectCheckbox(T& array, GUI_BUTTON cons
 }
 
 
-static void BtnDifficultyTogglesCallback(GUI_BUTTON *btn, INT32 reason)
+static void BtnDifficultyTogglesCallback(GUI_BUTTON *btn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		SelectCheckbox(guiDifficultySettingsToggles, *btn);
 	}
 }
 
 
-static void BtnGameStyleTogglesCallback(GUI_BUTTON *btn, INT32 reason)
+static void BtnGameStyleTogglesCallback(GUI_BUTTON *btn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		SelectCheckbox(guiGameStyleToggles, *btn);
 	}
 }
 
 
-static void BtnGameSaveTogglesCallback(GUI_BUTTON *btn, INT32 reason)
+static void BtnGameSaveTogglesCallback(GUI_BUTTON *btn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		SelectCheckbox(guiGameSaveToggles, *btn);
 	}
 }
 
 
-static void BtnGunOptionsTogglesCallback(GUI_BUTTON *btn, INT32 reason)
+static void BtnGunOptionsTogglesCallback(GUI_BUTTON *btn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		SelectCheckbox(guiGunOptionToggles, *btn);
 	}
@@ -567,9 +569,9 @@ static void BtnGunOptionsTogglesCallback(GUI_BUTTON *btn, INT32 reason)
 
 
 #if 0 // JA2Gold: no more timed turns setting
-static void BtnTimedTurnsTogglesCallback(GUI_BUTTON *btn, INT32 reason)
+static void BtnTimedTurnsTogglesCallback(GUI_BUTTON *btn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		SelectCheckbox(guiTimedTurnToggles, *btn);
 	}
@@ -577,9 +579,9 @@ static void BtnTimedTurnsTogglesCallback(GUI_BUTTON *btn, INT32 reason)
 #endif
 
 
-static void BtnGIODoneCallback(GUI_BUTTON *btn,INT32 reason)
+static void BtnGIODoneCallback(GUI_BUTTON *btn,UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		//if the user doesnt have IRON MAN mode selected
 		if (!DisplayMessageToUserAboutIronManMode())
@@ -591,9 +593,9 @@ static void BtnGIODoneCallback(GUI_BUTTON *btn,INT32 reason)
 }
 
 
-static void BtnGIOCancelCallback(GUI_BUTTON *btn, INT32 reason)
+static void BtnGIOCancelCallback(GUI_BUTTON *btn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		gubGameOptionScreenHandler = GIO_CANCEL;
 	}
@@ -740,7 +742,7 @@ static void DoneFadeOutForExitGameInitOptionScreen(void)
 }
 
 
-static void DoGioMessageBox(const wchar_t *zString, MSGBOX_CALLBACK ReturnCallback)
+static void DoGioMessageBox(const ST::string& zString, MSGBOX_CALLBACK ReturnCallback)
 {
 	DoMessageBox(MSG_BOX_BASIC_STYLE, zString, GAME_INIT_OPTIONS_SCREEN, MSG_BOX_FLAG_YESNO, ReturnCallback, NULL);
 }
@@ -748,8 +750,7 @@ static void DoGioMessageBox(const wchar_t *zString, MSGBOX_CALLBACK ReturnCallba
 
 static void DisplayMessageToUserAboutGameDifficulty(void)
 {
-	const wchar_t* text;
-	text = zGioDifConfirmText[GetCurrentDifficultyButtonSetting()];
+	ST::string text = zGioDifConfirmText[GetCurrentDifficultyButtonSetting()];
 	DoGioMessageBox(text, ConfirmGioDifSettingMessageBoxCallBack);
 }
 

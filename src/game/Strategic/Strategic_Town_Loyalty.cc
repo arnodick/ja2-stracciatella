@@ -8,6 +8,8 @@
 #include "Animation_Data.h"
 #include "Quests.h"
 #include "Message.h"
+#include "GameInstance.h"
+#include "ContentManager.h"
 #include "LOS.h"
 #include "World_Items.h"
 #include "Tactical_Save.h"
@@ -27,10 +29,15 @@
 #include "Meanwhile.h"
 #include "GameSettings.h"
 #include "Strategic_Status.h"
-#include "MemMan.h"
 #include "Debug.h"
 #include "FileMan.h"
-#include "slog/slog.h"
+#include "Logger.h"
+
+#include <string_theory/string>
+
+#include <algorithm>
+#include <iterator>
+#include <vector>
 
 // the max loyalty rating for any given town
 #define MAX_LOYALTY_VALUE 100
@@ -71,7 +78,7 @@ TOWN_LOYALTY gTownLoyalty[ NUM_TOWNS ];
 
 
 // Town names and locations
-TownSectorInfo g_town_sectors[40];
+std::vector<TownSectorInfo> g_town_sectors;
 
 
 #define BASIC_COST_FOR_CIV_MURDER	(10 * GAIN_PTS_PER_LOYALTY_PT)
@@ -223,7 +230,7 @@ void IncrementTownLoyalty( INT8 bTownId, UINT32 uiLoyaltyIncrease )
 	uiRemainingIncrement = uiLoyaltyIncrease;
 	while ( uiRemainingIncrement )
 	{
-		sThisIncrement = ( INT16 ) MIN( uiRemainingIncrement, 10000 );
+		sThisIncrement = ( INT16 ) std::min(uiRemainingIncrement, 10000U);
 
 		// up the gain value
 		gTownLoyalty[ bTownId ].sChange += (INT16) sThisIncrement;
@@ -259,7 +266,7 @@ void DecrementTownLoyalty( INT8 bTownId, UINT32 uiLoyaltyDecrease )
 	uiRemainingDecrement = uiLoyaltyDecrease;
 	while ( uiRemainingDecrement )
 	{
-		sThisDecrement = ( INT16 ) MIN( uiRemainingDecrement, 10000 );
+		sThisDecrement = ( INT16 ) std::min(uiRemainingDecrement, 10000U);
 
 		// down the gain value
 		gTownLoyalty[ bTownId ].sChange -= sThisDecrement;
@@ -343,7 +350,7 @@ static void UpdateTownLoyaltyRating(INT8 bTownId)
 }
 
 
-static void AffectAllTownsLoyaltyByDistanceFrom(INT32 iLoyaltyChange, INT16 sSectorX, INT16 sSectorY, INT8 bSectorZ);
+static void AffectAllTownsLoyaltyByDistanceFrom(INT32 iLoyaltyChange, const SGPSector& sSector);
 
 
 void HandleMurderOfCivilian(const SOLDIERTYPE* const pSoldier)
@@ -396,10 +403,10 @@ void HandleMurderOfCivilian(const SOLDIERTYPE* const pSoldier)
 	if( bKillerTeam == OUR_TEAM )
 	{
 		// apply morale penalty for killing a civilian!
-		HandleMoraleEvent(killer, MORALE_KILLED_CIVILIAN, killer->sSectorX, killer->sSectorY, killer->bSectorZ);
+		HandleMoraleEvent(killer, MORALE_KILLED_CIVILIAN, killer->sSector);
 	}
 
-	UINT8 const bTownId = GetTownIdForSector(SECTOR(pSoldier->sSectorX, pSoldier->sSectorY));
+	UINT8 const bTownId = GetTownIdForSector(pSoldier->sSector);
 
 	// if civilian is NOT in a town
 	if( bTownId == BLANK_SECTOR )
@@ -492,7 +499,7 @@ void HandleMurderOfCivilian(const SOLDIERTYPE* const pSoldier)
 			iLoyaltyChange /= 100;
 
 			// debug message
-			SLOGD(DEBUG_TAG_LOYALTY, "You're being blamed for a death you didn't cause!");
+			SLOGD("You're being blamed for a death you didn't cause!");
 		}
 	}
 
@@ -505,18 +512,18 @@ void HandleMurderOfCivilian(const SOLDIERTYPE* const pSoldier)
 			fIncrement = FALSE;
 
 			// debug message
-			SLOGD(DEBUG_TAG_LOYALTY, "Civilian killed by friendly forces.");
+			SLOGD("Civilian killed by friendly forces.");
 			break;
 
 		case ENEMY_TEAM:
 			// check whose sector this is
-			if (StrategicMap[pSoldier->sSectorX + MAP_WORLD_X * pSoldier->sSectorY].fEnemyControlled)
+			if (StrategicMap[pSoldier->sSector.AsStrategicIndex()].fEnemyControlled)
 			{
 				// enemy soldiers... in enemy controlled sector.  Gain loyalty
 				fIncrement = TRUE;
 
 				// debug message
-				SLOGD(DEBUG_TAG_LOYALTY, "Enemy soldiers murdered a civilian. Town loyalty increases");
+				SLOGD("Enemy soldiers murdered a civilian. Town loyalty increases");
 			}
 			else
 			{
@@ -528,7 +535,7 @@ void HandleMurderOfCivilian(const SOLDIERTYPE* const pSoldier)
 				fIncrement = FALSE;
 
 				// debug message
-				SLOGD(DEBUG_TAG_LOYALTY, "Town holds you responsible for murder by enemy.");
+				SLOGD("Town holds you responsible for murder by enemy.");
 			}
 			break;
 
@@ -544,7 +551,7 @@ void HandleMurderOfCivilian(const SOLDIERTYPE* const pSoldier)
 				fIncrement = FALSE;
 
 				// debug message
-				SLOGD(DEBUG_TAG_LOYALTY, "Town holds you responsible for murder by rebels.");
+				SLOGD("Town holds you responsible for murder by rebels.");
 			}
 			break;
 
@@ -556,7 +563,7 @@ void HandleMurderOfCivilian(const SOLDIERTYPE* const pSoldier)
 				iLoyaltyChange *= MULTIPLIER_FOR_MURDER_BY_MONSTER;
 
 				// check whose sector this is
-				if (StrategicMap[pSoldier->sSectorX + MAP_WORLD_X * pSoldier->sSectorY].fEnemyControlled)
+				if (StrategicMap[pSoldier->sSector.AsStrategicIndex()].fEnemyControlled)
 				{
 					// enemy controlled sector - gain loyalty
 					fIncrement = TRUE;
@@ -585,7 +592,7 @@ void HandleMurderOfCivilian(const SOLDIERTYPE* const pSoldier)
 	iLoyaltyChange *= 100;
 	iLoyaltyChange /= (100 + ( 25 * LOYALTY_EVENT_DISTANCE_THRESHOLD ) );
 
-	AffectAllTownsLoyaltyByDistanceFrom( iLoyaltyChange, pSoldier->sSectorX, pSoldier->sSectorY, pSoldier->bSectorZ );
+	AffectAllTownsLoyaltyByDistanceFrom(iLoyaltyChange, pSoldier->sSector);
 }
 
 
@@ -595,7 +602,7 @@ void HandleTownLoyaltyForNPCRecruitment( SOLDIERTYPE *pSoldier )
 {
 	UINT32 uiLoyaltyValue = 0;
 
-	UINT8 const bTownId = GetTownIdForSector(SECTOR(pSoldier->sSectorX, pSoldier->sSectorY));
+	UINT8 const bTownId = GetTownIdForSector(pSoldier->sSector);
 
 	// is the merc currently in their home town?
 	if( bTownId == gMercProfiles[ pSoldier->ubProfile ].bTown )
@@ -611,65 +618,57 @@ void HandleTownLoyaltyForNPCRecruitment( SOLDIERTYPE *pSoldier )
 	}
 }
 
-void RemoveRandomItemsInSector(INT16 const sSectorX, INT16 const sSectorY, INT16 const sSectorZ, UINT8 const ubChance)
+void RemoveRandomItemsInSector(const SGPSector& sSector, UINT8 const ubChance)
 {
 	/* Stealing should fail anyway 'cause there shouldn't be a temp file for
 	 * unvisited sectors, but let's check anyway */
-	Assert(GetSectorFlagStatus(sSectorX, sSectorY, sSectorZ, SF_ALREADY_VISITED));
+	Assert(GetSectorFlagStatus(sSector, SF_ALREADY_VISITED));
 
-	wchar_t wSectorName[128];
-	GetSectorIDString(sSectorX, sSectorY, sSectorZ, wSectorName, lengthof(wSectorName), TRUE);
+	ST::string wSectorName = GetSectorIDString(sSector, TRUE);
 
 	// go through list of items in sector and randomly remove them
 
 	// if unloaded sector
-	if (gWorldSectorX  != sSectorX ||
-			gWorldSectorY  != sSectorY ||
-			gbWorldSectorZ != sSectorZ)
+	if (gWorldSector != sSector)
 	{
 		/* if the player has never been there, there's no temp file, and 0 items
 		 * will get returned, preventing any stealing */
-		UINT32     uiNumberOfItems;
-		WORLDITEM* pItemList;
-		LoadWorldItemsFromTempItemFile(sSectorX, sSectorY, sSectorZ, &uiNumberOfItems, &pItemList);
-		if (uiNumberOfItems == 0) return;
+		std::vector<WORLDITEM> pItemList = LoadWorldItemsFromTempItemFile(sSector);
+		if (pItemList.size() == 0) return;
 
-		UINT32 uiNewTotal = uiNumberOfItems;
+		bool somethingWasStolen = false;
 
 		// set up item list ptrs
-		WORLDITEM const* const end = pItemList + uiNumberOfItems;
-		for (WORLDITEM* wi = pItemList; wi != end; ++wi)
+		for (WORLDITEM& wi : pItemList)
 		{
 			//if the item exists, and is visible and reachable, see if it should be stolen
-			if (!wi->fExists)                          continue;
-			if (wi->bVisible != VISIBLE)               continue;
-			if (!(wi->usFlags & WORLD_ITEM_REACHABLE)) continue;
+			if (!wi.fExists)                          continue;
+			if (wi.bVisible != VISIBLE)               continue;
+			if (!(wi.usFlags & WORLD_ITEM_REACHABLE)) continue;
 			if (Random(100) >= ubChance)               continue;
 
 			// remove
-			--uiNewTotal;
-			wi->fExists = FALSE;
+			somethingWasStolen = true;
+			wi.fExists = FALSE;
 
-			SLOGD(DEBUG_TAG_LOYALTY, "%ls stolen in %ls!", ItemNames[wi->o.usItem], wSectorName);
+			SLOGD("{} stolen in {}!", GCM->getItem(wi.o.usItem)->getName(), wSectorName);
 		}
 
 		// only save if something was stolen
-		if (uiNewTotal < uiNumberOfItems)
+		if (somethingWasStolen)
 		{
-			SaveWorldItemsToTempItemFile(sSectorX, sSectorY, sSectorZ, uiNumberOfItems, pItemList);
+			SaveWorldItemsToTempItemFile(sSector, pItemList);
 		}
-
-		MemFree(pItemList);
 	}
 	else	// handle a loaded sector
 	{
 		FOR_EACH_WORLD_ITEM(wi)
 		{
 			// note, can't do reachable test here because we'd have to do a path call
-			if (wi->bVisible != VISIBLE) continue;
+			if (wi.bVisible != VISIBLE) continue;
 			if (Random(100) >= ubChance) continue;
 
-			SLOGD(DEBUG_TAG_LOYALTY, "%ls stolen in %ls!", ItemNames[wi->o.usItem], wSectorName);
+			SLOGD("{} stolen in {}!", GCM->getItem(wi.o.usItem)->getName(), wSectorName);
 			RemoveItemFromPool(wi);
 		}
 	}
@@ -678,19 +677,16 @@ void RemoveRandomItemsInSector(INT16 const sSectorX, INT16 const sSectorY, INT16
 
 void BuildListOfTownSectors()
 {
-	memset(g_town_sectors, 0, sizeof(g_town_sectors));
-
-	TownSectorInfo* i = g_town_sectors;
-	for (INT32 x = 1; x != MAP_WORLD_X - 1; ++x)
+	SGPSector sMap;
+	for (sMap.x = 1; sMap.x != MAP_WORLD_X - 1; ++sMap.x)
 	{
-		for (INT32 y = 1; y != MAP_WORLD_Y - 1; ++y)
+		for (sMap.y = 1; sMap.y != MAP_WORLD_Y - 1; ++sMap.y)
 		{
-			INT8 const town = StrategicMap[CALCULATE_STRATEGIC_INDEX(x, y)].bNameId;
+			INT8 const town = StrategicMap[sMap.AsStrategicIndex()].bNameId;
 			if (town < FIRST_TOWN || NUM_TOWNS <= town) continue;
-
-			i->sector = SECTOR(x, y);
-			i->town   = town;
-			++i;
+			g_town_sectors.push_back(
+				TownSectorInfo{ (UINT8)town, sMap.AsByte() }
+			);
 		}
 	}
 }
@@ -702,7 +698,7 @@ void SaveStrategicTownLoyaltyToSaveGameFile(HWFILE const f)
 	FOR_EACH(TOWN_LOYALTY const, i, gTownLoyalty)
 	{
 		BYTE  data[26];
-		BYTE* d = data;
+		DataWriter d{data};
 		INJ_U8(  d, i->ubRating)
 		INJ_SKIP(d, 1)
 		INJ_I16( d, i->sChange)
@@ -710,9 +706,9 @@ void SaveStrategicTownLoyaltyToSaveGameFile(HWFILE const f)
 		INJ_SKIP(d, 1)
 		INJ_BOOL(d, i->fLiberatedAlready)
 		INJ_SKIP(d, 19)
-		Assert(d == endof(data));
+		Assert(d.getConsumed() == lengthof(data));
 
-		FileWrite(f, data, sizeof(data));
+		f->write(data, sizeof(data));
 	}
 }
 
@@ -723,9 +719,9 @@ void LoadStrategicTownLoyaltyFromSavedGameFile(HWFILE const f)
 	FOR_EACH(TOWN_LOYALTY, i, gTownLoyalty)
 	{
 		BYTE data[26];
-		FileRead(f, data, sizeof(data));
+		f->read(data, sizeof(data));
 
-		BYTE const* d = data;
+		DataReader d{data};
 		EXTR_U8(  d, i->ubRating)
 		EXTR_SKIP(d, 1)
 		EXTR_I16( d, i->sChange)
@@ -733,7 +729,7 @@ void LoadStrategicTownLoyaltyFromSavedGameFile(HWFILE const f)
 		EXTR_SKIP(d, 1)
 		EXTR_BOOL(d, i->fLiberatedAlready)
 		EXTR_SKIP(d, 19)
-		Assert(d == endof(data));
+		Assert(d.getConsumed() == lengthof(data));
 	}
 }
 
@@ -814,13 +810,13 @@ static INT32 IsTownUnderCompleteControlByEnemy(INT8 bTownId)
 	return GetTownSectorsUnderControl(bTownId) == 0;
 }
 
-void AdjustLoyaltyForCivsEatenByMonsters( INT16 sSectorX, INT16 sSectorY, UINT8 ubHowMany)
+void AdjustLoyaltyForCivsEatenByMonsters(const SGPSector& sSector, UINT8 ubHowMany)
 {
 	UINT32 uiLoyaltyChange = 0;
-	wchar_t str[256];
-	wchar_t pSectorString[128];
+	ST::string str;
+	ST::string pSectorString;
 
-	UINT8 const bTownId = GetTownIdForSector(SECTOR(sSectorX, sSectorY));
+	UINT8 const bTownId = GetTownIdForSector(sSector);
 
 	// if NOT in a town
 	if( bTownId == BLANK_SECTOR )
@@ -829,8 +825,8 @@ void AdjustLoyaltyForCivsEatenByMonsters( INT16 sSectorX, INT16 sSectorY, UINT8 
 	}
 
 	//Report this to player
-	GetSectorIDString( sSectorX, sSectorY, 0, pSectorString, lengthof(pSectorString), TRUE );
-	swprintf( str, lengthof(str), gpStrategicString[ STR_DIALOG_CREATURES_KILL_CIVILIANS ], ubHowMany, pSectorString );
+	pSectorString = GetSectorIDString(sSector, TRUE);
+	str = st_format_printf(gpStrategicString[ STR_DIALOG_CREATURES_KILL_CIVILIANS ], ubHowMany, pSectorString);
 	DoScreenIndependantMessageBox( str, MSG_BOX_FLAG_OK, MapScreenDefaultOkBoxCallback );
 
 	// use same formula as if it were a civilian "murder" in tactical!!!
@@ -860,15 +856,15 @@ void DecrementTownLoyaltyEverywhere( UINT32 uiLoyaltyDecrease )
 	}
 }
 // this applies the change to every town differently, depending on the distance from the event
-void HandleGlobalLoyaltyEvent( UINT8 ubEventType, INT16 sSectorX, INT16 sSectorY, INT8 bSectorZ)
+void HandleGlobalLoyaltyEvent(UINT8 ubEventType, const SGPSector& sSector)
 {
 	INT32 iLoyaltyChange;
 	INT8 bTownId = 0;
 
-	if( bSectorZ == 0 )
+	if (sSector.z == 0)
 	{
 		// grab town id, if this event occured within one
-		bTownId = GetTownIdForSector(SECTOR(sSectorX, sSectorY));
+		bTownId = GetTownIdForSector(sSector);
 	}
 
 	// should other towns ignore events occuring in this town?
@@ -883,11 +879,11 @@ void HandleGlobalLoyaltyEvent( UINT8 ubEventType, INT16 sSectorX, INT16 sSectorY
 	switch (ubEventType)
 	{
 		case GLOBAL_LOYALTY_BATTLE_WON:
-			CheckConditionsForTriggeringCreatureQuest( sSectorX, sSectorY, bSectorZ );
+			CheckConditionsForTriggeringCreatureQuest();
 			iLoyaltyChange = 500;
 			break;
 		case GLOBAL_LOYALTY_QUEEN_BATTLE_WON:
-			CheckConditionsForTriggeringCreatureQuest( sSectorX, sSectorY, bSectorZ );
+			CheckConditionsForTriggeringCreatureQuest();
 			iLoyaltyChange = 1000;
 			break;
 		case GLOBAL_LOYALTY_BATTLE_LOST:
@@ -932,11 +928,11 @@ void HandleGlobalLoyaltyEvent( UINT8 ubEventType, INT16 sSectorX, INT16 sSectorY
 			return;
 	}
 
-	AffectAllTownsLoyaltyByDistanceFrom( iLoyaltyChange, sSectorX, sSectorY, bSectorZ);
+	AffectAllTownsLoyaltyByDistanceFrom(iLoyaltyChange, sSector);
 }
 
 
-static void AffectAllTownsLoyaltyByDistanceFrom(INT32 iLoyaltyChange, INT16 sSectorX, INT16 sSectorY, INT8 bSectorZ)
+static void AffectAllTownsLoyaltyByDistanceFrom(INT32 iLoyaltyChange, const SGPSector& sSector)
 {
 	INT16 sEventSector;
 	INT8 bTownId;
@@ -952,10 +948,10 @@ static void AffectAllTownsLoyaltyByDistanceFrom(INT32 iLoyaltyChange, INT16 sSec
 		iShortestDistance[ bTownId ] = 999999;
 	}
 
-	sEventSector = sSectorX + ( MAP_WORLD_X * sSectorY );
+	sEventSector = sSector.AsStrategicIndex();
 
 	// need a temporary group create to use for laying down distance paths
-	GROUP& g = *CreateNewPlayerGroupDepartingFromSector(sSectorX, sSectorY);
+	GROUP& g = *CreateNewPlayerGroupDepartingFromSector(sSector);
 
 	// calc distance to the event sector from EACH SECTOR of each town, keeping only the shortest one for every town
 	FOR_EACH_TOWN_SECTOR(i)
@@ -966,7 +962,7 @@ static void AffectAllTownsLoyaltyByDistanceFrom(INT32 iLoyaltyChange, INT16 sSec
 		if (iShortestDistance[ bTownId ] > 0 )
 		{
 			// calculate across how many sectors the fastest travel path from event to this town sector
-			iThisDistance = FindStratPath(sEventSector, SECTOR_INFO_TO_STRATEGIC_INDEX(i->sector), g, FALSE);
+			iThisDistance = FindStratPath(sEventSector, SGPSector(i->sector).AsStrategicIndex(), g, FALSE);
 
 			if (iThisDistance < iShortestDistance[ bTownId ])
 			{
@@ -987,7 +983,7 @@ static void AffectAllTownsLoyaltyByDistanceFrom(INT32 iLoyaltyChange, INT16 sSec
 		}
 
 		// if event was underground, double effective distance
-		if (bSectorZ != 0)
+		if (sSector.z != 0)
 		{
 			iShortestDistance[ bTownId ] *= 2;
 		}
@@ -1043,18 +1039,18 @@ static void AffectAllTownsLoyaltyByDistanceFrom(INT32 iLoyaltyChange, INT16 sSec
 
 
 // to be called whenever player gains control of a sector in any way
-void CheckIfEntireTownHasBeenLiberated( INT8 bTownId, INT16 sSectorX, INT16 sSectorY )
+void CheckIfEntireTownHasBeenLiberated(INT8 bTownId, const SGPSector& sSector)
 {
 	// the whole town is under our control, check if we never libed this town before
 	if ( !gTownLoyalty[ bTownId ].fLiberatedAlready && IsTownUnderCompleteControlByPlayer ( bTownId ) )
 	{
-		if ( MilitiaTrainingAllowedInSector( sSectorX, sSectorY, 0 ) )
+		if (MilitiaTrainingAllowedInSector(sSector))
 		{
 			// give a loyalty bonus
-			HandleGlobalLoyaltyEvent( GLOBAL_LOYALTY_LIBERATE_WHOLE_TOWN, sSectorX, sSectorY, 0 );
+			HandleGlobalLoyaltyEvent(GLOBAL_LOYALTY_LIBERATE_WHOLE_TOWN, sSector);
 
 			// set fact is has been lib'ed and set history event
-			AddHistoryToPlayersLog( HISTORY_LIBERATED_TOWN, bTownId, GetWorldTotalMin(), sSectorX, sSectorY );
+			AddHistoryToPlayersLog(HISTORY_LIBERATED_TOWN, bTownId, GetWorldTotalMin(), sSector);
 
 			HandleMeanWhileEventPostingForTownLiberation( bTownId );
 		}
@@ -1074,11 +1070,11 @@ void CheckIfEntireTownHasBeenLiberated( INT8 bTownId, INT16 sSectorX, INT16 sSec
 	}
 }
 
-void CheckIfEntireTownHasBeenLost( INT8 bTownId, INT16 sSectorX, INT16 sSectorY )
+void CheckIfEntireTownHasBeenLost(INT8 bTownId, const SGPSector& sSector)
 {
 	// NOTE:  only towns which allow you to train militia are important enough to get
 	// reported here (and they're the only ones you can protect)
-	if ( MilitiaTrainingAllowedInSector( sSectorX, sSectorY, 0 ) && IsTownUnderCompleteControlByEnemy(bTownId) )
+	if (MilitiaTrainingAllowedInSector(sSector) && IsTownUnderCompleteControlByEnemy(bTownId))
 	{
 		// the whole town is under enemy control, check if we libed this town before
 		if ( gTownLoyalty[ bTownId ].fLiberatedAlready )
@@ -1153,7 +1149,7 @@ void SetTheFirstBattleSector( INT16 sSectorValue )
 // Did first battle take place here?
 bool DidFirstBattleTakePlaceInThisTown(INT8 const town)
 {
-	return GetTownIdForSector(STRATEGIC_INDEX_TO_SECTOR_INFO(sWorldSectorLocationOfFirstBattle)) == town;
+	return GetTownIdForSector(SGPSector::FromStrategicIndex(sWorldSectorLocationOfFirstBattle)) == town;
 }
 
 
@@ -1166,9 +1162,9 @@ static UINT32 PlayerStrength(void)
 		if (s->bInSector ||
 			(
 				s->fBetweenSectors &&
-				s->ubPrevSectorID % 16 + 1 == gWorldSectorX &&
-				s->ubPrevSectorID / 16 + 1 == gWorldSectorY &&
-				s->bSectorZ == gbWorldSectorZ
+				s->ubPrevSectorID % 16 + 1 == gWorldSector.x &&
+				s->ubPrevSectorID / 16 + 1 == gWorldSector.y &&
+				s->sSector.z == gWorldSector.z
 			))
 		{
 			// count this person's strength (condition), calculated as life reduced up to half according to maxbreath
@@ -1197,11 +1193,11 @@ static UINT32 EnemyStrength(void)
 //Function assumes that mercs have retreated already.  Handles two cases, one for general merc retreat
 //which slightly demoralizes the mercs, the other handles abandonment of militia forces which poses
 //as a serious loyalty penalty.
-void HandleLoyaltyImplicationsOfMercRetreat( INT8 bRetreatCode, INT16 sSectorX, INT16 sSectorY, INT16 sSectorZ )
+void HandleLoyaltyImplicationsOfMercRetreat(INT8 bRetreatCode, const SGPSector& sSector)
 {
-	if( CountAllMilitiaInSector( sSectorX, sSectorY ) )
+	if (CountAllMilitiaInSector(sSector))
 	{ //Big morale penalty!
-		HandleGlobalLoyaltyEvent( GLOBAL_LOYALTY_ABANDON_MILITIA, sSectorX, sSectorY, (INT8)sSectorZ );
+		HandleGlobalLoyaltyEvent(GLOBAL_LOYALTY_ABANDON_MILITIA, sSector);
 	}
 
 	//Standard retreat penalty
@@ -1210,12 +1206,12 @@ void HandleLoyaltyImplicationsOfMercRetreat( INT8 bRetreatCode, INT16 sSectorX, 
 		// if not worse than 2:1 odds, then penalize morale
 		if ( gTacticalStatus.fEnemyInSector && ( PlayerStrength() * 2 >= EnemyStrength() ) )
 		{
-			HandleMoraleEvent( NULL, MORALE_RAN_AWAY, sSectorX, sSectorY, (INT8)sSectorZ );
+			HandleMoraleEvent(nullptr, MORALE_RAN_AWAY, sSector);
 		}
 	}
 	else
 	{
-		HandleMoraleEvent( NULL, MORALE_RAN_AWAY, sSectorX, sSectorY, (INT8)sSectorZ );
+		HandleMoraleEvent(nullptr, MORALE_RAN_AWAY, sSector);
 	}
 }
 

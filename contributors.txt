@@ -1,44 +1,66 @@
-Primal author of the project
-----------------------------
+Founder of the project
+----------------------
 
 Tron
-
 
 Contributors (sorted alphabetically)
 ------------------------------------
 
 Agatae (https://bitbucket.org/Agatae)
+akdjka
+Aleh Filipovich
+Alex Ellwein
+Alexander 'z33ky' Hirsch
+Alexander Gordeev
+Alexander von Gernler
+Alexandru Pinca
+Czcibór
+Darius Kazemi
 David Krawiec
 daviel
+Derek Chan
 Dmitry Marakasov
-derSteFfi <der_steffi@gmx.de>
 Edwin Buck
+Felix Zürker
+FluffyQuack
+Flávio J. Saraiva
+Gennady Trafimenkov
 Greg Kennedy
 Gregor Zorc
-Gennady Trafimenkov <gennady.trafimenkov@gmail.com>
-Jaka Kranjc <smgl@lynxlynx.info>
-JAsmine-ja2 (https://bitbucket.org/JAsmine-ja2)
+Guilherme Janczak
+Jaka Kranjc
+JAsmine-ja2
+JRF-github
+juzza1
 Manuel K
 mgl from The Bear's Pit Forum
 Michał Janiszewski
-Misanthropos <misanthropos@gmx.net>
+Mladen Milinkovic
 Momoko Hanasaki
-Nils Reuße <n.reusse@hxgn.net>
-Nils R <ml@hxgn.net>
+MrMaggot
+Nils Reuße
+noword
+oldlaptop
 Oliver Jankowski
-Peinthor Rene <peinthor@gmail.com>
+Pavel Timofeev
+Peinthor Rene
+Peter Piwowarski
 Poncho
+rebb
 Rebekka Bais (Logo Design)
-RinneT <thomas.rinsch@arcor.de>
-rk <rk@razlaw.name>
+Richard Fröhning
+RinneT
+rk
 RoddyAtHat
-sam <bg9zzxik@gmail.com>
-Stefan Lau <github@stefanlau.com>
-Stephan Bauroth <der_steffi@gmx.de>
+sam
+Seven
+Simon Bitschnau
+stefan
+Stefan Lau
+Stephan Bauroth
 sunshine from The Bear's Pit Forum
-vancv <vanc.vaclav@gmail.com>
-vxx <no@e.mail>
-wolf (committer to the original Tron's svn repository)
-
-
-(*) Please feel free to send update for this list to the project maintainer.
+Trenton Schulz
+tron
+vancv
+vxx
+wolf

@@ -13,14 +13,14 @@ extern MERCPROFILESTRUCT gMercProfiles[NUM_PROFILES];
 
 static inline MERCPROFILESTRUCT& GetProfile(ProfileID const id)
 {
-	Assert(id < lengthof(gMercProfiles));
-	return gMercProfiles[id];
+	if (id < lengthof(gMercProfiles))
+		return gMercProfiles[id];
+	SLOGA("invalid profile id {}", id);
+	abort();
 }
 
-#define AIM_AND_MERC_MERCS 51 // A.I.M. is 0-39, M.E.R.C.s are 40-50
-
 //enums for the mercs
-enum NPCIDs
+enum NPCIDs : ProfileID
 {
 	BARRY   =  0,
 	BLOOD   =  1,
@@ -186,7 +186,11 @@ enum NPCIDs
 	NPC167,
 	NPC168,
 	NPC169
+
+	// 200 is NO_PROFILE, defined in Soldier_Control.h
 };
+
+BOOLEAN IsProfileIdAnAimOrMERCMerc(UINT8 ubProfileID);
 
 void LoadMercProfiles();
 

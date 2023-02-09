@@ -12,7 +12,7 @@
 #include "Render_Dirty.h"
 #include "Text.h"
 #include "WordWrap.h"
-#include "Multi_Language_Graphic_Utils.h"
+#include "GameRes.h"
 #include "HelpScreen.h"
 #include "HelpScreenText.h"
 #include "Line.h"
@@ -33,6 +33,9 @@
 
 #include "ContentManager.h"
 #include "GameInstance.h"
+
+#include <string_theory/string>
+
 
 extern void PrintDate( void );
 extern void PrintNumberOnTeam( void );
@@ -313,7 +316,7 @@ static GUIButtonRef giHelpScreenScrollArrows[2];
 void InitHelpScreenSystem()
 {
 	//set some values
-	memset( &gHelpScreen, 0, sizeof( gHelpScreen ) );
+	gHelpScreen = HELP_SCREEN_STRUCT{};
 
 	//set it up so we can enter the screen
 	gfHelpScreenEntry = TRUE;
@@ -444,7 +447,7 @@ void HelpScreenHandler()
 	RenderButtons( );
 
 	SaveBackgroundRects( );
-	RenderButtonsFastHelp();
+	RenderFastHelp();
 
 	ExecuteBaseDirtyRectQueue();
 	EndFrameBufferRender();
@@ -465,8 +468,8 @@ void HelpScreenHandler()
 }
 
 
-static void BtnHelpScreenDontShowHelpAgainCallback(GUI_BUTTON* btn, INT32 reason);
-static void BtnHelpScreenExitCallback(GUI_BUTTON* btn, INT32 reason);
+static void BtnHelpScreenDontShowHelpAgainCallback(GUI_BUTTON* btn, UINT32 reason);
+static void BtnHelpScreenExitCallback(GUI_BUTTON* btn, UINT32 reason);
 static void ChangeHelpScreenSubPage(void);
 static void CreateHelpScreenButtons(void);
 static void CreateHelpScreenTextBuffer(void);
@@ -591,7 +594,7 @@ static void HandleHelpScreen(void)
 
 	if( gfScrollBoxIsScrolling )
 	{
-		if( gfLeftButtonState )
+		if( IsMouseButtonDown(MOUSE_BUTTON_LEFT) || IsMainFingerDown() )
 		{
 			HelpScreenMouseMoveScrollBox( gusMouseYPos );
 		}
@@ -819,7 +822,7 @@ static void SetSizeAndPropertiesOfHelpScreen(void)
 			break;
 
 		default:
-			SLOGE(DEBUG_TAG_ASSERTS, "Error in help screen.");
+			SLOGA("Error in help screen.");
 			break;
 	}
 
@@ -831,8 +834,8 @@ static void SetSizeAndPropertiesOfHelpScreen(void)
 }
 
 
-static void BtnHelpScreenBtnsCallback(GUI_BUTTON* btn, INT32 reason);
-static void GetHelpScreenText(UINT32 uiRecordToGet, wchar_t* pText);
+static void BtnHelpScreenBtnsCallback(GUI_BUTTON* btn, UINT32 reason);
+static ST::string GetHelpScreenText(UINT32 uiRecordToGet);
 
 
 static void CreateHelpScreenButtons(void)
@@ -852,8 +855,7 @@ static void CreateHelpScreenButtons(void)
 		for( i=0; i< gHelpScreen.bNumberOfButtons; i++ )
 		{
 			//get the text for the button
-			wchar_t sText[HELPSCREEN_RECORD_SIZE];
-			GetHelpScreenText(gHelpScreenBtnTextRecordNum[gHelpScreen.bCurrentHelpScreen][i], sText);
+			ST::string sText = GetHelpScreenText(gHelpScreenBtnTextRecordNum[gHelpScreen.bCurrentHelpScreen][i]);
 
 			giHelpScreenButtonsImage[i] = UseLoadedButtonImage( giExitBtnImage, -1,1,5,3,7 );
 
@@ -882,14 +884,9 @@ static void PrepareToExitHelpScreen(void);
 
 static void GetHelpScreenUserInput(void)
 {
-	SGPPoint MousePos;
-	GetMousePos(&MousePos);
-
 	InputAtom Event;
-	while( DequeueEvent( &Event ) )
+	while( DequeueSpecificEvent(&Event, KEYBOARD_EVENTS) )
 	{
-		MouseSystemHook(Event.usEvent, MousePos.iX, MousePos.iY);
-
 		if( !HandleTextInput( &Event ) && Event.usEvent == KEY_UP )
 		{
 			switch( Event.usParam )
@@ -976,7 +973,7 @@ static void HelpScreenSpecialExitCode(void)
 			break;
 
 		default:
-			SLOGE(DEBUG_TAG_ASSERTS, "Error in help screen.");
+			SLOGA("Error in help screen.");
 			break;
 	}
 }
@@ -1016,7 +1013,7 @@ static void SpecialHandlerCode(void)
 			break;
 
 		default:
-			SLOGE(DEBUG_TAG_ASSERTS, "Error in help screen: SpecialHandlerCode().");
+			SLOGA("Error in help screen: SpecialHandlerCode().");
 			break;
 	}
 }
@@ -1065,7 +1062,7 @@ static UINT16 RenderSpecificHelpScreen(void)
 
 		default:
 			SetFontDestBuffer(FRAME_BUFFER);
-			SLOGE(DEBUG_TAG_ASSERTS, "Error in help screen: RenderSpecificHelpScreen().");
+			SLOGA("Error in help screen: RenderSpecificHelpScreen().");
 			break;
 	}
 
@@ -1112,7 +1109,7 @@ static void DisplayCurrentScreenTitleAndFooter(void)
 		case HELP_SCREEN_LOAD_GAME:                  break;
 
 		default:
-			SLOGE(DEBUG_TAG_ASSERTS, "Error in help screen: DisplayCurrentScreenTitleAndFooter()." );
+			SLOGA("Error in help screen: DisplayCurrentScreenTitleAndFooter()." );
 			break;
 	}
 
@@ -1123,12 +1120,12 @@ static void DisplayCurrentScreenTitleAndFooter(void)
 	else
 		usWidth = gHelpScreen.usScreenWidth - HELP_SCREEN_TEXT_LEFT_MARGIN - HELP_SCREEN_TEXT_RIGHT_MARGIN_SPACE;
 
-	wchar_t zText[HELPSCREEN_RECORD_SIZE];
+	ST::string zText;
 
 	//if this screen has a valid title
 	if( iStartLoc != -1 )
 	{
-		GetHelpScreenText(iStartLoc, zText);
+		zText = GetHelpScreenText(iStartLoc);
 
 		SetFontShadow( NO_SHADOW );
 
@@ -1139,7 +1136,7 @@ static void DisplayCurrentScreenTitleAndFooter(void)
 	}
 
 	//Display the '( press H to get help... )'
-	GetHelpScreenText(HLP_TXT_CONSTANT_SUBTITLE, zText);
+	zText = GetHelpScreenText(HLP_TXT_CONSTANT_SUBTITLE);
 
 	usPosX = gHelpScreen.usLeftMarginPosX;
 
@@ -1150,7 +1147,7 @@ static void DisplayCurrentScreenTitleAndFooter(void)
 	if( !gHelpScreen.fForceHelpScreenToComeUp )
 	{
 		//calc location for the ' [ x ] Dont display again...'
-		GetHelpScreenText(HLP_TXT_CONSTANT_FOOTER, zText);
+		zText = GetHelpScreenText(HLP_TXT_CONSTANT_FOOTER);
 
 		usPosX = gHelpScreen.usLeftMarginPosX + HELP_SCREEN_SHOW_HELP_AGAIN_REGION_TEXT_OFFSET_X;
 
@@ -1164,9 +1161,9 @@ static void DisplayCurrentScreenTitleAndFooter(void)
 }
 
 
-static void BtnHelpScreenBtnsCallback(GUI_BUTTON* btn, INT32 reason)
+static void BtnHelpScreenBtnsCallback(GUI_BUTTON* btn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		//Get the btn id
 		INT8 const bRetValue = btn->GetUserData();
@@ -1230,9 +1227,9 @@ static void ChangeToHelpScreenSubPage(INT8 bNewPage)
 }
 
 
-static void GetHelpScreenText(const UINT32 uiRecordToGet, wchar_t* const pText)
+static ST::string GetHelpScreenText(UINT32 uiRecordToGet)
 {
-	GCM->loadEncryptedString(BINARYDATADIR "/help.edt", pText, HELPSCREEN_RECORD_SIZE * uiRecordToGet, HELPSCREEN_RECORD_SIZE);
+	return GCM->loadEncryptedString(BINARYDATADIR "/help.edt", HELPSCREEN_RECORD_SIZE * uiRecordToGet, HELPSCREEN_RECORD_SIZE);
 }
 
 
@@ -1243,8 +1240,7 @@ static UINT16 GetAndDisplayHelpScreenText(UINT32 uiRecord, UINT16 usPosX, UINT16
 
 	SetFontShadow( NO_SHADOW );
 
-	wchar_t zText[HELPSCREEN_RECORD_SIZE];
-	GetHelpScreenText( uiRecord, zText );
+	ST::string zText = GetHelpScreenText(uiRecord);
 
 	//Display the text
 	usNumVertPixels = IanDisplayWrappedString(usPosX, usPosY, usWidth, HELP_SCREEN_GAP_BTN_LINES, HELP_SCREEN_TEXT_BODY_FONT, HELP_SCREEN_TEXT_BODY_COLOR, zText, HELP_SCREEN_TEXT_BACKGROUND, 0);
@@ -1255,9 +1251,9 @@ static UINT16 GetAndDisplayHelpScreenText(UINT32 uiRecord, UINT16 usPosX, UINT16
 }
 
 
-static void BtnHelpScreenDontShowHelpAgainCallback(GUI_BUTTON* btn, INT32 reason)
+static void BtnHelpScreenDontShowHelpAgainCallback(GUI_BUTTON* btn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_DWN)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_DWN)
 	{
 /*
 		if( gHelpScreen.usHasPlayerSeenHelpScreenInCurrentScreen & ( 1 << gHelpScreen.bCurrentHelpScreen ) )
@@ -1283,9 +1279,9 @@ void NewScreenSoResetHelpScreen( )
 }
 
 
-static void BtnHelpScreenExitCallback(GUI_BUTTON* btn, INT32 reason)
+static void BtnHelpScreenExitCallback(GUI_BUTTON* btn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		PrepareToExitHelpScreen();
 	}
@@ -1898,7 +1894,7 @@ static void ChangeTopLineInTextBufferByAmount(INT32 const delta)
 	if (new_top > max_top) new_top = max_top;
 	if (new_top < 0)       new_top = 0;
 
-	if (new_top == top) return;
+	if (static_cast<UINT32>(new_top) == top) return;
 
 	top                   = new_top;
 	hlp.ubHelpScreenDirty = HLP_SCRN_DRTY_LVL_REFRESH_TEXT;
@@ -1955,9 +1951,9 @@ static void DisplayHelpScreenTextBufferScrollBox(void)
 }
 
 
-static void BtnHelpScreenScrollArrowsCallback(GUI_BUTTON* btn, INT32 reason);
-static void SelectHelpScrollAreaCallBack(MOUSE_REGION* pRegion, INT32 iReason);
-static void SelectHelpScrollAreaMovementCallBack(MOUSE_REGION* pRegion, INT32 iReason);
+static void BtnHelpScreenScrollArrowsCallback(GUI_BUTTON* btn, UINT32 reason);
+static void SelectHelpScrollAreaCallBack(MOUSE_REGION* pRegion, UINT32 iReason);
+static void SelectHelpScrollAreaMovementCallBack(MOUSE_REGION* pRegion, UINT32 iReason);
 
 
 static void CreateScrollAreaButtons(void)
@@ -2057,14 +2053,14 @@ static void CalculateHeightAndPositionForHelpScreenScrollBox(INT32* piHeightOfSc
 }
 
 
-static void SelectHelpScrollAreaCallBack(MOUSE_REGION* pRegion, INT32 iReason)
+static void SelectHelpScrollAreaCallBack(MOUSE_REGION* pRegion, UINT32 iReason)
 {
-	if (iReason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (iReason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		gfScrollBoxIsScrolling = FALSE;
 		gHelpScreen.iLastMouseClickY = -1;
 	}
-	else if( iReason & MSYS_CALLBACK_REASON_LBUTTON_DWN )
+	else if( iReason & MSYS_CALLBACK_REASON_POINTER_DWN )
 	{
 		gfScrollBoxIsScrolling = TRUE;
 		HelpScreenMouseMoveScrollBox( pRegion->MouseYPos );
@@ -2080,11 +2076,11 @@ static void SelectHelpScrollAreaCallBack(MOUSE_REGION* pRegion, INT32 iReason)
 }
 
 
-static void SelectHelpScrollAreaMovementCallBack(MOUSE_REGION* pRegion, INT32 iReason)
+static void SelectHelpScrollAreaMovementCallBack(MOUSE_REGION* pRegion, UINT32 iReason)
 {
 	if (iReason & MSYS_CALLBACK_REASON_MOVE)
 	{
-		if( gfLeftButtonState )
+		if( IsMouseButtonDown(MOUSE_BUTTON_LEFT) || IsMainFingerDown() )
 		{
 			HelpScreenMouseMoveScrollBox( pRegion->MouseYPos );
 		}
@@ -2117,10 +2113,10 @@ static void HelpScreenMouseMoveScrollBox(INT32 const mouse_y)
 }
 
 
-static void BtnHelpScreenScrollArrowsCallback(GUI_BUTTON* btn, INT32 reason)
+static void BtnHelpScreenScrollArrowsCallback(GUI_BUTTON* btn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_DWN ||
-			reason & MSYS_CALLBACK_REASON_LBUTTON_REPEAT)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_DWN ||
+			reason & MSYS_CALLBACK_REASON_POINTER_REPEAT)
 	{
 		INT32 const iButtonID = btn->GetUserData();
 

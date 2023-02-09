@@ -28,7 +28,6 @@
 #include "Strategic_Exit_GUI.h"
 #include "Strategic_Movement.h"
 #include "Tactical_Placement_GUI.h"
-#include "Air_Raid.h"
 #include "Game_Clock.h"
 #include "Game_Init.h"
 #include "Interface_Control.h"
@@ -59,9 +58,10 @@
 #include "Video.h"
 #include "JAScreens.h"
 #include "UILayout.h"
-#include "GameState.h"
+#include "GameMode.h"
 #include "EditScreen.h"
-#include "slog/slog.h"
+#include "Logger.h"
+#include "GameSettings.h"
 
 #define ARE_IN_FADE_IN( )		( gfFadeIn || gfFadeInitialized )
 
@@ -99,14 +99,15 @@ static void BlitMFont(VIDEO_OVERLAY* const ovr)
 {
 	SetFontAttributes(ovr->uiFontID, ovr->ubFontFore, DEFAULT_SHADOW, ovr->ubFontBack);
 	SGPVSurface::Lock l(ovr->uiDestBuff);
-	MPrintBuffer(l.Buffer<UINT16>(), l.Pitch(), ovr->sX, ovr->sY, ovr->zText);
+	MPrintBuffer(l.Buffer<UINT16>(), l.Pitch(), ovr->sX, ovr->sY, ovr->codepoints);
 }
 
 
 void MainGameScreenInit(void)
 {
 	// all blit functions expect z-buffer pitch to match framebuffer pitch
-	gZBufferPitch = FRAME_BUFFER->surface_->pitch / FRAME_BUFFER->surface_->format->BytesPerPixel;
+	SDL_Surface const& surface = FRAME_BUFFER->GetSDLSurface();
+	gZBufferPitch = surface.pitch / surface.format->BytesPerPixel;
 	gpZBuffer = InitZBuffer(gZBufferPitch, SCREEN_HEIGHT);
 	gZBufferPitch *= sizeof(*gpZBuffer);
 	InitializeBackgroundRects();
@@ -147,7 +148,6 @@ void MainGameScreenInit(void)
 void MainGameScreenShutdown(void)
 {
 	ShutdownZBuffer(gpZBuffer);
-	ShutdownBackgroundRects();
 	RemoveVideoOverlay(g_fps_overlay);
 	RemoveVideoOverlay(g_counter_period_overlay);
 }
@@ -174,9 +174,6 @@ void EnterTacticalScreen(void)
 
 	// Set pending screen
 	SetPendingNewScreen( GAME_SCREEN );
-
-	// Set as active...
-	gTacticalStatus.uiFlags |= ACTIVE;
 
 	fInterfacePanelDirty = DIRTYLEVEL2;
 
@@ -213,7 +210,7 @@ void EnterTacticalScreen(void)
 	if( !gfTacticalPlacementGUIActive )
 	{
 		//make sure the gsCurInterfacePanel is valid
-		if( gsCurInterfacePanel < 0 || gsCurInterfacePanel >= NUM_UI_PANELS )
+		if( gsCurInterfacePanel >= NUM_UI_PANELS )
 			gsCurInterfacePanel = TEAM_PANEL;
 
 		SetCurrentInterfacePanel(gsCurInterfacePanel);
@@ -273,9 +270,6 @@ void InternalLeaveTacticalScreen(ScreenID const uiNewScreen)
 	}
 
 	SetPositionSndsInActive( );
-
-	// Turn off active flag
-	gTacticalStatus.uiFlags &= ( ~ACTIVE );
 
 	fFirstTimeInGameScreen = TRUE;
 
@@ -431,11 +425,6 @@ ScreenID MainGameScreenHandle(void)
 		return( GAME_SCREEN );
 	}
 
-	if ( !ARE_IN_FADE_IN( ) )
-	{
-		HandleAirRaid( );
-	}
-
 	if ( gfGameScreenLocateToSoldier )
 	{
 		TacticalScreenLocateToSoldier( );
@@ -506,9 +495,9 @@ ScreenID MainGameScreenHandle(void)
 
 		if (uiNewScreen != GAME_SCREEN) return uiNewScreen;
 	}
-	else if (gfIntendOnEnteringEditor && GameState::getInstance()->isEditorMode())
+	else if (gfIntendOnEnteringEditor && GameMode::getInstance()->isEditorMode())
 	{
-		SLOGI(DEBUG_TAG_GAMESCREEN, "Aborting normal game mode and entering editor mode...");
+		SLOGI("Aborting normal game mode and entering editor mode...");
 		SetPendingNewScreen(NO_PENDING_SCREEN);
 		return EDIT_SCREEN;
 	}
@@ -531,6 +520,10 @@ ScreenID MainGameScreenHandle(void)
 		// Handle Interface Stuff
 		SetUpInterface( );
 		HandleTacticalPanelSwitch( );
+	} else {
+		if( gGameSettings.fOptions[TOPTION_MERC_CASTS_LIGHT] && NightTime()) {
+			SetRenderFlags( RENDER_FLAG_FULL );
+		}
 	}
 
 	// Handle Scroll Of World
@@ -586,7 +579,7 @@ ScreenID MainGameScreenHandle(void)
 	//Don't render if we have a scroll pending!
 	if (!gfScrollPending && !g_scroll_inertia && !gfRenderFullThisFrame)
 	{
-		RenderButtonsFastHelp( );
+		RenderFastHelp( );
 	}
 
 	// Display Framerate
@@ -759,7 +752,7 @@ static void HandleModalTactical(void)
 	RenderButtons();
 
 	SaveBackgroundRects( );
-	RenderButtonsFastHelp( );
+	RenderFastHelp();
 	RenderPausedGameBox( );
 
 	ExecuteBaseDirtyRectQueue( );
@@ -772,19 +765,8 @@ void InitHelicopterEntranceByMercs( void )
 {
 	if( DidGameJustStart() )
 	{
-		AIR_RAID_DEFINITION	AirRaidDef;
-
 		// Update clock ahead from STARTING_TIME to make mercs arrive!
 		WarpGameTime( FIRST_ARRIVAL_DELAY, WARPTIME_PROCESS_EVENTS_NORMALLY );
-
-		AirRaidDef.sSectorX		= 9;
-		AirRaidDef.sSectorY		= 1;
-		AirRaidDef.sSectorZ		= 0;
-		AirRaidDef.bIntensity = 2;
-		AirRaidDef.uiFlags		=	AIR_RAID_BEGINNING_GAME;
-		AirRaidDef.ubNumMinsFromCurrentTime	= 1;
-
-	//	ScheduleAirRaid( &AirRaidDef );
 
 		gfTacticalDoHeliRun = TRUE;
 		gfFirstHeliRun			= TRUE;

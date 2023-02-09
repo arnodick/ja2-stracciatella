@@ -1,10 +1,18 @@
+#include "ContentManager.h"
 #include "Cursor_Control.h"
+#include "Cursors.h"
 #include "Debug.h"
+#include "GameInstance.h"
 #include "HImage.h"
+#include "Input.h"
 #include "Timer.h"
 #include "VObject.h"
 #include "Video.h"
 #include "VSurface.h"
+
+#include "policy/GamePolicy.h"
+
+#include <optional>
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -28,6 +36,25 @@ static UINT32 guiDelayTimer = 0;
 
 static MOUSEBLT_HOOK gMouseBltOverride = NULL;
 
+std::optional<SGPPoint> gManualCursorPos = std::nullopt;
+
+void GetCursorPos(SGPPoint& point)
+{
+	if (gManualCursorPos) {
+		point.iX = gManualCursorPos->iX;
+		point.iY = gManualCursorPos->iY;
+		return;
+	}
+	GetMousePos(&point);
+}
+
+void SetManualCursorPos(SGPPoint point) {
+	gManualCursorPos = std::make_optional(point);
+}
+
+void ClearManualCursorPos() {
+	gManualCursorPos = std::nullopt;
+}
 
 static void EraseMouseCursor(void)
 {
@@ -87,7 +114,7 @@ static void LoadCursorData(UINT32 uiCursorIndex)
 
 			AutoSGPImage hImage(CreateImage(CFData->Filename, IMAGE_ALLDATA));
 
-			CFData->hVObject = AddVideoObjectFromHImage(hImage);
+			CFData->hVObject = AddVideoObjectFromHImage(hImage.get());
 
 			// Check for animated tile
 			if (hImage->uiAppDataSize > 0)
@@ -189,6 +216,8 @@ void CursorDatabaseClear(void)
 
 BOOLEAN SetCurrentCursorFromDatabase(UINT32 uiCursorIndex)
 {
+	uiCursorIndex = ModifyCursorIndex(uiCursorIndex);
+
 	if (uiCursorIndex == VIDEO_NO_CURSOR)
 	{
 		SetMouseCursorProperties(0, 0, 0, 0);
@@ -215,6 +244,14 @@ BOOLEAN SetCurrentCursorFromDatabase(UINT32 uiCursorIndex)
 		else
 		{
 			const CursorData* pCurData = &gpCursorDatabase[uiCursorIndex];
+
+			// Disable specific pointing cursors on touch devices
+			if (pCurData->fHideOnTouch && IsUsingTouch()) {
+				uiCursorIndex = VIDEO_NO_CURSOR;
+				guiOldSetCursor = VIDEO_NO_CURSOR;
+				SetMouseCursorProperties(0, 0, 0, 0);
+				return TRUE;
+			}
 
 			// First check if we are a differnet curosr...
 			if (uiCursorIndex != guiOldSetCursor)
@@ -356,4 +393,17 @@ void SetExternMouseCursor(SGPVObject const& vo, UINT16 const region_idx)
 {
 	guiExternVo         = &vo;
 	gusExternVoSubIndex = region_idx;
+}
+
+// Checks if uiCursorIndex is VIDEO_DEFAULT_TO_NO_CURSOR. If so, we parse it as VIDEO_NO_CURSOR or 0 (generic cursor)
+UINT32 ModifyCursorIndex(UINT32 uiCursorIndex)
+{
+	if (uiCursorIndex == VIDEO_DEFAULT_TO_NO_CURSOR)
+	{
+		if (gamepolicy(always_show_cursor_in_tactical))
+			return CURSOR_NORMAL;
+		else
+			return VIDEO_NO_CURSOR;
+	}
+	return uiCursorIndex;
 }

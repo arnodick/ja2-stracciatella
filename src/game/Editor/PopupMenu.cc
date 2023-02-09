@@ -34,6 +34,8 @@
 #include "WorldDef.h"
 #include "UILayout.h"
 
+#include <string_theory/string>
+
 
 #define POPUP_ACTIVETYPE_NOT_YET_DETERMINED 0
 #define POPUP_ACTIVETYPE_PERSISTANT         1
@@ -70,11 +72,9 @@ static MOUSE_REGION popupRegion;
 static UINT16  gusEntryHeight;
 static BOOLEAN fWaitingForLButtonRelease = FALSE;
 
-extern const wchar_t* gszScheduleActions[NUM_SCHEDULE_ACTIONS];
-
 //Finds the string for any popup menu in JA2 -- the strings are stored
 //in different ways in each instance.
-static const wchar_t* GetPopupMenuString(UINT8 ubIndex)
+static const ST::string GetPopupMenuString(UINT8 ubIndex)
 {
 	switch( gPopup.ubPopupMenuID )
 	{
@@ -88,7 +88,7 @@ static const wchar_t* GetPopupMenuString(UINT8 ubIndex)
 		case ACTIONITEM_POPUP:
 			return gszActionItemDesc[ ubIndex ];
 		default:
-			return 0;
+			return ST::null;
 	}
 }
 
@@ -157,7 +157,7 @@ void InitPopupMenu(GUIButtonRef const button, PopupMenuID const ubPopupMenuID, U
 	switch( ubPopupMenuID )
 	{
 		case CHANGETSET_POPUP:	//change tileset
-			gPopup.ubNumEntries = NUM_TILESETS;
+			gPopup.ubNumEntries = gubNumTilesets;
 			break;
 		case OWNERSHIPGROUP_POPUP:
 		case CHANGECIVGROUP_POPUP:
@@ -300,7 +300,7 @@ static void RenderPopupMenu(void)
 
 			SetFontForeground(entry == selected ? FONT_MCOLOR_LTBLUE : FONT_MCOLOR_WHITE);
 
-			wchar_t const* const str   = GetPopupMenuString(entry);
+			ST::string str = GetPopupMenuString(entry);
 			UINT16         const str_w = StringPixLength(str, font);
 			// Horizontally center the string inside the popup menu
 			UINT16         const x     = dx + (w - str_w) / 2;
@@ -373,7 +373,7 @@ static void PopupMenuHandle(void)
 
 			return;
 		}
-		else if( !gfLeftButtonState )
+		else if( !IsMouseButtonDown(MOUSE_BUTTON_LEFT) )
 		{	//left button has been released before entering region -- persistant
 			gPopup.ubActiveType = POPUP_ACTIVETYPE_PERSISTANT;
 			return;
@@ -392,10 +392,10 @@ static void PopupMenuHandle(void)
 		gPopup.ubSelectedIndex = GetPopupIndexFromMousePosition();
 	}
 	//Check terminating conditions for persistant states.
-	if( gfLeftButtonState && gPopup.ubActiveType == POPUP_ACTIVETYPE_PERSISTANT )
+	if( IsMouseButtonDown(MOUSE_BUTTON_LEFT) && gPopup.ubActiveType == POPUP_ACTIVETYPE_PERSISTANT )
 		fWaitingForLButtonRelease = TRUE;
-	if( (gfLeftButtonState && gPopup.ubActiveType == POPUP_ACTIVETYPE_PERSISTANT)
-		|| (!gfLeftButtonState && gPopup.ubActiveType == POPUP_ACTIVETYPE_NONPERSISTANT) )
+	if( (IsMouseButtonDown(MOUSE_BUTTON_LEFT) && gPopup.ubActiveType == POPUP_ACTIVETYPE_PERSISTANT)
+		|| (!IsMouseButtonDown(MOUSE_BUTTON_LEFT) && gPopup.ubActiveType == POPUP_ACTIVETYPE_NONPERSISTANT) )
 	{
 		//Selection conditions via mouse have been met whether the mouse is in the
 		//menu region or not.
@@ -411,7 +411,7 @@ static void PopupMenuHandle(void)
 		return;
 	}
 	//Use keyboard input as well.
-	while( DequeueEvent( &InputEvent ) )
+	while( DequeueSpecificEvent(&InputEvent, KEYBOARD_EVENTS) )
 	{
 		switch(InputEvent.usEvent)
 		{
@@ -494,7 +494,7 @@ BOOLEAN ProcessPopupMenuIfActive( )
 		return FALSE;
 	if( fWaitingForLButtonRelease )
 	{
-		if( !gfLeftButtonState )
+		if( !IsMouseButtonDown(MOUSE_BUTTON_LEFT) )
 		{
 			fWaitingForLButtonRelease = FALSE;
 			return FALSE;

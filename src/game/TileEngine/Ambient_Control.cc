@@ -10,31 +10,23 @@
 
 #include "ContentManager.h"
 #include "GameInstance.h"
-#include "slog/slog.h"
-
-AMBIENTDATA_STRUCT		gAmbData[ MAX_AMBIENT_SOUNDS ];
-INT16									gsNumAmbData = 0;
+#include "Logger.h"
+#include <string_theory/format>
+#include <string_theory/string>
 
 
 static BOOLEAN LoadAmbientControlFile(UINT8 ubAmbientID)
 try
 {
-	SGPFILENAME zFilename;
-	sprintf(zFilename, AMBIENTDIR "/%d.bad", ubAmbientID);
-
+	ST::string zFilename = ST::format("{}/{}.bad", AMBIENTDIR, ubAmbientID);
 	AutoSGPFile hFile(GCM->openGameResForReading(zFilename));
 
 	// READ #
-	FileRead(hFile, &gsNumAmbData, sizeof(INT16));
+	hFile->read(&gsNumAmbData, sizeof(INT16));
+	Assert(gsNumAmbData <= MAX_AMBIENT_SOUNDS && gsNumAmbData >= 0);
 
-	// LOOP FOR OTHERS
-	for (INT32 cnt = 0; cnt < gsNumAmbData; cnt++)
-	{
-		FileRead(hFile, &gAmbData[cnt], sizeof(AMBIENTDATA_STRUCT));
-
-		sprintf(zFilename, AMBIENTDIR "/%s", gAmbData[cnt].zFilename);
-		strcpy(gAmbData[cnt].zFilename, zFilename);
-	}
+	// Read all ambient data
+	hFile->read(gAmbData, sizeof(AMBIENTDATA_STRUCT) * gsNumAmbData);
 
 	return TRUE;
 }
@@ -62,7 +54,7 @@ void HandleNewSectorAmbience( UINT8 ubAmbientID )
 		}
 		else
 		{
-			SLOGW(DEBUG_TAG_AMBIENT, "Cannot load Ambient data for tileset");
+			SLOGW("Cannot load Ambient data for tileset");
 		}
 	}
 }
@@ -77,9 +69,16 @@ void DeleteAllAmbients()
 
 UINT32 SetupNewAmbientSound( UINT32 uiAmbientID )
 {
+	if (static_cast<INT16>(uiAmbientID) >= gsNumAmbData)
+	{
+		return NO_SAMPLE;
+	}
+
 	const AMBIENTDATA_STRUCT* const a   = &gAmbData[uiAmbientID];
 	const UINT32                    vol = CalculateSoundEffectsVolume(a->uiVol);
-	return SoundPlayRandom(a->zFilename, a->uiMinTime, a->uiMaxTime, vol, vol, MIDDLEPAN, MIDDLEPAN, 1);
+	const auto filename = ST::format("{}/{}", AMBIENTDIR, a->zFilename);
+
+	return SoundPlayRandom(filename.c_str(), a->uiMinTime, a->uiMaxTime, vol, vol, MIDDLEPAN, MIDDLEPAN, 1);
 }
 
 
@@ -88,7 +87,7 @@ UINT32 SetupNewAmbientSound( UINT32 uiAmbientID )
 
 TEST(AmbientControl, asserts)
 {
-	EXPECT_EQ(sizeof(AMBIENTDATA_STRUCT), 116);
+	EXPECT_EQ(sizeof(AMBIENTDATA_STRUCT), 116u);
 }
 
 #endif

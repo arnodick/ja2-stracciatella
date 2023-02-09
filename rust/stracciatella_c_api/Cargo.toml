@@ -1,0 +1,23 @@
+[package]
+name = "stracciatella_c_api"
+version = "0.1.0"
+authors = ["Stefan Lau <github@stefanlau.com>"]
+edition = "2021"
+workspace = ".."
+
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]
+byteorder = "1.4"
+hex = "0.4"
+libc = "0.2"
+log = "0.4"
+stracciatella = { path = "../stracciatella" }
+tempfile = "3.3"
+
+[target.'cfg(target_os = "android")'.dependencies.jni]
+version = "0.14"
+
+[build-dependencies]
+cbindgen = "0.20"

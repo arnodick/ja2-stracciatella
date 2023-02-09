@@ -1,9 +1,9 @@
 #ifndef __VOBJECT_H
 #define __VOBJECT_H
 
-#include "AutoPtr.h"
 #include "Buffer.h"
 #include "Types.h"
+#include <memory>
 
 
 // Defines for HVOBJECT limits
@@ -84,10 +84,6 @@ class SGPVObject
 		UINT8                        bit_depth_;                     // BPP
 
 	public:
-#ifdef SGP_VIDEO_DEBUGGING
-		char*                        name_;
-		char*                        code_;
-#endif
 		SGPVObject*                  next_;
 };
 ENUM_BITSET(SGPVObject::Flags)
@@ -100,20 +96,8 @@ void InitializeVideoObjectManager(void);
 void ShutdownVideoObjectManager(void);
 
 // Creates and adds a video object to list
-#ifdef SGP_VIDEO_DEBUGGING
-extern UINT32 guiVObjectSize;
-
-	void PerformVideoInfoDumpIntoFile(const char* filename, BOOLEAN fAppend);
-	SGPVObject* AddAndRecordVObjectFromHImage(SGPImage*, UINT32 uiLineNum, const char* pSourceFile);
-	SGPVObject* AddAndRecordVObjectFromFile(const char* ImageFile, UINT32 uiLineNum, const char* pSourceFile);
-	#define AddVideoObjectFromHImage(a) AddAndRecordVObjectFromHImage(a, __LINE__, __FILE__)
-	#define AddVideoObjectFromFile(a)   AddAndRecordVObjectFromFile(  a, __LINE__, __FILE__)
-#else
-	SGPVObject* AddStandardVideoObjectFromHImage(SGPImage*);
-	SGPVObject* AddStandardVideoObjectFromFile(const char* ImageFile);
-	#define AddVideoObjectFromHImage(a) AddStandardVideoObjectFromHImage(a)
-	#define AddVideoObjectFromFile(a)   AddStandardVideoObjectFromFile(a)
-#endif
+SGPVObject* AddVideoObjectFromHImage(SGPImage*);
+SGPVObject* AddVideoObjectFromFile(const ST::string& ImageFile);
 
 // Removes a video object
 static inline void DeleteVideoObject(SGPVObject* const vo)
@@ -131,6 +115,6 @@ void BltVideoObjectOutlineShadow(SGPVSurface* dst, SGPVObject const* src, UINT16
 /* Loads a video object, blits it once and frees it */
 void BltVideoObjectOnce(SGPVSurface* dst, char const* filename, UINT16 region, INT32 x, INT32 y);
 
-typedef SGP::AutoPtr<SGPVObject> AutoSGPVObject;
+typedef std::unique_ptr<SGPVObject> AutoSGPVObject;
 
 #endif

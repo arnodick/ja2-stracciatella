@@ -1,6 +1,15 @@
 #pragma once
 
-class DefaultContentManager;
+#include "GameRes.h"
+#include "externalized/DefaultContentManager.h"
 
-/** Create DefaultContentManager for usage in unit testing. */
-DefaultContentManager * createDefaultCMForTesting();
+struct EngineOptions;
+
+class DefaultContentManagerUT : public DefaultContentManager
+{
+	DefaultContentManagerUT(RustPointer<EngineOptions> engineOptions);
+
+public:
+	/** Create DefaultContentManager for usage in unit testing. */
+	static DefaultContentManagerUT* createDefaultCMForTesting();
+};

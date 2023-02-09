@@ -3,6 +3,9 @@
 
 #include "JA2Types.h"
 
+#include <memory>
+#include <string_theory/string>
+
 
 #define NO_BGND_RECT NULL
 
@@ -31,20 +34,20 @@ struct VIDEO_OVERLAY
 	BOOLEAN          fActivelySaving;
 	BOOLEAN          fDeletionPending;
 	BACKGROUND_SAVE* background;
-	UINT16*          pSaveArea;
+	std::unique_ptr<UINT16 []> pSaveArea;
 	SGPFont          uiFontID;
 	INT16            sX;
 	INT16            sY;
 	UINT8            ubFontBack;
 	UINT8            ubFontFore;
-	wchar_t          zText[200];
+	ST::utf32_buffer codepoints;
 	SGPVSurface*     uiDestBuff;
 	OVERLAY_CALLBACK BltCallback;
 };
 
 
 // GLOBAL VARIABLES
-extern SGPRect gDirtyClipRect;
+inline SGPRect gDirtyClipRect;
 
 
 // DIRTY QUEUE
@@ -54,10 +57,11 @@ void ExecuteBaseDirtyRectQueue(void);
 
 // BACKGROUND RECT BUFFERING STUFF
 void             InitializeBackgroundRects(void);
-void             ShutdownBackgroundRects(void);
 BACKGROUND_SAVE* RegisterBackgroundRect(BackgroundFlags, INT16 x, INT16 y, INT16 w, INT16 h);
-void             FreeBackgroundRect(BACKGROUND_SAVE*);
-void             FreeBackgroundRectPending(BACKGROUND_SAVE*);
+// This function will invalidate your BACKGROUND_SAVE pointer!
+void             FreeBackgroundRect(BACKGROUND_SAVE*&);
+// This function will invalidate your BACKGROUND_SAVE pointer!
+void             FreeBackgroundRectPending(BACKGROUND_SAVE*&);
 void             FreeBackgroundRectType(BackgroundFlags);
 void             RestoreBackgroundRects(void);
 void             SaveBackgroundRects(void);
@@ -69,16 +73,26 @@ void             EmptyBackgroundRects(void);
 void             RestoreExternBackgroundRectGivenID(const BACKGROUND_SAVE*);
 
 
-void GDirtyPrint(INT16 x, INT16 y, wchar_t const* str);
-void GDirtyPrintF(INT16 x, INT16 y, wchar_t const* fmt, ...);
+void GDirtyPrint(INT16 x, INT16 y, const ST::utf32_buffer& codepoints);
+inline void GDirtyPrint(INT16 x, INT16 y, const ST::string& str)
+{
+	GDirtyPrint(x, y, str.to_utf32());
+}
 
-void GPrintInvalidate(INT16 x, INT16 y, wchar_t const* str);
-void GPrintInvalidateF(INT16 x, INT16 y, wchar_t const* fmt, ...);
+void GPrintInvalidate(INT16 x, INT16 y, const ST::utf32_buffer& codepoints);
+inline void GPrintInvalidate(INT16 x, INT16 y, const ST::string& str)
+{
+	GPrintInvalidate(x, y, str.to_utf32());
+}
 
 
 // VIDEO OVERLAY STUFF
 VIDEO_OVERLAY* RegisterVideoOverlay(OVERLAY_CALLBACK callback, INT16 x, INT16 y, INT16 w, INT16 h);
-VIDEO_OVERLAY* RegisterVideoOverlay(OVERLAY_CALLBACK callback, INT16 x, INT16 y, SGPFont font, UINT8 foreground, UINT8 background, wchar_t const* text);
+VIDEO_OVERLAY* RegisterVideoOverlay(OVERLAY_CALLBACK callback, INT16 x, INT16 y, SGPFont font, UINT8 foreground, UINT8 background, const ST::utf32_buffer& codepoints);
+inline VIDEO_OVERLAY* RegisterVideoOverlay(OVERLAY_CALLBACK callback, INT16 x, INT16 y, SGPFont font, UINT8 foreground, UINT8 background, const ST::string& str)
+{
+	return RegisterVideoOverlay(callback, x, y, font, foreground, background, str.to_utf32());
+}
 void ExecuteVideoOverlays(void);
 void SaveVideoOverlaysArea(SGPVSurface* src);
 
@@ -90,7 +104,11 @@ void ExecuteVideoOverlaysToAlternateBuffer(SGPVSurface* buffer);
 void RemoveVideoOverlay(VIDEO_OVERLAY*);
 void RestoreShiftedVideoOverlays(INT16 sShiftX, INT16 sShiftY);
 void EnableVideoOverlay(BOOLEAN fEnable, VIDEO_OVERLAY*);
-void SetVideoOverlayTextF(VIDEO_OVERLAY*, const wchar_t* fmt, ...);
+void SetVideoOverlayText(VIDEO_OVERLAY* v, const ST::utf32_buffer& codepoints);
+inline void SetVideoOverlayText(VIDEO_OVERLAY* v, const ST::string& str)
+{
+	SetVideoOverlayText(v, str.to_utf32());
+}
 void SetVideoOverlayPos(VIDEO_OVERLAY*, INT16 X, INT16 Y);
 
 void BlitBufferToBuffer(SGPVSurface* src, SGPVSurface* dst, UINT16 usSrcX, UINT16 usSrcY, UINT16 usWidth, UINT16 usHeight);

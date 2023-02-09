@@ -4,8 +4,11 @@
 #include "JA2Types.h"
 #include "Strategic_Movement.h"
 
+#include <vector>
+
 
 #define MAX_VEHICLES 10
+#define MAX_PASSENGERS_IN_VEHICLE 10
 
 // type of vehicles
 enum{
@@ -25,14 +28,12 @@ struct VEHICLETYPE
 	PathSt  *pMercPath; // vehicle's stategic path list
 	UINT8   ubMovementGroup; // the movement group this vehicle belongs to
 	UINT8   ubVehicleType; // type of vehicle
-	INT16   sSectorX; // X position on the Stategic Map
-	INT16   sSectorY; // Y position on the Stategic Map
-	INT16   sSectorZ;
+	SGPSector sSector; // position on the Stategic Map
 	BOOLEAN fBetweenSectors; // between sectors?
 	INT16   sGridNo; // location in tactical
-	SOLDIERTYPE *pPassengers[ 10 ];
+	SOLDIERTYPE *pPassengers[MAX_PASSENGERS_IN_VEHICLE];
 	BOOLEAN fDestroyed;
-	INT32   iMovementSoundID;
+	UINT32  uiMovementSoundID;
 	BOOLEAN fValid;
 };
 
@@ -45,19 +46,13 @@ struct VEHICLETYPE
 
 
 // the list of vehicles
-extern VEHICLETYPE *pVehicleList;
+extern std::vector<VEHICLETYPE> pVehicleList;
 
-// number of vehicles on the list
-extern UINT8 ubNumberOfVehicles;
+#define VEHICLE2ID(v) static_cast<INT32>(&(v) - pVehicleList.data())
 
-#define VEHICLE2ID(v) (UINT32)((&(v) - pVehicleList))
-
-#define BASE_FOR_EACH_VEHICLE(type, iter)                           \
-	for (type* iter = pVehicleList,                      \
-		* const end__##iter = pVehicleList + ubNumberOfVehicles; \
-		iter != end__##iter;                                         \
-		++iter)                                                      \
-		if (!iter->fValid) continue; else
+#define BASE_FOR_EACH_VEHICLE(type, iter) \
+	for (type& iter : pVehicleList) \
+		if (!iter.fValid) continue; else
 #define FOR_EACH_VEHICLE( iter) BASE_FOR_EACH_VEHICLE(      VEHICLETYPE, iter)
 #define CFOR_EACH_VEHICLE(iter) BASE_FOR_EACH_VEHICLE(const VEHICLETYPE, iter)
 
@@ -65,7 +60,7 @@ extern UINT8 ubNumberOfVehicles;
 void SetVehicleValuesIntoSoldierType( SOLDIERTYPE *pVehicle );
 
 // add vehicle to list and return id value
-INT32 AddVehicleToList( INT16 sMapX, INT16 sMapY, INT16 sGridNo, UINT8 ubType );
+INT32 AddVehicleToList(const SGPSector& sMap, INT16 sGridNo, UINT8 ubType);
 
 // remove this vehicle from the list
 void RemoveVehicleFromList(VEHICLETYPE&);
@@ -128,7 +123,7 @@ BOOLEAN TakeSoldierOutOfVehicle( SOLDIERTYPE *pSoldier );
 
 bool PutSoldierInVehicle(SOLDIERTYPE&, VEHICLETYPE&);
 
-void SetVehicleSectorValues(VEHICLETYPE&, UINT8 x, UINT8 y);
+void SetVehicleSectorValues(VEHICLETYPE&, const SGPSector& sMap);
 
 void UpdateAllVehiclePassengersGridNo( SOLDIERTYPE *pSoldier );
 

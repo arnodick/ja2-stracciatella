@@ -6,14 +6,12 @@
 #include "sgp/FileMan.h"
 
 #include "Directories.h"
-#include "Multi_Language_Graphic_Utils.h"
 #include "Text.h"
-#include "TranslationTable.h"
-#include "GameState.h"
+#include "VObject.h"
+#include "GameMode.h"
 #include "EncodingCorrectors.h"
-#include "StrUtils.h"
 
-#include "slog/slog.h"
+#include "Logger.h"
 
 extern LanguageRes g_LanguageResDutch;
 extern LanguageRes g_LanguageResEnglish;
@@ -23,6 +21,7 @@ extern LanguageRes g_LanguageResItalian;
 extern LanguageRes g_LanguageResPolish;
 extern LanguageRes g_LanguageResRussian;
 extern LanguageRes g_LanguageResRussianGold;
+extern LanguageRes g_LanguageResChinese;
 
 
 /** Game version. */
@@ -31,28 +30,10 @@ static GameVersion s_gameVersion = GameVersion::ENGLISH;
 /** Current language resources. */
 const LanguageRes* g_langRes = &g_LanguageResEnglish;
 
-/** Character->Glyph translation table for the current language. */
-unsigned char const *TranslationTable = g_en_TranslationTable->m_table;
-
-
-wchar_t getZeroGlyphChar()
-{
-	if(s_gameVersion == GameVersion::RUSSIAN)
-	{
-		return L' ';
-	}
-	else
-	{
-		return L'A';
-	}
-}
-
-
 /** Set language resources. */
-static void setResources(const LanguageRes* langRes, const CTranslationTable *translationTable)
+static void setResources(const LanguageRes* langRes)
 {
 	g_langRes = langRes;
-	TranslationTable = translationTable->m_table;
 }
 
 
@@ -62,19 +43,20 @@ void setGameVersion(GameVersion ver)
 	s_gameVersion = ver;
 	switch(s_gameVersion)
 	{
-		case GameVersion::DUTCH:        setResources(&g_LanguageResDutch,             g_en_TranslationTable     ); break;
-		case GameVersion::ENGLISH:      setResources(&g_LanguageResEnglish,           g_en_TranslationTable     ); break;
-		case GameVersion::FRENCH:       setResources(&g_LanguageResFrench,            g_fr_TranslationTable     ); break;
-		case GameVersion::GERMAN:       setResources(&g_LanguageResGerman,            g_en_TranslationTable     ); break;
-		case GameVersion::ITALIAN:      setResources(&g_LanguageResItalian,           g_en_TranslationTable     ); break;
-		case GameVersion::POLISH:       setResources(&g_LanguageResPolish,            g_en_TranslationTable     ); break;
-		case GameVersion::RUSSIAN:      setResources(&g_LanguageResRussian,           g_rus_TranslationTable    ); break;
-		case GameVersion::RUSSIAN_GOLD: setResources(&g_LanguageResRussianGold,       g_rusGold_TranslationTable); break;
+		case GameVersion::DUTCH:        setResources(&g_LanguageResDutch);              break;
+		case GameVersion::ENGLISH:      setResources(&g_LanguageResEnglish);            break;
+		case GameVersion::FRENCH:       setResources(&g_LanguageResFrench);             break;
+		case GameVersion::GERMAN:       setResources(&g_LanguageResGerman);             break;
+		case GameVersion::ITALIAN:      setResources(&g_LanguageResItalian);            break;
+		case GameVersion::POLISH:       setResources(&g_LanguageResPolish);             break;
+		case GameVersion::RUSSIAN:      setResources(&g_LanguageResRussian);            break;
+		case GameVersion::RUSSIAN_GOLD: setResources(&g_LanguageResRussianGold);        break;
+		case GameVersion::SIMPLIFIED_CHINESE:      setResources(&g_LanguageResChinese); break;
 		default:
 		{
-			SLOGW(DEBUG_TAG_RESOURCES, "Unknown version. Using ENGLISH by defaul");
+			SLOGW("Unknown version. Using ENGLISH by defaul");
 			s_gameVersion = GameVersion::ENGLISH;
-			setResources(&g_LanguageResEnglish, g_en_TranslationTable);
+			setResources(&g_LanguageResEnglish);
 		}
 	}
 }
@@ -114,6 +96,11 @@ bool isRussianGoldVersion()
 	return s_gameVersion == GameVersion::RUSSIAN_GOLD;
 }
 
+/** Check if this is Chinese version of the game. */
+bool isChineseVersion()
+{
+	return s_gameVersion == GameVersion::SIMPLIFIED_CHINESE;
+}
 
 /**
  * Get encoding corrector for strings in data files.
@@ -135,27 +122,13 @@ FLOAT getMajorMapVersion()
 	return (s_gameVersion == GameVersion::RUSSIAN) ? 6.00 : 5.00;
 }
 
-/** Get list of resource libraries. */
-std::vector<std::string> GetResourceLibraries(const std::string &dataDir)
-{
-	std::vector<std::string> libraries = FindFilesInDir(dataDir, ".slf", true, true);
-
-	// for (int i = 0; i < libraries.size(); i++)
-	// {
-	//   SLOGW(DEBUG_TAG_RESOURCES, "%s", libraries[i].c_str());
-	// }
-
-	return libraries;
-}
-
-
 #define STI(LNG, x) LNG "/" x "_" LNG ".sti"
 #define PCX(LNG, x) LNG "/" x "_" LNG ".pcx"
 
 
 char const* GetMLGFilename(MultiLanguageGraphic const id)
 {
-	if((s_gameVersion == GameVersion::ENGLISH) || (s_gameVersion == GameVersion::FRENCH) || (s_gameVersion == GameVersion::RUSSIAN_GOLD))
+	if((s_gameVersion == GameVersion::ENGLISH) || (s_gameVersion == GameVersion::FRENCH) || (s_gameVersion == GameVersion::RUSSIAN_GOLD) || (s_gameVersion == GameVersion::SIMPLIFIED_CHINESE))
 	{
 		switch (id)
 		{
@@ -402,8 +375,15 @@ char const* GetMLGFilename(MultiLanguageGraphic const id)
 		}
 	}
 
-	throw std::runtime_error(FormattedString("Multilanguage resource %d is not found", id));
+	throw std::runtime_error(ST::format("Multilanguage resource {} is not found", id).to_std_string());
 }
+
+
+SGPVObject* AddVideoObjectFromFile(MultiLanguageGraphic const mlg)
+{
+	return AddVideoObjectFromFile(GetMLGFilename(mlg));
+}
+
 
 STRING_ENC_TYPE getStringEncType()
 {
@@ -415,7 +395,7 @@ STRING_ENC_TYPE getStringEncType()
 	{
 		return SE_POLISH;
 	}
-	else if(isEnglishVersion())
+	else if(isEnglishVersion() || isChineseVersion())
 	{
 		return SE_ENGLISH;
 	}

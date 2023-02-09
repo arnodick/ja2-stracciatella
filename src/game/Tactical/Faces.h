@@ -2,7 +2,14 @@
 #define __TALKING_H_
 
 #include "JA2Types.h"
+#include "Types.h"
+#include <string_theory/string>
 
+class SGPVObject;
+class SGPVSurface;
+struct GROUP;
+struct SOLDIERTYPE;
+struct VIDEO_OVERLAY;
 
 #define NO_EXPRESSION				0
 #define BLINKING				1
@@ -81,7 +88,7 @@ struct FACETYPE
 	BOOLEAN fAutoDisplayBuffer; // Flag to indicate our own display buffer or not
 	BOOLEAN fDisplayTextOver; // Boolean indicating to display text on face
 	BOOLEAN fCanHandleInactiveNow;
-	wchar_t zDisplayText[ 30 ]; // String of text that can be displayed
+	ST::string zDisplayText; // String of text that can be displayed
 
 	UINT16  usEyesX;
 	UINT16  usEyesY;
@@ -115,7 +122,6 @@ struct FACETYPE
 
 	UINT16   sMouthFrame;
 	UINT32   uiMouthlast;
-	UINT32   uiMouthDelay;
 
 	UINT32   uiLastBlink;
 	UINT32   uiLastExpression;
@@ -173,7 +179,7 @@ void RenderAutoFace(FACETYPE&);
 
 // If you want to setup the face to talking, ( most times this call is done in JA2 by other functions, not
 //directly), you call
-void SetFaceTalking(FACETYPE&, char const* zSoundFile, wchar_t const* zTextString);
+void SetFaceTalking(FACETYPE& f, const ST::string& zSoundFile, const ST::string& zTextString);
 // This function will setup appropriate face data and begin the speech process. It can fail if the sound
 //cannot be played for any reason.
 

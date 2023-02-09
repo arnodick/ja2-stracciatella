@@ -5,6 +5,7 @@
 #include "English.h"
 #include "Font.h"
 #include "Font_Control.h"
+#include "GameRes.h"
 #include "GameSettings.h"
 #include "GameLoop.h"
 #include "GameVersion.h"
@@ -14,7 +15,6 @@
 #include "Local.h"
 #include "MainMenuScreen.h"
 #include "MessageBoxScreen.h"
-#include "Multi_Language_Graphic_Utils.h"
 #include "Music_Control.h"
 #include "ContentMusic.h"
 #include "Options_Screen.h"
@@ -29,6 +29,8 @@
 #include "Video.h"
 #include "WordWrap.h"
 #include "UILayout.h"
+
+#include <string_theory/format>
 
 
 //#define TESTFOREIGNFONTS
@@ -76,14 +78,13 @@ static void HandleMainMenuInput(void);
 static void HandleMainMenuScreen(void);
 static void RenderMainMenu(void);
 static void RenderGameVersion(void);
-static void RenderSDLVersionWarningIfNeccessary(void);
 static void RenderCopyright(void);
 static void RestoreButtonBackGrounds(void);
 
 
 ScreenID MainMenuScreenHandle(void)
 {
-	if (guiSplashStartTime + 4000 > GetJA2Clock())
+	if (guiSplashStartTime + INTRO_SPLASH_DURATION > GetJA2Clock())
 	{
 		SetCurrentCursorFromDatabase(VIDEO_NO_CURSOR);
 		SetMusicMode(MUSIC_NONE);
@@ -128,7 +129,6 @@ ScreenID MainMenuScreenHandle(void)
 		RenderMainMenu();
 		RenderGameVersion();
 		RenderCopyright();
-		RenderSDLVersionWarningIfNeccessary();
 
 		fInitialRender = FALSE;
 	}
@@ -221,7 +221,7 @@ void InitMainMenu(void)
 
 	InitGameOptions();
 
-	DequeueAllKeyBoardEvents();
+	DequeueAllInputEvents();
 }
 
 
@@ -234,9 +234,9 @@ static void ExitMainMenu(void)
 }
 
 
-static void MenuButtonCallback(GUI_BUTTON *btn, INT32 reason)
+static void MenuButtonCallback(GUI_BUTTON *btn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		INT8 const bID = btn->GetUserData();
 
@@ -255,15 +255,14 @@ static void MenuButtonCallback(GUI_BUTTON *btn, INT32 reason)
 static void HandleMainMenuInput(void)
 {
 	InputAtom InputEvent;
-	while (DequeueEvent(&InputEvent))
+	while (DequeueSpecificEvent(&InputEvent, KEYBOARD_EVENTS))
 	{
 		if (InputEvent.usEvent == KEY_UP)
 		{
 			switch (InputEvent.usParam)
 			{
-/*
+				case 'q': if (_KeyDown(CTRL)) gbHandledMainMenu = QUIT; break;					
 				case SDLK_ESCAPE: gbHandledMainMenu = QUIT; break;
-*/
 
 				case 'c':
 					if (_KeyDown(ALT)) gfLoadGameUponEntry = TRUE;
@@ -356,16 +355,7 @@ static void RenderMainMenu(void)
 
 void RenderGameVersion() {
 	SetFontAttributes(FONT10ARIAL, FONT_MCOLOR_WHITE);
-	mprintf(g_ui.m_versionPosition.iX, g_ui.m_versionPosition.iY, L"%hs", g_version_label, g_version_number);
-}
-
-void RenderSDLVersionWarningIfNeccessary() {
-	SDL_version sdl_version_linked;
-	SDL_GetVersion(&sdl_version_linked);
-	if (sdl_version_linked.major == 2 && sdl_version_linked.minor == 0 && sdl_version_linked.patch == 6) {
-		SetFontAttributes(FONT14ARIAL, FONT_MCOLOR_RED);
-		mprintf(0, 0, L"Detected SDL2 2.0.6. Sound disabled. Check ja2.log for more details.");
-	}
+	MPrint(g_ui.m_versionPosition.iX, g_ui.m_versionPosition.iY, ST::format("{}", g_version_label));
 }
 
 void RenderCopyright() {

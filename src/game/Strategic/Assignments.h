@@ -3,8 +3,10 @@
 
 // header for assignment manipulation/updating for characters
 
-#include "JA2Types.h"
-#include "Strategic_Movement.h"
+#include "Types.h"
+struct GROUP;
+struct PopUpBox;
+struct SOLDIERTYPE;
 
 
 // this distinguishes whether we're only looking for patients healable THIS HOUR (those that have been on their assignment
@@ -110,7 +112,7 @@ void BuildSectorsWithSoldiersList( void );
 void InitSectorsWithSoldiersList( void );
 
 // is there a soldier in this sector?..only use after BuildSectorsWithSoldiersList is called
-BOOLEAN IsThereASoldierInThisSector( INT16 sSectorX, INT16 sSectorY, INT8 bSectorZ );
+BOOLEAN IsThereASoldierInThisSector(const SGPSector& sSector);
 
 void CheckIfSoldierUnassigned( SOLDIERTYPE *pSoldier );
 
@@ -159,6 +161,7 @@ extern PopUpBox* ghMoveBox;
 extern BOOLEAN fShownContractMenu;
 extern BOOLEAN fShownAssignmentMenu;
 extern BOOLEAN fShowRepairMenu;
+extern SOLDIERTYPE* gAssignmentTargetSoldier;
 
 extern BOOLEAN fFirstClickInAssignmentScreenMask;
 
@@ -172,7 +175,7 @@ void CreateDestroyScreenMaskForAssignmentAndContractMenus( void );
 
 void CreateDestroyAssignmentPopUpBoxes();
 void SetSoldierAssignmentHospital(SOLDIERTYPE&);
-void SetSoldierAssignmentRepair(SOLDIERTYPE&, BOOLEAN sam, BOOLEAN robot, INT8 vehicle_id);
+void SetSoldierAssignmentRepair(SOLDIERTYPE&, BOOLEAN robot, INT8 vehicle_id);
 
 // set merc asleep and awake under the new sleep system implemented June 29, 1998
 // if give warning is false, the function can be used as an internal function

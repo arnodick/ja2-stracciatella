@@ -1,198 +1,104 @@
-#include <stdexcept>
-
-#include "Font_Control.h"
-#include "JAScreens.h"
+#include "Game_Init.h"
+#include "Arms_Dealer_Init.h"
+#include "BloodCatPlacementsModel.h"
+#include "BloodCatSpawnsModel.h"
+#include "BobbyR.h"
+#include "Campaign_Init.h"
+#include "Campaign_Types.h"
+#include "Cheats.h"
+#include "ContentManager.h"
+#include "ContentMusic.h"
+#include "Creature_Spreading.h"
+#include "Dialogue_Control.h"
+#include "EMail.h"
+#include "Finances.h"
+#include "Game_Clock.h"
+#include "Game_Event_Hook.h"
+#include "GameInstance.h"
+#include "GameLoop.h"
+#include "GamePolicy.h"
+#include "GameSettings.h"
+#include "HelpScreen.h"
+#include "Interface.h"
+#include "Interface_Dialogue.h"
 #include "Laptop.h"
+#include "Logger.h"
+#include "Map_Screen_Helicopter.h"
+#include "Map_Screen_Interface.h"
+#include "Map_Screen_Interface_Border.h"
+#include "Map_Screen_Interface_Map.h"
 #include "MapScreen.h"
 #include "Meanwhile.h"
-#include "Merc_Hiring.h"
-#include "Queen_Command.h"
-#include "ShopKeeper_Interface.h"
-#include "Timer_Control.h"
-#include "WorldDef.h"
-#include "Soldier_Control.h"
-#include "Overhead.h"
-#include "EMail.h"
-#include "Game_Clock.h"
-#include "Soldier_Profile.h"
-#include "StrategicMap.h"
-#include "Game_Init.h"
-#include "Animation_Data.h"
-#include "Finances.h"
-#include "Soldier_Create.h"
-#include "Soldier_Init_List.h"
-#include "Strategic.h"
-#include "History.h"
 #include "Merc_Entering.h"
-#include "Squads.h"
-#include "Campaign_Init.h"
-#include "Strategic_Town_Loyalty.h"
-#include "Strategic_Mines.h"
-#include "GameLoop.h"
-#include "Random.h"
-#include "Map_Screen_Interface.h"
-#include "Tactical_Save.h"
-#include "Campaign_Types.h"
 #include "Message.h"
-#include "Game_Event_Hook.h"
-#include "Strategic_Movement.h"
-#include "Creature_Spreading.h"
-#include "Quests.h"
-#include "Strategic_AI.h"
-#include "LaptopSave.h"
-#include "AIMMembers.h"
-#include "Dialogue_Control.h"
+#include "Music_Control.h"
 #include "NPC.h"
+#include "NpcPlacementModel.h"
 #include "OppList.h"
-#include "GameSettings.h"
-#include "Interface_Dialogue.h"
-#include "Map_Screen_Interface_Border.h"
-#include "Map_Screen_Helicopter.h"
-#include "Vehicles.h"
-#include "Map_Screen_Interface_Map.h"
+#include "Overhead.h"
+#include "Overhead_Types.h"
 #include "PreBattle_Interface.h"
-#include "Arms_Dealer_Init.h"
-#include "BobbyR.h"
-#include "HelpScreen.h"
-#include "Air_Raid.h"
-#include "Interface.h"
-#include "Cheats.h"
-#include "SoundMan.h"
-#include "Debug.h"
+#include "Queen_Command.h"
+#include "Quests.h"
+#include "Random.h"
+#include "SAM_Sites.h"
+#include "SaveLoadGameStates.h"
 #include "ScreenIDs.h"
+#include "ShopKeeper_Interface.h"
+#include "Soldier_Control.h"
+#include "Soldier_Create.h"
+#include "Soldier_Profile.h"
+#include "Soldier_Profile_Type.h"
+#include "SoundMan.h"
+#include "Squads.h"
+#include "Strategic_AI.h"
+#include "Strategic_Mines.h"
+#include "Strategic_Movement.h"
+#include "Strategic_Town_Loyalty.h"
+#include "StrategicMap.h"
+#include "StrategicMap_Secrets.h"
+#include "Tactical_Save.h"
+#include "Timer_Control.h"
+#include "Vehicles.h"
+#include "WorldDef.h"
+#include <stdexcept>
+#include <string_theory/format>
 
-#include "ContentManager.h"
-#include "GameInstance.h"
-#include "policy/GamePolicy.h"
+void InitScriptingEngine();
 
 UINT8			gubScreenCount=0;
 
 
-static void InitNPCs(void)
+static void InitNPCs()
 {
-	{ // add the pilot at a random location!
-		MERCPROFILESTRUCT& p = GetProfile(SKYRIDER);
-		switch (Random(4))
-		{
-			case 0:
-				p.sSectorX = 15;
-				p.sSectorY = MAP_ROW_B;
-				p.bSectorZ = 0;
-				break;
-			case 1:
-				p.sSectorX = 14;
-				p.sSectorY = MAP_ROW_E;
-				p.bSectorZ = 0;
-				break;
-			case 2:
-				p.sSectorX = 12;
-				p.sSectorY = MAP_ROW_D;
-				p.bSectorZ = 0;
-				break;
-			case 3:
-				p.sSectorX = 16;
-				p.sSectorY = MAP_ROW_C;
-				p.bSectorZ = 0;
-				break;
-		}
-		SLOGD(DEBUG_TAG_INIT, "Skyrider in %c %d", 'A' + p.sSectorY - 1, p.sSectorX);
-		// use alternate map, with Skyrider's shack, in this sector
-		SectorInfo[SECTOR(p.sSectorX, p.sSectorY)].uiFlags |= SF_USE_ALTERNATE_MAP;
-	}
-
-
-	// set up Madlab's secret lab (he'll be added when the meanwhile scene occurs)
-
-	switch( Random( 4 ) )
+	for (auto const& p : GCM->listNpcPlacements())
 	{
-		case 0:
-			// use alternate map in this sector
-			SectorInfo[ SECTOR( 7, MAP_ROW_H ) ].uiFlags |= SF_USE_ALTERNATE_MAP;
-			break;
-		case 1:
-			SectorInfo[ SECTOR( 16, MAP_ROW_H ) ].uiFlags |= SF_USE_ALTERNATE_MAP;
-			break;
-		case 2:
-			SectorInfo[ SECTOR( 11, MAP_ROW_I ) ].uiFlags |= SF_USE_ALTERNATE_MAP;
-			break;
-		case 3:
-			SectorInfo[ SECTOR( 4, MAP_ROW_E ) ].uiFlags |= SF_USE_ALTERNATE_MAP;
-			break;
-	}
-
-	{ // add Micky in random location
-		MERCPROFILESTRUCT& p = GetProfile(MICKY);
-		switch (Random(5))
+		const NpcPlacementModel* placement = p.second;
+		if (placement->isSciFiOnly && !gGameOptions.fSciFi)
 		{
-			case 0:
-				p.sSectorX = 9;
-				p.sSectorY = MAP_ROW_G;
-				p.bSectorZ = 0;
-				break;
-			case 1:
-				p.sSectorX = 13;
-				p.sSectorY = MAP_ROW_D;
-				p.bSectorZ = 0;
-				break;
-			case 2:
-				p.sSectorX = 5;
-				p.sSectorY = MAP_ROW_C;
-				p.bSectorZ = 0;
-				break;
-			case 3:
-				p.sSectorX = 2;
-				p.sSectorY = MAP_ROW_H;
-				p.bSectorZ = 0;
-				break;
-			case 4:
-				p.sSectorX = 6;
-				p.sSectorY = MAP_ROW_C;
-				p.bSectorZ = 0;
-				break;
+			continue;
 		}
-		SLOGD(DEBUG_TAG_INIT, "%ls in %c %d", p.zNickname, 'A' + p.sSectorY - 1, p.sSectorX);
 
-		// use alternate map in this sector
-		//SectorInfo[SECTOR(p.sSectorX, p.sSectorY)].uiFlags |= SF_USE_ALTERNATE_MAP;
+		SGPSector sMap(placement->pickPlacementSector());
+		if (placement->useAlternateMap)
+		{
+			SectorInfo[sMap.AsByte()].uiFlags |= SF_USE_ALTERNATE_MAP;
+			SLOGD("Alternate map in {}", sMap);
+		}
+		if (placement->isPlacedAtStart)
+		{
+			MERCPROFILESTRUCT& merc = GetProfile(placement->profileId);
+			merc.sSector = sMap;
+			SLOGD("{} in {}", merc.zNickname, sMap);
+		}
 	}
 
 	gfPlayerTeamSawJoey = FALSE;
 
-
-	if ( gGameOptions.fSciFi )
-	{
-		{ // add Bob
-			MERCPROFILESTRUCT& p = GetProfile(BOB);
-			p.sSectorX = 8;
-			p.sSectorY = MAP_ROW_F;
-			p.bSectorZ = 0;
-		}
-
-		{ // add Gabby in random location
-			MERCPROFILESTRUCT& p = gMercProfiles[GABBY];
-			switch( Random( 2 ) )
-			{
-				case 0:
-					p.sSectorX = 11;
-					p.sSectorY = MAP_ROW_H;
-					p.bSectorZ = 0;
-					break;
-				case 1:
-					p.sSectorX = 4;
-					p.sSectorY = MAP_ROW_I;
-					p.bSectorZ = 0;
-					break;
-			}
-			SLOGD(DEBUG_TAG_INIT, "%ls in %c %d", p.zNickname, 'A' + p.sSectorY - 1, p.sSectorX);
-
-			// use alternate map in this sector
-			SectorInfo[SECTOR(p.sSectorX, p.sSectorY)].uiFlags |= SF_USE_ALTERNATE_MAP;
-		}
-	}
-	else
+	if (!gGameOptions.fSciFi)
 	{ //not scifi, so use alternate map in Tixa's b1 level that doesn't have the stairs going down to the caves.
 		UNDERGROUND_SECTORINFO *pSector;
-		pSector = FindUnderGroundSector( 9, 10, 1 ); //j9_b1
+		pSector = FindUnderGroundSector(SGPSector(TIXA_SECTOR_X, TIXA_SECTOR_Y, 1)); //j9_b1
 		if( pSector )
 		{
 			pSector->uiFlags |= SF_USE_ALTERNATE_MAP;
@@ -211,62 +117,21 @@ static void InitNPCs(void)
 void InitBloodCatSectors()
 {
 	INT32 i;
-	//Hard coded table of bloodcat populations.  We don't have
-	//access to the real population (if different) until we physically
-	//load the map.  If the real population is different, then an error
-	//will be reported.
 	for( i = 0; i < 255; i++ )
 	{
 		SectorInfo[ i ].bBloodCats = -1;
-	}
-	SectorInfo[ SEC_A15	].bBloodCatPlacements = 9;
-	SectorInfo[ SEC_B4	].bBloodCatPlacements = 9;
-	SectorInfo[ SEC_B16	].bBloodCatPlacements = 8;
-	SectorInfo[ SEC_C3	].bBloodCatPlacements = 12;
-	SectorInfo[ SEC_C8	].bBloodCatPlacements = 13;
-	SectorInfo[ SEC_C11	].bBloodCatPlacements = 7;
-	SectorInfo[ SEC_D4	].bBloodCatPlacements = 8;
-	SectorInfo[ SEC_D9	].bBloodCatPlacements = 12;
-	SectorInfo[ SEC_E11	].bBloodCatPlacements = 10;
-	SectorInfo[ SEC_E13	].bBloodCatPlacements = 14;
-	SectorInfo[ SEC_F3	].bBloodCatPlacements = 13;
-	SectorInfo[ SEC_F5	].bBloodCatPlacements = 7;
-	SectorInfo[ SEC_F7	].bBloodCatPlacements = 12;
-	SectorInfo[ SEC_F12	].bBloodCatPlacements = 9;
-	SectorInfo[ SEC_F14	].bBloodCatPlacements = 14;
-	SectorInfo[ SEC_F15	].bBloodCatPlacements = 8;
-	SectorInfo[ SEC_G6	].bBloodCatPlacements = 7;
-	SectorInfo[ SEC_G10	].bBloodCatPlacements = 12;
-	SectorInfo[ SEC_G12	].bBloodCatPlacements = 11;
-	SectorInfo[ SEC_H5	].bBloodCatPlacements = 9;
-	SectorInfo[ SEC_I4	].bBloodCatPlacements = 8;
-	SectorInfo[ SEC_I15	].bBloodCatPlacements = 8;
-	SectorInfo[ SEC_J6	].bBloodCatPlacements = 11;
-	SectorInfo[ SEC_K3	].bBloodCatPlacements = 12;
-	SectorInfo[ SEC_K6	].bBloodCatPlacements = 14;
-	SectorInfo[ SEC_K10	].bBloodCatPlacements = 12;
-	SectorInfo[ SEC_K14	].bBloodCatPlacements = 14;
-
-	switch( gGameOptions.ubDifficultyLevel )
+	};
+	for (auto placements : GCM->getBloodCatPlacements())
 	{
-		case DIF_LEVEL_EASY: //50%
-			SectorInfo[ SEC_I16	].bBloodCatPlacements = 14;
-			SectorInfo[ SEC_I16	].bBloodCats = 14;
-			SectorInfo[ SEC_N5	].bBloodCatPlacements = 8;
-			SectorInfo[ SEC_N5	].bBloodCats = 8;
-			break;
-		case DIF_LEVEL_MEDIUM: //75%
-			SectorInfo[ SEC_I16	].bBloodCatPlacements = 19;
-			SectorInfo[ SEC_I16	].bBloodCats = 19;
-			SectorInfo[ SEC_N5	].bBloodCatPlacements = 10;
-			SectorInfo[ SEC_N5	].bBloodCats = 10;
-			break;
-		case DIF_LEVEL_HARD: //100%
-			SectorInfo[ SEC_I16	].bBloodCatPlacements = 26;
-			SectorInfo[ SEC_I16	].bBloodCats = 26;
-			SectorInfo[ SEC_N5	].bBloodCatPlacements = 12;
-			SectorInfo[ SEC_N5	].bBloodCats = 12;
-			break;
+		UINT8 sectorId = placements->sectorId;
+		SectorInfo[ sectorId ].bBloodCatPlacements = placements->bloodCatPlacements;
+	}
+	for (auto spawns : GCM->getBloodCatSpawns())
+	{
+		UINT8 sectorId = spawns->sectorId;
+		INT8 spawnsCount = spawns->getSpawnsByDifficulty(gGameOptions.ubDifficultyLevel);
+		SectorInfo[ sectorId ].bBloodCatPlacements = spawnsCount;
+		SectorInfo[ sectorId ].bBloodCats = spawnsCount;
 	}
 }
 
@@ -313,7 +178,8 @@ void InitStrategicLayer( void )
 	SetGameTimeCompressionLevel( TIME_COMPRESS_X0 );
 
 	// Select the start sector as the initial selected sector
-	ChangeSelectedMapSector(SECTORX(START_SECTOR), SECTORY(START_SECTOR), 0);
+	static const SGPSector startSector(gamepolicy(start_sector));
+	ChangeSelectedMapSector(startSector);
 
 	// Reset these flags or mapscreen could be disabled and cause major headache.
 	fDisableDueToBattleRoster = FALSE;
@@ -347,6 +213,9 @@ void InitNewGame()
 	ClearTacticalMessageQueue();
 	FreeGlobalMessageList(); // Clear mapscreen messages
 
+	ResetGameStates();
+	InitScriptingEngine();
+
 	if (gubScreenCount == 0)
 	{ // Our first time, go into laptop
 		InitLaptopAndLaptopScreens();
@@ -374,9 +243,20 @@ void InitNewGame()
 		}
 		AddTransactionToPlayersBook(ANONYMOUS_DEPOSIT, 0, now, starting_cash);
 
-		// Schedule email for message from Speck at 7am 1 to 2 days in the future
-		UINT32 const days_time_merc_site_available = Random(2) + 1;
-		AddFutureDayStrategicEvent(EVENT_DAY3_ADD_EMAIL_FROM_SPECK, 60 * 7, 0, days_time_merc_site_available);
+		// random day between min and max days, inclusive
+		UINT8 ubMin = gamepolicy(merc_online_min_days);
+		UINT8 ubMax = gamepolicy(merc_online_max_days);
+		UINT32 const days_time_merc_site_available = Random(ubMax - ubMin + 1) + ubMin;
+		if (days_time_merc_site_available == 0)
+		{
+			// M.E.R.C. is already online
+			AddEmail(MERC_INTRO, MERC_INTRO_LENGTH, SPECK_FROM_MERC, GetWorldTotalMin());
+		}
+		else
+		{
+			// Schedule email for message from Speck at 7am on a random day in the future
+			AddFutureDayStrategicEvent(EVENT_DAY3_ADD_EMAIL_FROM_SPECK, 60 * 7, 0, days_time_merc_site_available);
+		}
 
 		SetLaptopExitScreen(INIT_SCREEN);
 		SetPendingNewScreen(LAPTOP_SCREEN);
@@ -411,7 +291,8 @@ void ReStartingGame()
 	//Reset the sectors
 	SetWorldSectorInvalid();
 
-	SoundStopAll( );
+	SetMusicMode(MUSIC_NONE);
+	SoundStopAll();
 
 	//we are going to restart a game so initialize the variable so we can initialize a new game
 	gubScreenCount = 0;
@@ -419,7 +300,7 @@ void ReStartingGame()
 	InitTacticalSave();
 
 	//Loop through all the soldier and delete them all
-	FOR_EACH_SOLDIER(i) TacticalRemoveSoldier(*i);
+	TrashAllSoldiers();
 
 	// Re-init overhead...
 	InitOverhead( );
@@ -448,16 +329,15 @@ void ReStartingGame()
 
 	EmptyDialogueQueue( );
 
-	if ( InAirRaid( ) )
-	{
-		EndAirRaid( );
-	}
 
 	//Make sure the game starts in the TEAM panel ( it wasnt being reset )
 	gsCurInterfacePanel = TEAM_PANEL;
 
 	//Delete all the strategic events
 	DeleteAllStrategicEvents();
+
+	//Delete creature lair, if any
+	DeleteCreatureDirectives();
 
 	//This function gets called when ur in a game a click the quit to main menu button, therefore no game is in progress
 	gTacticalStatus.fHasAGameBeenStarted = FALSE;

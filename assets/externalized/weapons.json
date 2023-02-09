@@ -2,9 +2,16 @@
     {
         "itemIndex": 0,
         "internalName": "Nothing",
-        "internalType": "NOWEAPON",
-        "ubGraphicType": 0,
-        "ubGraphicNum": 0,
+        "internalType": "PUNCH",
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdguns.sti",
+                "subImageIndex": 0
+            },
+            "big": {
+                "path": "bigitems/gun00.sti"
+            }
+        },
         "ubWeight": 0,
         "ubPerPocket": 0,
         "usPrice": 0,
@@ -13,14 +20,25 @@
         "bRepairEase": 0,
         "rateOfFire": 0,
         "usRange": 0,
-        "bNotBuyable": true
+        "bNotBuyable": true,
+        "tileGraphic": {
+            "type": "GUNS",
+            "subIndex": 1
+        }
     },
     {
         "itemIndex": 1,
         "internalName": "GLOCK_17",
         "internalType": "PISTOL",
-        "ubGraphicType": 0,
-        "ubGraphicNum": 1,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdguns.sti",
+                "subImageIndex": 1
+            },
+            "big": {
+                "path": "bigitems/gun01.sti"
+            }
+        },
         "ubWeight": 6,
         "ubPerPocket": 1,
         "usPrice": 350,
@@ -38,7 +56,6 @@
         "usRange": 120,
         "ubAttackVolume": 60,
         "ubHitVolume": 5,
-        "Sound": "sounds/weapons/9mm single shot.wav",
         "attachment_Silencer": true,
         "attachment_LaserScope": true,
         "attachment_SpringAndBoltUpgrade": true,
@@ -48,14 +65,25 @@
         "bWaterDamages": true,
         "bMetal": true,
         "bSinks": true,
-        "bShowStatus": true
+        "bShowStatus": true,
+        "tileGraphic": {
+            "type": "GUNS",
+            "subIndex": 2
+        }
     },
     {
         "itemIndex": 2,
         "internalName": "GLOCK_18",
         "internalType": "M_PISTOL",
-        "ubGraphicType": 0,
-        "ubGraphicNum": 2,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdguns.sti",
+                "subImageIndex": 2
+            },
+            "big": {
+                "path": "bigitems/gun02.sti"
+            }
+        },
         "ubWeight": 6,
         "ubPerPocket": 1,
         "usPrice": 480,
@@ -76,8 +104,6 @@
         "usRange": 120,
         "ubAttackVolume": 60,
         "ubHitVolume": 5,
-        "Sound": "sounds/weapons/9mm single shot.wav",
-        "BurstSound": "sounds/weapons/bursttype1.wav",
         "attachment_Silencer": true,
         "attachment_LaserScope": true,
         "attachment_SpringAndBoltUpgrade": true,
@@ -88,14 +114,25 @@
         "bMetal": true,
         "bSinks": true,
         "bShowStatus": true,
-        "bBigGunList": true
+        "bBigGunList": true,
+        "tileGraphic": {
+            "type": "GUNS",
+            "subIndex": 3
+        }
     },
     {
         "itemIndex": 3,
         "internalName": "BERETTA_92F",
         "internalType": "PISTOL",
-        "ubGraphicType": 0,
-        "ubGraphicNum": 3,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdguns.sti",
+                "subImageIndex": 3
+            },
+            "big": {
+                "path": "bigitems/gun03.sti"
+            }
+        },
         "ubWeight": 11,
         "ubPerPocket": 1,
         "usPrice": 450,
@@ -114,7 +151,6 @@
         "usRange": 120,
         "ubAttackVolume": 60,
         "ubHitVolume": 5,
-        "Sound": "sounds/weapons/9mm single shot.wav",
         "attachment_Silencer": true,
         "attachment_LaserScope": true,
         "attachment_SpringAndBoltUpgrade": true,
@@ -125,14 +161,25 @@
         "bMetal": true,
         "bSinks": true,
         "bShowStatus": true,
-        "bBigGunList": true
+        "bBigGunList": true,
+        "tileGraphic": {
+            "type": "GUNS",
+            "subIndex": 4
+        }
     },
     {
         "itemIndex": 4,
         "internalName": "BERETTA_93R",
         "internalType": "M_PISTOL",
-        "ubGraphicType": 0,
-        "ubGraphicNum": 4,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdguns.sti",
+                "subImageIndex": 4
+            },
+            "big": {
+                "path": "bigitems/gun04.sti"
+            }
+        },
         "ubWeight": 11,
         "ubPerPocket": 1,
         "usPrice": 470,
@@ -152,8 +199,6 @@
         "usRange": 120,
         "ubAttackVolume": 60,
         "ubHitVolume": 5,
-        "Sound": "sounds/weapons/9mm single shot.wav",
-        "BurstSound": "sounds/weapons/bursttype1.wav",
         "attachment_Silencer": true,
         "attachment_LaserScope": true,
         "attachment_SpringAndBoltUpgrade": true,
@@ -163,14 +208,25 @@
         "bWaterDamages": true,
         "bMetal": true,
         "bSinks": true,
-        "bShowStatus": true
+        "bShowStatus": true,
+        "tileGraphic": {
+            "type": "GUNS",
+            "subIndex": 5
+        }
     },
     {
         "itemIndex": 5,
         "internalName": "SW38",
         "internalType": "PISTOL",
-        "ubGraphicType": 0,
-        "ubGraphicNum": 5,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdguns.sti",
+                "subImageIndex": 5
+            },
+            "big": {
+                "path": "bigitems/gun05.sti"
+            }
+        },
         "ubWeight": 11,
         "ubPerPocket": 1,
         "usPrice": 250,
@@ -188,7 +244,6 @@
         "usRange": 130,
         "ubAttackVolume": 63,
         "ubHitVolume": 5,
-        "Sound": "sounds/weapons/38 caliber.wav",
         "attachment_Silencer": true,
         "attachment_LaserScope": true,
         "attachment_SpringAndBoltUpgrade": true,
@@ -198,14 +253,25 @@
         "bWaterDamages": true,
         "bMetal": true,
         "bSinks": true,
-        "bShowStatus": true
+        "bShowStatus": true,
+        "tileGraphic": {
+            "type": "GUNS",
+            "subIndex": 6
+        }
     },
     {
         "itemIndex": 6,
         "internalName": "BARRACUDA",
         "internalType": "PISTOL",
-        "ubGraphicType": 0,
-        "ubGraphicNum": 6,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdguns.sti",
+                "subImageIndex": 6
+            },
+            "big": {
+                "path": "bigitems/gun06.sti"
+            }
+        },
         "ubWeight": 10,
         "ubPerPocket": 1,
         "usPrice": 300,
@@ -224,7 +290,6 @@
         "usRange": 135,
         "ubAttackVolume": 66,
         "ubHitVolume": 6,
-        "Sound": "sounds/weapons/357 single shot.wav",
         "attachment_Silencer": true,
         "attachment_LaserScope": true,
         "attachment_SpringAndBoltUpgrade": true,
@@ -235,14 +300,25 @@
         "bMetal": true,
         "bSinks": true,
         "bShowStatus": true,
-        "bBigGunList": true
+        "bBigGunList": true,
+        "tileGraphic": {
+            "type": "GUNS",
+            "subIndex": 7
+        }
     },
     {
         "itemIndex": 7,
         "internalName": "DESERTEAGLE",
         "internalType": "PISTOL",
-        "ubGraphicType": 0,
-        "ubGraphicNum": 7,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdguns.sti",
+                "subImageIndex": 7
+            },
+            "big": {
+                "path": "bigitems/gun07.sti"
+            }
+        },
         "ubWeight": 17,
         "ubPerPocket": 1,
         "usPrice": 300,
@@ -260,7 +336,6 @@
         "usRange": 135,
         "ubAttackVolume": 66,
         "ubHitVolume": 6,
-        "Sound": "sounds/weapons/357 single shot.wav",
         "attachment_Silencer": true,
         "attachment_LaserScope": true,
         "attachment_SpringAndBoltUpgrade": true,
@@ -270,14 +345,25 @@
         "bWaterDamages": true,
         "bMetal": true,
         "bSinks": true,
-        "bShowStatus": true
+        "bShowStatus": true,
+        "tileGraphic": {
+            "type": "GUNS",
+            "subIndex": 8
+        }
     },
     {
         "itemIndex": 8,
         "internalName": "M1911",
         "internalType": "PISTOL",
-        "ubGraphicType": 0,
-        "ubGraphicNum": 8,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdguns.sti",
+                "subImageIndex": 8
+            },
+            "big": {
+                "path": "bigitems/gun08.sti"
+            }
+        },
         "ubWeight": 11,
         "ubPerPocket": 1,
         "usPrice": 400,
@@ -296,7 +382,6 @@
         "usRange": 125,
         "ubAttackVolume": 69,
         "ubHitVolume": 6,
-        "Sound": "sounds/weapons/45 caliber single shot.wav",
         "attachment_Silencer": true,
         "attachment_LaserScope": true,
         "attachment_SpringAndBoltUpgrade": true,
@@ -307,14 +392,25 @@
         "bMetal": true,
         "bSinks": true,
         "bShowStatus": true,
-        "bBigGunList": true
+        "bBigGunList": true,
+        "tileGraphic": {
+            "type": "GUNS",
+            "subIndex": 9
+        }
     },
     {
         "itemIndex": 9,
         "internalName": "MP5K",
         "internalType": "SMG",
-        "ubGraphicType": 0,
-        "ubGraphicNum": 9,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdguns.sti",
+                "subImageIndex": 9
+            },
+            "big": {
+                "path": "bigitems/gun09.sti"
+            }
+        },
         "ubWeight": 21,
         "ubPerPocket": 0,
         "usPrice": 980,
@@ -334,8 +430,6 @@
         "usRange": 200,
         "ubAttackVolume": 75,
         "ubHitVolume": 7,
-        "Sound": "sounds/weapons/9mm single shot.wav",
-        "BurstSound": "sounds/weapons/bursttype1.wav",
         "attachment_Silencer": true,
         "attachment_LaserScope": true,
         "attachment_SpringAndBoltUpgrade": true,
@@ -345,14 +439,25 @@
         "bWaterDamages": true,
         "bMetal": true,
         "bSinks": true,
-        "bShowStatus": true
+        "bShowStatus": true,
+        "tileGraphic": {
+            "type": "GUNS",
+            "subIndex": 10
+        }
     },
     {
         "itemIndex": 10,
         "internalName": "MAC10",
         "internalType": "SMG",
-        "ubGraphicType": 0,
-        "ubGraphicNum": 10,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdguns.sti",
+                "subImageIndex": 10
+            },
+            "big": {
+                "path": "bigitems/gun10.sti"
+            }
+        },
         "ubWeight": 28,
         "ubPerPocket": 0,
         "usPrice": 1170,
@@ -372,8 +477,6 @@
         "usRange": 200,
         "ubAttackVolume": 75,
         "ubHitVolume": 7,
-        "Sound": "sounds/weapons/45 caliber single shot.wav",
-        "BurstSound": "sounds/weapons/bursttype1.wav",
         "attachment_Silencer": true,
         "attachment_LaserScope": true,
         "attachment_SpringAndBoltUpgrade": true,
@@ -383,14 +486,25 @@
         "bWaterDamages": true,
         "bMetal": true,
         "bSinks": true,
-        "bShowStatus": true
+        "bShowStatus": true,
+        "tileGraphic": {
+            "type": "GUNS",
+            "subIndex": 11
+        }
     },
     {
         "itemIndex": 11,
         "internalName": "THOMPSON",
         "internalType": "SMG",
-        "ubGraphicType": 0,
-        "ubGraphicNum": 11,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdguns.sti",
+                "subImageIndex": 11
+            },
+            "big": {
+                "path": "bigitems/gun11.sti"
+            }
+        },
         "ubWeight": 48,
         "ubPerPocket": 0,
         "usPrice": 700,
@@ -411,8 +525,6 @@
         "usRange": 200,
         "ubAttackVolume": 75,
         "ubHitVolume": 7,
-        "Sound": "sounds/weapons/45 caliber single shot.wav",
-        "BurstSound": "sounds/weapons/bursttype1.wav",
         "attachment_Silencer": true,
         "attachment_LaserScope": true,
         "attachment_SpringAndBoltUpgrade": true,
@@ -424,14 +536,25 @@
         "bSinks": true,
         "bShowStatus": true,
         "bTwoHanded": true,
-        "bBigGunList": true
+        "bBigGunList": true,
+        "tileGraphic": {
+            "type": "GUNS",
+            "subIndex": 12
+        }
     },
     {
         "itemIndex": 12,
         "internalName": "COMMANDO",
         "internalType": "SMG",
-        "ubGraphicType": 0,
-        "ubGraphicNum": 12,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdguns.sti",
+                "subImageIndex": 12
+            },
+            "big": {
+                "path": "bigitems/gun12.sti"
+            }
+        },
         "ubWeight": 26,
         "ubPerPocket": 0,
         "usPrice": 1330,
@@ -451,8 +574,6 @@
         "usRange": 200,
         "ubAttackVolume": 75,
         "ubHitVolume": 7,
-        "Sound": "sounds/weapons/5,56 single shot.wav",
-        "BurstSound": "sounds/weapons/bursttype1.wav",
         "attachment_SniperScope": true,
         "attachment_LaserScope": true,
         "attachment_UnderGLauncher": true,
@@ -464,14 +585,25 @@
         "bMetal": true,
         "bSinks": true,
         "bShowStatus": true,
-        "bTwoHanded": true
+        "bTwoHanded": true,
+        "tileGraphic": {
+            "type": "GUNS",
+            "subIndex": 13
+        }
     },
     {
         "itemIndex": 13,
         "internalName": "MP53",
         "internalType": "SMG",
-        "ubGraphicType": 0,
-        "ubGraphicNum": 13,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdguns.sti",
+                "subImageIndex": 13
+            },
+            "big": {
+                "path": "bigitems/gun13.sti"
+            }
+        },
         "ubWeight": 31,
         "ubPerPocket": 0,
         "usPrice": 770,
@@ -492,8 +624,6 @@
         "usRange": 200,
         "ubAttackVolume": 75,
         "ubHitVolume": 7,
-        "Sound": "sounds/weapons/5,56 single shot.wav",
-        "BurstSound": "sounds/weapons/bursttype1.wav",
         "attachment_LaserScope": true,
         "attachment_SpringAndBoltUpgrade": true,
         "attachment_GunBarrelExtender": true,
@@ -504,14 +634,25 @@
         "bSinks": true,
         "bShowStatus": true,
         "bTwoHanded": true,
-        "bBigGunList": true
+        "bBigGunList": true,
+        "tileGraphic": {
+            "type": "GUNS",
+            "subIndex": 14
+        }
     },
     {
         "itemIndex": 14,
         "internalName": "AKSU74",
         "internalType": "SMG",
-        "ubGraphicType": 0,
-        "ubGraphicNum": 14,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdguns.sti",
+                "subImageIndex": 14
+            },
+            "big": {
+                "path": "bigitems/gun14.sti"
+            }
+        },
         "ubWeight": 39,
         "ubPerPocket": 0,
         "usPrice": 1180,
@@ -532,8 +673,6 @@
         "usRange": 200,
         "ubAttackVolume": 75,
         "ubHitVolume": 7,
-        "Sound": "sounds/weapons/5,45 single shot.wav",
-        "BurstSound": "sounds/weapons/bursttype1.wav",
         "attachment_SniperScope": true,
         "attachment_LaserScope": true,
         "attachment_UnderGLauncher": true,
@@ -546,14 +685,25 @@
         "bSinks": true,
         "bShowStatus": true,
         "bTwoHanded": true,
-        "bBigGunList": true
+        "bBigGunList": true,
+        "tileGraphic": {
+            "type": "GUNS",
+            "subIndex": 15
+        }
     },
     {
         "itemIndex": 15,
         "internalName": "P90",
         "internalType": "SMG",
-        "ubGraphicType": 0,
-        "ubGraphicNum": 15,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdguns.sti",
+                "subImageIndex": 15
+            },
+            "big": {
+                "path": "bigitems/gun15.sti"
+            }
+        },
         "ubWeight": 28,
         "ubPerPocket": 0,
         "usPrice": 2750,
@@ -573,8 +723,6 @@
         "usRange": 225,
         "ubAttackVolume": 75,
         "ubHitVolume": 7,
-        "Sound": "sounds/weapons/5,7 single shot.wav",
-        "BurstSound": "sounds/weapons/bursttype1.wav",
         "attachment_Silencer": true,
         "attachment_LaserScope": true,
         "attachment_SpringAndBoltUpgrade": true,
@@ -585,14 +733,25 @@
         "bMetal": true,
         "bSinks": true,
         "bShowStatus": true,
-        "bNotBuyable": true
+        "bNotBuyable": true,
+        "tileGraphic": {
+            "type": "GUNS",
+            "subIndex": 16
+        }
     },
     {
         "itemIndex": 16,
         "internalName": "TYPE85",
         "internalType": "SMG",
-        "ubGraphicType": 0,
-        "ubGraphicNum": 16,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdguns.sti",
+                "subImageIndex": 16
+            },
+            "big": {
+                "path": "bigitems/gun16.sti"
+            }
+        },
         "ubWeight": 19,
         "ubPerPocket": 0,
         "usPrice": 620,
@@ -613,8 +772,6 @@
         "usRange": 200,
         "ubAttackVolume": 75,
         "ubHitVolume": 7,
-        "Sound": "sounds/weapons/7,62 wp single shot.wav",
-        "BurstSound": "sounds/weapons/bursttype1.wav",
         "attachment_SniperScope": true,
         "attachment_LaserScope": true,
         "attachment_SpringAndBoltUpgrade": true,
@@ -626,14 +783,25 @@
         "bSinks": true,
         "bShowStatus": true,
         "bTwoHanded": true,
-        "bBigGunList": true
+        "bBigGunList": true,
+        "tileGraphic": {
+            "type": "GUNS",
+            "subIndex": 17
+        }
     },
     {
         "itemIndex": 17,
         "internalName": "SKS",
         "internalType": "RIFLE",
-        "ubGraphicType": 0,
-        "ubGraphicNum": 17,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdguns.sti",
+                "subImageIndex": 17
+            },
+            "big": {
+                "path": "bigitems/gun17.sti"
+            }
+        },
         "ubWeight": 39,
         "ubPerPocket": 0,
         "usPrice": 1350,
@@ -652,7 +820,6 @@
         "usRange": 300,
         "ubAttackVolume": 80,
         "ubHitVolume": 8,
-        "Sound": "sounds/weapons/7,62 wp single shot.wav",
         "attachment_SniperScope": true,
         "attachment_LaserScope": true,
         "attachment_Bipod": true,
@@ -665,14 +832,25 @@
         "bSinks": true,
         "bShowStatus": true,
         "bTwoHanded": true,
-        "bBigGunList": true
+        "bBigGunList": true,
+        "tileGraphic": {
+            "type": "GUNS",
+            "subIndex": 18
+        }
     },
     {
         "itemIndex": 18,
         "internalName": "DRAGUNOV",
         "internalType": "SN_RIFLE",
-        "ubGraphicType": 0,
-        "ubGraphicNum": 18,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdguns.sti",
+                "subImageIndex": 18
+            },
+            "big": {
+                "path": "bigitems/gun18.sti"
+            }
+        },
         "ubWeight": 43,
         "ubPerPocket": 0,
         "usPrice": 1930,
@@ -691,7 +869,6 @@
         "usRange": 750,
         "ubAttackVolume": 80,
         "ubHitVolume": 8,
-        "Sound": "sounds/weapons/7,62 wp single shot.wav",
         "attachment_SniperScope": true,
         "attachment_LaserScope": true,
         "attachment_Bipod": true,
@@ -704,14 +881,25 @@
         "bSinks": true,
         "bShowStatus": true,
         "bTwoHanded": true,
-        "bBigGunList": true
+        "bBigGunList": true,
+        "tileGraphic": {
+            "type": "GUNS",
+            "subIndex": 19
+        }
     },
     {
         "itemIndex": 19,
         "internalName": "M24",
         "internalType": "SN_RIFLE",
-        "ubGraphicType": 0,
-        "ubGraphicNum": 19,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdguns.sti",
+                "subImageIndex": 19
+            },
+            "big": {
+                "path": "bigitems/gun19.sti"
+            }
+        },
         "ubWeight": 66,
         "ubPerPocket": 0,
         "usPrice": 1950,
@@ -729,7 +917,6 @@
         "usRange": 800,
         "ubAttackVolume": 80,
         "ubHitVolume": 8,
-        "Sound": "sounds/weapons/7,62 nato single shot.wav",
         "attachment_SniperScope": true,
         "attachment_LaserScope": true,
         "attachment_Bipod": true,
@@ -741,14 +928,25 @@
         "bMetal": true,
         "bSinks": true,
         "bShowStatus": true,
-        "bTwoHanded": true
+        "bTwoHanded": true,
+        "tileGraphic": {
+            "type": "GUNS",
+            "subIndex": 20
+        }
     },
     {
         "itemIndex": 20,
         "internalName": "AUG",
         "internalType": "ASRIFLE",
-        "ubGraphicType": 0,
-        "ubGraphicNum": 20,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdguns.sti",
+                "subImageIndex": 20
+            },
+            "big": {
+                "path": "bigitems/gun20.sti"
+            }
+        },
         "ubWeight": 36,
         "ubPerPocket": 0,
         "usPrice": 2380,
@@ -769,8 +967,6 @@
         "usRange": 500,
         "ubAttackVolume": 77,
         "ubHitVolume": 8,
-        "Sound": "sounds/weapons/5,56 single shot.wav",
-        "BurstSound": "sounds/weapons/bursttype1.wav",
         "attachment_SniperScope": true,
         "attachment_LaserScope": true,
         "attachment_Bipod": true,
@@ -784,14 +980,25 @@
         "bSinks": true,
         "bShowStatus": true,
         "bTwoHanded": true,
-        "bBigGunList": true
+        "bBigGunList": true,
+        "tileGraphic": {
+            "type": "GUNS",
+            "subIndex": 21
+        }
     },
     {
         "itemIndex": 21,
         "internalName": "G41",
         "internalType": "ASRIFLE",
-        "ubGraphicType": 0,
-        "ubGraphicNum": 21,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdguns.sti",
+                "subImageIndex": 21
+            },
+            "big": {
+                "path": "bigitems/gun21.sti"
+            }
+        },
         "ubWeight": 41,
         "ubPerPocket": 0,
         "usPrice": 1620,
@@ -811,8 +1018,6 @@
         "usRange": 300,
         "ubAttackVolume": 77,
         "ubHitVolume": 8,
-        "Sound": "sounds/weapons/5,56 single shot.wav",
-        "BurstSound": "sounds/weapons/bursttype1.wav",
         "attachment_SniperScope": true,
         "attachment_LaserScope": true,
         "attachment_Bipod": true,
@@ -825,14 +1030,25 @@
         "bMetal": true,
         "bSinks": true,
         "bShowStatus": true,
-        "bTwoHanded": true
+        "bTwoHanded": true,
+        "tileGraphic": {
+            "type": "GUNS",
+            "subIndex": 22
+        }
     },
     {
         "itemIndex": 22,
         "internalName": "MINI14",
         "internalType": "RIFLE",
-        "ubGraphicType": 0,
-        "ubGraphicNum": 22,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdguns.sti",
+                "subImageIndex": 22
+            },
+            "big": {
+                "path": "bigitems/gun22.sti"
+            }
+        },
         "ubWeight": 29,
         "ubPerPocket": 0,
         "usPrice": 1100,
@@ -850,7 +1066,6 @@
         "usRange": 250,
         "ubAttackVolume": 77,
         "ubHitVolume": 8,
-        "Sound": "sounds/weapons/5,56 single shot.wav",
         "attachment_SniperScope": true,
         "attachment_LaserScope": true,
         "attachment_Bipod": true,
@@ -863,14 +1078,25 @@
         "bMetal": true,
         "bSinks": true,
         "bShowStatus": true,
-        "bTwoHanded": true
+        "bTwoHanded": true,
+        "tileGraphic": {
+            "type": "GUNS",
+            "subIndex": 23
+        }
     },
     {
         "itemIndex": 23,
         "internalName": "C7",
         "internalType": "ASRIFLE",
-        "ubGraphicType": 0,
-        "ubGraphicNum": 23,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdguns.sti",
+                "subImageIndex": 23
+            },
+            "big": {
+                "path": "bigitems/gun23.sti"
+            }
+        },
         "ubWeight": 36,
         "ubPerPocket": 0,
         "usPrice": 2680,
@@ -890,8 +1116,6 @@
         "usRange": 400,
         "ubAttackVolume": 77,
         "ubHitVolume": 8,
-        "Sound": "sounds/weapons/5,56 single shot.wav",
-        "BurstSound": "sounds/weapons/bursttype1.wav",
         "attachment_SniperScope": true,
         "attachment_LaserScope": true,
         "attachment_Bipod": true,
@@ -904,14 +1128,25 @@
         "bMetal": true,
         "bSinks": true,
         "bShowStatus": true,
-        "bTwoHanded": true
+        "bTwoHanded": true,
+        "tileGraphic": {
+            "type": "GUNS",
+            "subIndex": 24
+        }
     },
     {
         "itemIndex": 24,
         "internalName": "FAMAS",
         "internalType": "ASRIFLE",
-        "ubGraphicType": 0,
-        "ubGraphicNum": 24,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdguns.sti",
+                "subImageIndex": 24
+            },
+            "big": {
+                "path": "bigitems/gun24.sti"
+            }
+        },
         "ubWeight": 36,
         "ubPerPocket": 0,
         "usPrice": 1970,
@@ -932,8 +1167,6 @@
         "usRange": 250,
         "ubAttackVolume": 77,
         "ubHitVolume": 8,
-        "Sound": "sounds/weapons/5,56 single shot.wav",
-        "BurstSound": "sounds/weapons/bursttype1.wav",
         "attachment_SniperScope": true,
         "attachment_LaserScope": true,
         "attachment_Bipod": true,
@@ -947,14 +1180,25 @@
         "bSinks": true,
         "bShowStatus": true,
         "bTwoHanded": true,
-        "bBigGunList": true
+        "bBigGunList": true,
+        "tileGraphic": {
+            "type": "GUNS",
+            "subIndex": 25
+        }
     },
     {
         "itemIndex": 25,
         "internalName": "AK74",
         "internalType": "ASRIFLE",
-        "ubGraphicType": 0,
-        "ubGraphicNum": 25,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdguns.sti",
+                "subImageIndex": 25
+            },
+            "big": {
+                "path": "bigitems/gun25.sti"
+            }
+        },
         "ubWeight": 36,
         "ubPerPocket": 0,
         "usPrice": 1830,
@@ -975,8 +1219,6 @@
         "usRange": 350,
         "ubAttackVolume": 77,
         "ubHitVolume": 8,
-        "Sound": "sounds/weapons/5,45 single shot.wav",
-        "BurstSound": "sounds/weapons/bursttype1.wav",
         "attachment_SniperScope": true,
         "attachment_LaserScope": true,
         "attachment_Bipod": true,
@@ -990,14 +1232,25 @@
         "bSinks": true,
         "bShowStatus": true,
         "bTwoHanded": true,
-        "bBigGunList": true
+        "bBigGunList": true,
+        "tileGraphic": {
+            "type": "GUNS",
+            "subIndex": 26
+        }
     },
     {
         "itemIndex": 26,
         "internalName": "AKM",
         "internalType": "ASRIFLE",
-        "ubGraphicType": 0,
-        "ubGraphicNum": 26,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdguns.sti",
+                "subImageIndex": 26
+            },
+            "big": {
+                "path": "bigitems/gun26.sti"
+            }
+        },
         "ubWeight": 43,
         "ubPerPocket": 0,
         "usPrice": 1450,
@@ -1018,8 +1271,6 @@
         "usRange": 250,
         "ubAttackVolume": 77,
         "ubHitVolume": 8,
-        "Sound": "sounds/weapons/7,62 wp single shot.wav",
-        "BurstSound": "sounds/weapons/bursttype1.wav",
         "attachment_SniperScope": true,
         "attachment_LaserScope": true,
         "attachment_Bipod": true,
@@ -1033,14 +1284,25 @@
         "bSinks": true,
         "bShowStatus": true,
         "bTwoHanded": true,
-        "bBigGunList": true
+        "bBigGunList": true,
+        "tileGraphic": {
+            "type": "GUNS",
+            "subIndex": 27
+        }
     },
     {
         "itemIndex": 27,
         "internalName": "M14",
         "internalType": "ASRIFLE",
-        "ubGraphicType": 0,
-        "ubGraphicNum": 27,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdguns.sti",
+                "subImageIndex": 27
+            },
+            "big": {
+                "path": "bigitems/gun27.sti"
+            }
+        },
         "ubWeight": 29,
         "ubPerPocket": 0,
         "usPrice": 2120,
@@ -1060,8 +1322,6 @@
         "usRange": 330,
         "ubAttackVolume": 80,
         "ubHitVolume": 8,
-        "Sound": "sounds/weapons/7,62 nato single shot.wav",
-        "BurstSound": "sounds/weapons/bursttype1.wav",
         "attachment_SniperScope": true,
         "attachment_LaserScope": true,
         "attachment_Bipod": true,
@@ -1074,14 +1334,25 @@
         "bMetal": true,
         "bSinks": true,
         "bShowStatus": true,
-        "bTwoHanded": true
+        "bTwoHanded": true,
+        "tileGraphic": {
+            "type": "GUNS",
+            "subIndex": 28
+        }
     },
     {
         "itemIndex": 28,
         "internalName": "FNFAL",
         "internalType": "ASRIFLE",
-        "ubGraphicType": 0,
-        "ubGraphicNum": 28,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdguns.sti",
+                "subImageIndex": 28
+            },
+            "big": {
+                "path": "bigitems/gun28.sti"
+            }
+        },
         "ubWeight": 43,
         "ubPerPocket": 0,
         "usPrice": 2680,
@@ -1101,8 +1372,6 @@
         "usRange": 425,
         "ubAttackVolume": 80,
         "ubHitVolume": 8,
-        "Sound": "sounds/weapons/7,62 nato single shot.wav",
-        "BurstSound": "sounds/weapons/bursttype1.wav",
         "attachment_SniperScope": true,
         "attachment_LaserScope": true,
         "attachment_Bipod": true,
@@ -1115,14 +1384,25 @@
         "bMetal": true,
         "bSinks": true,
         "bShowStatus": true,
-        "bTwoHanded": true
+        "bTwoHanded": true,
+        "tileGraphic": {
+            "type": "GUNS",
+            "subIndex": 29
+        }
     },
     {
         "itemIndex": 29,
         "internalName": "G3A3",
         "internalType": "ASRIFLE",
-        "ubGraphicType": 0,
-        "ubGraphicNum": 29,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdguns.sti",
+                "subImageIndex": 29
+            },
+            "big": {
+                "path": "bigitems/gun29.sti"
+            }
+        },
         "ubWeight": 44,
         "ubPerPocket": 0,
         "usPrice": 1570,
@@ -1143,8 +1423,6 @@
         "usRange": 300,
         "ubAttackVolume": 80,
         "ubHitVolume": 8,
-        "Sound": "sounds/weapons/7,62 nato single shot.wav",
-        "BurstSound": "sounds/weapons/bursttype1.wav",
         "attachment_SniperScope": true,
         "attachment_LaserScope": true,
         "attachment_Bipod": true,
@@ -1158,14 +1436,25 @@
         "bSinks": true,
         "bShowStatus": true,
         "bTwoHanded": true,
-        "bBigGunList": true
+        "bBigGunList": true,
+        "tileGraphic": {
+            "type": "GUNS",
+            "subIndex": 30
+        }
     },
     {
         "itemIndex": 30,
         "internalName": "G11",
         "internalType": "ASRIFLE",
-        "ubGraphicType": 0,
-        "ubGraphicNum": 30,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdguns.sti",
+                "subImageIndex": 30
+            },
+            "big": {
+                "path": "bigitems/gun30.sti"
+            }
+        },
         "ubWeight": 38,
         "ubPerPocket": 0,
         "usPrice": 2530,
@@ -1185,8 +1474,6 @@
         "usRange": 300,
         "ubAttackVolume": 80,
         "ubHitVolume": 8,
-        "Sound": "sounds/weapons/4,7 single shot.wav",
-        "BurstSound": "sounds/weapons/bursttype1.wav",
         "attachment_SniperScope": true,
         "attachment_LaserScope": true,
         "attachment_Bipod": true,
@@ -1199,14 +1486,25 @@
         "bSinks": true,
         "bShowStatus": true,
         "bTwoHanded": true,
-        "bNotBuyable": true
+        "bNotBuyable": true,
+        "tileGraphic": {
+            "type": "GUNS",
+            "subIndex": 31
+        }
     },
     {
         "itemIndex": 31,
         "internalName": "M870",
         "internalType": "SHOTGUN",
-        "ubGraphicType": 0,
-        "ubGraphicNum": 31,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdguns.sti",
+                "subImageIndex": 31
+            },
+            "big": {
+                "path": "bigitems/gun31.sti"
+            }
+        },
         "ubWeight": 36,
         "ubPerPocket": 0,
         "usPrice": 670,
@@ -1226,8 +1524,6 @@
         "usRange": 135,
         "ubAttackVolume": 80,
         "ubHitVolume": 8,
-        "Sound": "sounds/weapons/shotgun single shot.wav",
-        "BurstSound": "sounds/weapons/bursttype1.wav",
         "attachment_SniperScope": true,
         "attachment_LaserScope": true,
         "attachment_Duckbill": true,
@@ -1239,14 +1535,25 @@
         "bMetal": true,
         "bSinks": true,
         "bShowStatus": true,
-        "bTwoHanded": true
+        "bTwoHanded": true,
+        "tileGraphic": {
+            "type": "GUNS",
+            "subIndex": 32
+        }
     },
     {
         "itemIndex": 32,
         "internalName": "SPAS15",
         "internalType": "SHOTGUN",
-        "ubGraphicType": 0,
-        "ubGraphicNum": 32,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdguns.sti",
+                "subImageIndex": 32
+            },
+            "big": {
+                "path": "bigitems/gun32.sti"
+            }
+        },
         "ubWeight": 38,
         "ubPerPocket": 0,
         "usPrice": 980,
@@ -1267,8 +1574,6 @@
         "usRange": 135,
         "ubAttackVolume": 80,
         "ubHitVolume": 8,
-        "Sound": "sounds/weapons/shotgun single shot.wav",
-        "BurstSound": "sounds/weapons/bursttype1.wav",
         "attachment_SniperScope": true,
         "attachment_LaserScope": true,
         "attachment_Duckbill": true,
@@ -1281,14 +1586,25 @@
         "bSinks": true,
         "bShowStatus": true,
         "bTwoHanded": true,
-        "bBigGunList": true
+        "bBigGunList": true,
+        "tileGraphic": {
+            "type": "GUNS",
+            "subIndex": 33
+        }
     },
     {
         "itemIndex": 33,
         "internalName": "CAWS",
         "internalType": "SHOTGUN",
-        "ubGraphicType": 0,
-        "ubGraphicNum": 33,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdguns.sti",
+                "subImageIndex": 33
+            },
+            "big": {
+                "path": "bigitems/gun33.sti"
+            }
+        },
         "ubWeight": 41,
         "ubPerPocket": 0,
         "usPrice": 2900,
@@ -1308,8 +1624,6 @@
         "usRange": 135,
         "ubAttackVolume": 80,
         "ubHitVolume": 8,
-        "Sound": "sounds/weapons/shotgun single shot.wav",
-        "BurstSound": "sounds/weapons/bursttype1.wav",
         "attachment_SniperScope": true,
         "attachment_LaserScope": true,
         "attachment_Bipod": true,
@@ -1323,14 +1637,25 @@
         "bSinks": true,
         "bShowStatus": true,
         "bTwoHanded": true,
-        "bNotBuyable": true
+        "bNotBuyable": true,
+        "tileGraphic": {
+            "type": "GUNS",
+            "subIndex": 34
+        }
     },
     {
         "itemIndex": 34,
         "internalName": "MINIMI",
         "internalType": "LMG",
-        "ubGraphicType": 0,
-        "ubGraphicNum": 34,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdguns.sti",
+                "subImageIndex": 34
+            },
+            "big": {
+                "path": "bigitems/gun34.sti"
+            }
+        },
         "ubWeight": 68,
         "ubPerPocket": 0,
         "usPrice": 3100,
@@ -1350,8 +1675,6 @@
         "usRange": 500,
         "ubAttackVolume": 82,
         "ubHitVolume": 8,
-        "Sound": "sounds/weapons/5,56 single shot.wav",
-        "BurstSound": "sounds/weapons/bursttype1.wav",
         "attachment_SniperScope": true,
         "attachment_LaserScope": true,
         "attachment_Bipod": true,
@@ -1364,14 +1687,25 @@
         "bMetal": true,
         "bSinks": true,
         "bShowStatus": true,
-        "bTwoHanded": true
+        "bTwoHanded": true,
+        "tileGraphic": {
+            "type": "GUNS",
+            "subIndex": 35
+        }
     },
     {
         "itemIndex": 35,
         "internalName": "RPK74",
         "internalType": "LMG",
-        "ubGraphicType": 0,
-        "ubGraphicNum": 35,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdguns.sti",
+                "subImageIndex": 35
+            },
+            "big": {
+                "path": "bigitems/gun35.sti"
+            }
+        },
         "ubWeight": 48,
         "ubPerPocket": 0,
         "usPrice": 3180,
@@ -1392,8 +1726,7 @@
         "usRange": 500,
         "ubAttackVolume": 82,
         "ubHitVolume": 8,
-        "Sound": "sounds/weapons/5,45 single shot.wav",
-        "BurstSound": "sounds/weapons/bursttype1.wav",
+        "burstSound": "sounds/weapons/bursttype1.wav",
         "attachment_SniperScope": true,
         "attachment_LaserScope": true,
         "attachment_Bipod": true,
@@ -1407,14 +1740,25 @@
         "bSinks": true,
         "bShowStatus": true,
         "bTwoHanded": true,
-        "bBigGunList": true
+        "bBigGunList": true,
+        "tileGraphic": {
+            "type": "GUNS",
+            "subIndex": 36
+        }
     },
     {
         "itemIndex": 36,
         "internalName": "HK21E",
         "internalType": "LMG",
-        "ubGraphicType": 0,
-        "ubGraphicNum": 36,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdguns.sti",
+                "subImageIndex": 36
+            },
+            "big": {
+                "path": "bigitems/gun36.sti"
+            }
+        },
         "ubWeight": 93,
         "ubPerPocket": 0,
         "usPrice": 3420,
@@ -1435,8 +1779,6 @@
         "usRange": 500,
         "ubAttackVolume": 82,
         "ubHitVolume": 8,
-        "Sound": "sounds/weapons/7,62 wp single shot.wav",
-        "BurstSound": "sounds/weapons/bursttype1.wav",
         "attachment_SniperScope": true,
         "attachment_LaserScope": true,
         "attachment_Bipod": true,
@@ -1450,14 +1792,25 @@
         "bSinks": true,
         "bShowStatus": true,
         "bTwoHanded": true,
-        "bBigGunList": true
+        "bBigGunList": true,
+        "tileGraphic": {
+            "type": "GUNS",
+            "subIndex": 37
+        }
     },
     {
         "itemIndex": 37,
         "internalName": "COMBAT_KNIFE",
         "internalType": "BLADE",
-        "ubGraphicType": 1,
-        "ubGraphicNum": 79,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdp1items.sti",
+                "subImageIndex": 79
+            },
+            "big": {
+                "path": "bigitems/p1item79.sti"
+            }
+        },
         "ubWeight": 9,
         "ubPerPocket": 2,
         "usPrice": 100,
@@ -1470,20 +1823,30 @@
         "ubDeadliness": 5,
         "usRange": 40,
         "ubAttackVolume": 2,
-        "Sound": "",
         "bDamageable": true,
         "bRepairable": true,
         "bWaterDamages": true,
         "bMetal": true,
         "bSinks": true,
-        "bShowStatus": true
+        "bShowStatus": true,
+        "tileGraphic": {
+            "type": "P1ITEMS",
+            "subIndex": 80
+        }
     },
     {
         "itemIndex": 38,
         "internalName": "THROWING_KNIFE",
         "internalType": "THROWINGBLADE",
-        "ubGraphicType": 1,
-        "ubGraphicNum": 53,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdp1items.sti",
+                "subImageIndex": 53
+            },
+            "big": {
+                "path": "bigitems/p1item53.sti"
+            }
+        },
         "ubWeight": 1,
         "ubPerPocket": 4,
         "usPrice": 50,
@@ -1496,21 +1859,31 @@
         "ubDeadliness": 4,
         "usRange": 150,
         "ubAttackVolume": 2,
-        "Sound": "sounds/weapons/knife throw swoosh.wav",
+        "sound": "sounds/weapons/knife throw swoosh.wav",
         "bDamageable": true,
         "bRepairable": true,
         "bWaterDamages": true,
         "bMetal": true,
         "bSinks": true,
-        "bShowStatus": true
+        "bShowStatus": true,
+        "tileGraphic": {
+            "type": "P1ITEMS",
+            "subIndex": 54
+        }
     },
     {
-        "thrown": true,
         "itemIndex": 39,
         "internalName": "ROCK",
-        "internalType": "NOWEAPON",
-        "ubGraphicType": 1,
-        "ubGraphicNum": 57,
+        "internalType": "THROWN",
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdp1items.sti",
+                "subImageIndex": 57
+            },
+            "big": {
+                "path": "bigitems/p1item57.sti"
+            }
+        },
         "ubWeight": 5,
         "ubPerPocket": 2,
         "usPrice": 0,
@@ -1519,14 +1892,25 @@
         "bRepairEase": 0,
         "rateOfFire": 0,
         "usRange": 0,
-        "bNotBuyable": true
+        "bNotBuyable": true,
+        "tileGraphic": {
+            "type": "P1ITEMS",
+            "subIndex": 58
+        }
     },
     {
         "itemIndex": 40,
         "internalName": "GLAUNCHER",
         "internalType": "LAUNCHER",
-        "ubGraphicType": 0,
-        "ubGraphicNum": 37,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdguns.sti",
+                "subImageIndex": 37
+            },
+            "big": {
+                "path": "bigitems/gun37.sti"
+            }
+        },
         "ubWeight": 26,
         "ubPerPocket": 0,
         "usPrice": 900,
@@ -1541,21 +1925,32 @@
         "usRange": 500,
         "ubAttackVolume": 20,
         "ubHitVolume": 10,
-        "Sound": "sounds/weapons/mortar fire 01.wav",
+        "sound": "sounds/weapons/mortar fire 01.wav",
         "bDamageable": true,
         "bRepairable": true,
         "bWaterDamages": true,
         "bMetal": true,
         "bSinks": true,
         "bShowStatus": true,
-        "bTwoHanded": true
+        "bTwoHanded": true,
+        "tileGraphic": {
+            "type": "GUNS",
+            "subIndex": 38
+        }
     },
     {
         "itemIndex": 41,
         "internalName": "MORTAR",
         "internalType": "LAUNCHER",
-        "ubGraphicType": 0,
-        "ubGraphicNum": 0,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdguns.sti",
+                "subImageIndex": 0
+            },
+            "big": {
+                "path": "bigitems/gun00.sti"
+            }
+        },
         "ubWeight": 77,
         "ubPerPocket": 0,
         "usPrice": 1800,
@@ -1570,22 +1965,32 @@
         "usRange": 550,
         "ubAttackVolume": 20,
         "ubHitVolume": 10,
-        "Sound": "sounds/weapons/mortar fire 01.wav",
+        "sound": "sounds/weapons/mortar fire 01.wav",
         "bDamageable": true,
         "bRepairable": true,
         "bWaterDamages": true,
         "bMetal": true,
         "bSinks": true,
         "bShowStatus": true,
-        "bTwoHanded": true
+        "bTwoHanded": true,
+        "tileGraphic": {
+            "type": "GUNS",
+            "subIndex": 1
+        }
     },
     {
-        "thrown": true,
         "itemIndex": 42,
         "internalName": "ROCK2",
-        "internalType": "NOWEAPON",
-        "ubGraphicType": 1,
-        "ubGraphicNum": 60,
+        "internalType": "THROWN",
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdp1items.sti",
+                "subImageIndex": 60
+            },
+            "big": {
+                "path": "bigitems/p1item60.sti"
+            }
+        },
         "ubWeight": 4,
         "ubPerPocket": 3,
         "usPrice": 0,
@@ -1594,14 +1999,25 @@
         "bRepairEase": 0,
         "rateOfFire": 0,
         "usRange": 0,
-        "bNotBuyable": true
+        "bNotBuyable": true,
+        "tileGraphic": {
+            "type": "P1ITEMS",
+            "subIndex": 61
+        }
     },
     {
         "itemIndex": 43,
         "internalName": "CREATURE_YOUNG_MALE_CLAWS",
         "internalType": "BLADE",
-        "ubGraphicType": 0,
-        "ubGraphicNum": 0,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdguns.sti",
+                "subImageIndex": 0
+            },
+            "big": {
+                "path": "bigitems/gun00.sti"
+            }
+        },
         "ubWeight": 0,
         "ubPerPocket": 1,
         "usPrice": 0,
@@ -1614,17 +2030,27 @@
         "ubDeadliness": 1,
         "usRange": 10,
         "ubAttackVolume": 2,
-        "Sound": "",
         "bNotBuyable": true,
         "bNotEditor": true,
-        "bDefaultUndroppable": true
+        "bDefaultUndroppable": true,
+        "tileGraphic": {
+            "type": "GUNS",
+            "subIndex": 1
+        }
     },
     {
         "itemIndex": 44,
         "internalName": "CREATURE_OLD_MALE_CLAWS",
         "internalType": "BLADE",
-        "ubGraphicType": 0,
-        "ubGraphicNum": 0,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdguns.sti",
+                "subImageIndex": 0
+            },
+            "big": {
+                "path": "bigitems/gun00.sti"
+            }
+        },
         "ubWeight": 0,
         "ubPerPocket": 1,
         "usPrice": 0,
@@ -1637,17 +2063,27 @@
         "ubDeadliness": 1,
         "usRange": 10,
         "ubAttackVolume": 2,
-        "Sound": "",
         "bNotBuyable": true,
         "bNotEditor": true,
-        "bDefaultUndroppable": true
+        "bDefaultUndroppable": true,
+        "tileGraphic": {
+            "type": "GUNS",
+            "subIndex": 1
+        }
     },
     {
         "itemIndex": 45,
         "internalName": "CREATURE_YOUNG_FEMALE_CLAWS",
         "internalType": "BLADE",
-        "ubGraphicType": 0,
-        "ubGraphicNum": 0,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdguns.sti",
+                "subImageIndex": 0
+            },
+            "big": {
+                "path": "bigitems/gun00.sti"
+            }
+        },
         "ubWeight": 0,
         "ubPerPocket": 1,
         "usPrice": 0,
@@ -1660,17 +2096,27 @@
         "ubDeadliness": 1,
         "usRange": 10,
         "ubAttackVolume": 2,
-        "Sound": "",
         "bNotBuyable": true,
         "bNotEditor": true,
-        "bDefaultUndroppable": true
+        "bDefaultUndroppable": true,
+        "tileGraphic": {
+            "type": "GUNS",
+            "subIndex": 1
+        }
     },
     {
         "itemIndex": 46,
         "internalName": "CREATURE_OLD_FEMALE_CLAWS",
         "internalType": "BLADE",
-        "ubGraphicType": 0,
-        "ubGraphicNum": 0,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdguns.sti",
+                "subImageIndex": 0
+            },
+            "big": {
+                "path": "bigitems/gun00.sti"
+            }
+        },
         "ubWeight": 0,
         "ubPerPocket": 1,
         "usPrice": 0,
@@ -1683,17 +2129,27 @@
         "ubDeadliness": 1,
         "usRange": 10,
         "ubAttackVolume": 2,
-        "Sound": "",
         "bNotBuyable": true,
         "bNotEditor": true,
-        "bDefaultUndroppable": true
+        "bDefaultUndroppable": true,
+        "tileGraphic": {
+            "type": "GUNS",
+            "subIndex": 1
+        }
     },
     {
         "itemIndex": 47,
         "internalName": "CREATURE_QUEEN_TENTACLES",
         "internalType": "BLADE",
-        "ubGraphicType": 0,
-        "ubGraphicNum": 0,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdguns.sti",
+                "subImageIndex": 0
+            },
+            "big": {
+                "path": "bigitems/gun00.sti"
+            }
+        },
         "ubWeight": 0,
         "ubPerPocket": 1,
         "usPrice": 0,
@@ -1706,17 +2162,27 @@
         "ubDeadliness": 1,
         "usRange": 70,
         "ubAttackVolume": 2,
-        "Sound": "",
         "bNotBuyable": true,
         "bNotEditor": true,
-        "bDefaultUndroppable": true
+        "bDefaultUndroppable": true,
+        "tileGraphic": {
+            "type": "GUNS",
+            "subIndex": 1
+        }
     },
     {
         "itemIndex": 48,
         "internalName": "CREATURE_QUEEN_SPIT",
         "internalType": "MONSTSPIT",
-        "ubGraphicType": 0,
-        "ubGraphicNum": 0,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdguns.sti",
+                "subImageIndex": 0
+            },
+            "big": {
+                "path": "bigitems/gun00.sti"
+            }
+        },
         "ubWeight": 0,
         "ubPerPocket": 1,
         "usPrice": 0,
@@ -1732,17 +2198,28 @@
         "usRange": 300,
         "ubAttackVolume": 10,
         "ubHitVolume": 5,
-        "Sound": "sounds/adult spit.wav",
         "bNotBuyable": true,
         "bNotEditor": true,
-        "bDefaultUndroppable": true
+        "bDefaultUndroppable": true,
+        "usSmokeEffect": 159,
+        "tileGraphic": {
+            "type": "GUNS",
+            "subIndex": 1
+        }
     },
     {
         "itemIndex": 49,
         "internalName": "BRASS_KNUCKLES",
         "internalType": "PUNCHWEAPON",
-        "ubGraphicType": 1,
-        "ubGraphicNum": 102,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdp1items.sti",
+                "subImageIndex": 102
+            },
+            "big": {
+                "path": "bigitems/p1item102.sti"
+            }
+        },
         "ubWeight": 1,
         "ubPerPocket": 4,
         "usPrice": 20,
@@ -1754,20 +2231,30 @@
         "ubImpact": 12,
         "ubDeadliness": 1,
         "ubAttackVolume": 0,
-        "Sound": "",
         "bDamageable": true,
         "bRepairable": true,
         "bWaterDamages": true,
         "bMetal": true,
         "bSinks": true,
-        "bShowStatus": true
+        "bShowStatus": true,
+        "tileGraphic": {
+            "type": "P1ITEMS",
+            "subIndex": 103
+        }
     },
     {
         "itemIndex": 50,
         "internalName": "UNDER_GLAUNCHER",
         "internalType": "LAUNCHER",
-        "ubGraphicType": 0,
-        "ubGraphicNum": 39,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdguns.sti",
+                "subImageIndex": 39
+            },
+            "big": {
+                "path": "bigitems/gun39.sti"
+            }
+        },
         "ubWeight": 13,
         "ubPerPocket": 0,
         "usPrice": 500,
@@ -1782,20 +2269,31 @@
         "usRange": 450,
         "ubAttackVolume": 20,
         "ubHitVolume": 10,
-        "Sound": "sounds/weapons/mortar fire 01.wav",
+        "sound": "sounds/weapons/mortar fire 01.wav",
         "bDamageable": true,
         "bRepairable": true,
         "bWaterDamages": true,
         "bMetal": true,
         "bSinks": true,
-        "bShowStatus": true
+        "bShowStatus": true,
+        "tileGraphic": {
+            "type": "GUNS",
+            "subIndex": 40
+        }
     },
     {
         "itemIndex": 51,
         "internalName": "ROCKET_LAUNCHER",
         "internalType": "LAW",
-        "ubGraphicType": 0,
-        "ubGraphicNum": 38,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdguns.sti",
+                "subImageIndex": 38
+            },
+            "big": {
+                "path": "bigitems/gun38.sti"
+            }
+        },
         "ubWeight": 21,
         "ubPerPocket": 0,
         "usPrice": 500,
@@ -1810,21 +2308,32 @@
         "usRange": 500,
         "ubAttackVolume": 80,
         "ubHitVolume": 10,
-        "Sound": "sounds/weapons/rocket launcher.wav",
+        "sound": "sounds/weapons/rocket launcher.wav",
         "bDamageable": true,
         "bRepairable": true,
         "bWaterDamages": true,
         "bMetal": true,
         "bSinks": true,
         "bShowStatus": true,
-        "bTwoHanded": true
+        "bTwoHanded": true,
+        "tileGraphic": {
+            "type": "GUNS",
+            "subIndex": 39
+        }
     },
     {
         "itemIndex": 52,
         "internalName": "BLOODCAT_CLAW_ATTACK",
         "internalType": "BLADE",
-        "ubGraphicType": 0,
-        "ubGraphicNum": 0,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdguns.sti",
+                "subImageIndex": 0
+            },
+            "big": {
+                "path": "bigitems/gun00.sti"
+            }
+        },
         "ubWeight": 0,
         "ubPerPocket": 1,
         "usPrice": 0,
@@ -1837,17 +2346,27 @@
         "ubDeadliness": 1,
         "usRange": 10,
         "ubAttackVolume": 2,
-        "Sound": "",
         "bNotBuyable": true,
         "bNotEditor": true,
-        "bDefaultUndroppable": true
+        "bDefaultUndroppable": true,
+        "tileGraphic": {
+            "type": "GUNS",
+            "subIndex": 1
+        }
     },
     {
         "itemIndex": 53,
         "internalName": "BLOODCAT_BITE",
         "internalType": "BLADE",
-        "ubGraphicType": 0,
-        "ubGraphicNum": 0,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdguns.sti",
+                "subImageIndex": 0
+            },
+            "big": {
+                "path": "bigitems/gun00.sti"
+            }
+        },
         "ubWeight": 0,
         "ubPerPocket": 1,
         "usPrice": 0,
@@ -1860,17 +2379,27 @@
         "ubDeadliness": 1,
         "usRange": 10,
         "ubAttackVolume": 2,
-        "Sound": "",
         "bNotBuyable": true,
         "bNotEditor": true,
-        "bDefaultUndroppable": true
+        "bDefaultUndroppable": true,
+        "tileGraphic": {
+            "type": "GUNS",
+            "subIndex": 1
+        }
     },
     {
         "itemIndex": 54,
         "internalName": "MACHETE",
         "internalType": "BLADE",
-        "ubGraphicType": 0,
-        "ubGraphicNum": 41,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdguns.sti",
+                "subImageIndex": 41
+            },
+            "big": {
+                "path": "bigitems/gun41.sti"
+            }
+        },
         "ubWeight": 13,
         "ubPerPocket": 0,
         "usPrice": 200,
@@ -1883,20 +2412,30 @@
         "ubDeadliness": 6,
         "usRange": 40,
         "ubAttackVolume": 2,
-        "Sound": "",
         "bDamageable": true,
         "bRepairable": true,
         "bWaterDamages": true,
         "bMetal": true,
         "bSinks": true,
-        "bShowStatus": true
+        "bShowStatus": true,
+        "tileGraphic": {
+            "type": "GUNS",
+            "subIndex": 42
+        }
     },
     {
         "itemIndex": 55,
         "internalName": "ROCKET_RIFLE",
         "internalType": "RIFLE",
-        "ubGraphicType": 0,
-        "ubGraphicNum": 45,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdguns.sti",
+                "subImageIndex": 45
+            },
+            "big": {
+                "path": "bigitems/gun45.sti"
+            }
+        },
         "ubWeight": 40,
         "ubPerPocket": 0,
         "usPrice": 5000,
@@ -1914,7 +2453,6 @@
         "usRange": 600,
         "ubAttackVolume": 80,
         "ubHitVolume": 10,
-        "Sound": "sounds/weapons/small rocket launcher.wav",
         "bDamageable": true,
         "bRepairable": true,
         "bWaterDamages": true,
@@ -1923,14 +2461,25 @@
         "bShowStatus": true,
         "bTwoHanded": true,
         "bNotBuyable": true,
-        "bElectronic": true
+        "bElectronic": true,
+        "tileGraphic": {
+            "type": "GUNS",
+            "subIndex": 46
+        }
     },
     {
         "itemIndex": 56,
         "internalName": "AUTOMAG_III",
         "internalType": "PISTOL",
-        "ubGraphicType": 0,
-        "ubGraphicNum": 40,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdguns.sti",
+                "subImageIndex": 40
+            },
+            "big": {
+                "path": "bigitems/gun40.sti"
+            }
+        },
         "ubWeight": 12,
         "ubPerPocket": 0,
         "usPrice": 1000,
@@ -1948,7 +2497,7 @@
         "usRange": 220,
         "ubAttackVolume": 72,
         "ubHitVolume": 6,
-        "Sound": "sounds/weapons/automag single.wav",
+        "sound": "sounds/weapons/automag single.wav",
         "attachment_LaserScope": true,
         "attachment_SpringAndBoltUpgrade": true,
         "attachment_GunBarrelExtender": true,
@@ -1958,14 +2507,25 @@
         "bMetal": true,
         "bSinks": true,
         "bShowStatus": true,
-        "bNotBuyable": true
+        "bNotBuyable": true,
+        "tileGraphic": {
+            "type": "GUNS",
+            "subIndex": 41
+        }
     },
     {
         "itemIndex": 57,
         "internalName": "CREATURE_INFANT_SPIT",
         "internalType": "MONSTSPIT",
-        "ubGraphicType": 0,
-        "ubGraphicNum": 0,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdguns.sti",
+                "subImageIndex": 0
+            },
+            "big": {
+                "path": "bigitems/gun00.sti"
+            }
+        },
         "ubWeight": 0,
         "ubPerPocket": 0,
         "usPrice": 0,
@@ -1981,17 +2541,28 @@
         "usRange": 200,
         "ubAttackVolume": 10,
         "ubHitVolume": 5,
-        "Sound": "sounds/adult spit.wav",
         "bNotBuyable": true,
         "bNotEditor": true,
-        "bDefaultUndroppable": true
+        "bDefaultUndroppable": true,
+        "usSmokeEffect": 160,
+        "tileGraphic": {
+            "type": "GUNS",
+            "subIndex": 1
+        }
     },
     {
         "itemIndex": 58,
         "internalName": "CREATURE_YOUNG_MALE_SPIT",
         "internalType": "MONSTSPIT",
-        "ubGraphicType": 0,
-        "ubGraphicNum": 0,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdguns.sti",
+                "subImageIndex": 0
+            },
+            "big": {
+                "path": "bigitems/gun00.sti"
+            }
+        },
         "ubWeight": 0,
         "ubPerPocket": 0,
         "usPrice": 0,
@@ -2007,17 +2578,28 @@
         "usRange": 200,
         "ubAttackVolume": 10,
         "ubHitVolume": 5,
-        "Sound": "sounds/adult spit.wav",
         "bNotBuyable": true,
         "bNotEditor": true,
-        "bDefaultUndroppable": true
+        "bDefaultUndroppable": true,
+        "usSmokeEffect": 160,
+        "tileGraphic": {
+            "type": "GUNS",
+            "subIndex": 1
+        }
     },
     {
         "itemIndex": 59,
         "internalName": "CREATURE_OLD_MALE_SPIT",
         "internalType": "MONSTSPIT",
-        "ubGraphicType": 0,
-        "ubGraphicNum": 0,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdguns.sti",
+                "subImageIndex": 0
+            },
+            "big": {
+                "path": "bigitems/gun00.sti"
+            }
+        },
         "ubWeight": 0,
         "ubPerPocket": 0,
         "usPrice": 0,
@@ -2033,17 +2615,28 @@
         "usRange": 200,
         "ubAttackVolume": 10,
         "ubHitVolume": 5,
-        "Sound": "sounds/adult spit.wav",
         "bNotBuyable": true,
         "bNotEditor": true,
-        "bDefaultUndroppable": true
+        "bDefaultUndroppable": true,
+        "usSmokeEffect": 158,
+        "tileGraphic": {
+            "type": "GUNS",
+            "subIndex": 1
+        }
     },
     {
         "itemIndex": 60,
         "internalName": "TANK_CANNON",
         "internalType": "CANNON",
-        "ubGraphicType": 0,
-        "ubGraphicNum": 37,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdguns.sti",
+                "subImageIndex": 37
+            },
+            "big": {
+                "path": "bigitems/gun37.sti"
+            }
+        },
         "ubWeight": 26,
         "ubPerPocket": 0,
         "usPrice": 0,
@@ -2058,15 +2651,26 @@
         "usRange": 800,
         "ubAttackVolume": 90,
         "ubHitVolume": 10,
-        "Sound": "sounds/weapons/tank_cannon.wav",
-        "bNotBuyable": true
+        "sound": "sounds/weapons/tank_cannon.wav",
+        "bNotBuyable": true,
+        "tileGraphic": {
+            "type": "GUNS",
+            "subIndex": 38
+        }
     },
     {
         "itemIndex": 61,
         "internalName": "DART_GUN",
         "internalType": "PISTOL",
-        "ubGraphicType": 0,
-        "ubGraphicNum": 46,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdguns.sti",
+                "subImageIndex": 46
+            },
+            "big": {
+                "path": "bigitems/gun46.sti"
+            }
+        },
         "ubWeight": 12,
         "ubPerPocket": 1,
         "usPrice": 500,
@@ -2084,20 +2688,30 @@
         "usRange": 200,
         "ubAttackVolume": 0,
         "ubHitVolume": 0,
-        "Sound": "",
         "bDamageable": true,
         "bRepairable": true,
         "bWaterDamages": true,
         "bMetal": true,
         "bSinks": true,
-        "bShowStatus": true
+        "bShowStatus": true,
+        "tileGraphic": {
+            "type": "GUNS",
+            "subIndex": 47
+        }
     },
     {
         "itemIndex": 62,
         "internalName": "BLOODY_THROWING_KNIFE",
         "internalType": "THROWINGBLADE",
-        "ubGraphicType": 1,
-        "ubGraphicNum": 95,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdp1items.sti",
+                "subImageIndex": 95
+            },
+            "big": {
+                "path": "bigitems/p1item95.sti"
+            }
+        },
         "ubWeight": 1,
         "ubPerPocket": 4,
         "usPrice": 50,
@@ -2110,21 +2724,32 @@
         "ubDeadliness": 3,
         "usRange": 150,
         "ubAttackVolume": 2,
-        "Sound": "sounds/weapons/knife throw swoosh.wav",
+        "sound": "sounds/weapons/knife throw swoosh.wav",
         "bDamageable": true,
         "bRepairable": true,
         "bWaterDamages": true,
         "bMetal": true,
         "bSinks": true,
         "bShowStatus": true,
-        "bNotBuyable": true
+        "bNotBuyable": true,
+        "tileGraphic": {
+            "type": "P1ITEMS",
+            "subIndex": 96
+        }
     },
     {
         "itemIndex": 63,
         "internalName": "FLAMETHROWER",
         "internalType": "SHOTGUN",
-        "ubGraphicType": 0,
-        "ubGraphicNum": 48,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdguns.sti",
+                "subImageIndex": 48
+            },
+            "big": {
+                "path": "bigitems/gun48.sti"
+            }
+        },
         "ubWeight": 18,
         "ubPerPocket": 0,
         "usPrice": 0,
@@ -2144,22 +2769,31 @@
         "usRange": 130,
         "ubAttackVolume": 40,
         "ubHitVolume": 8,
-        "Sound": "sounds/weapons/shotgun single shot.wav",
-        "BurstSound": "sounds/weapons/bursttype1.wav",
         "bDamageable": true,
         "bRepairable": true,
         "bWaterDamages": true,
         "bMetal": true,
         "bSinks": true,
         "bShowStatus": true,
-        "bNotBuyable": true
+        "bNotBuyable": true,
+        "tileGraphic": {
+            "type": "GUNS",
+            "subIndex": 49
+        }
     },
     {
         "itemIndex": 64,
         "internalName": "CROWBAR",
         "internalType": "PUNCHWEAPON",
-        "ubGraphicType": 1,
-        "ubGraphicNum": 85,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdp1items.sti",
+                "subImageIndex": 85
+            },
+            "big": {
+                "path": "bigitems/p1item85.sti"
+            }
+        },
         "ubWeight": 30,
         "ubPerPocket": 0,
         "usPrice": 40,
@@ -2171,16 +2805,26 @@
         "ubImpact": 25,
         "ubDeadliness": 4,
         "ubAttackVolume": 0,
-        "Sound": "",
         "bDamageable": true,
-        "bMetal": true
+        "bMetal": true,
+        "tileGraphic": {
+            "type": "P1ITEMS",
+            "subIndex": 86
+        }
     },
     {
         "itemIndex": 65,
         "internalName": "AUTO_ROCKET_RIFLE",
         "internalType": "ASRIFLE",
-        "ubGraphicType": 0,
-        "ubGraphicNum": 45,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdguns.sti",
+                "subImageIndex": 45
+            },
+            "big": {
+                "path": "bigitems/gun45.sti"
+            }
+        },
         "ubWeight": 40,
         "ubPerPocket": 0,
         "usPrice": 10000,
@@ -2200,8 +2844,6 @@
         "usRange": 600,
         "ubAttackVolume": 80,
         "ubHitVolume": 10,
-        "Sound": "sounds/weapons/small rocket launcher.wav",
-        "BurstSound": "sounds/weapons/bursttype1.wav",
         "bDamageable": true,
         "bRepairable": true,
         "bWaterDamages": true,
@@ -2210,14 +2852,25 @@
         "bShowStatus": true,
         "bTwoHanded": true,
         "bNotBuyable": true,
-        "bElectronic": true
+        "bElectronic": true,
+        "tileGraphic": {
+            "type": "GUNS",
+            "subIndex": 46
+        }
     },
     {
         "itemIndex": 66,
         "internalName": "unused",
         "internalType": "NOWEAPON",
-        "ubGraphicType": 0,
-        "ubGraphicNum": 0,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdguns.sti",
+                "subImageIndex": 0
+            },
+            "big": {
+                "path": "bigitems/gun00.sti"
+            }
+        },
         "ubWeight": 0,
         "ubPerPocket": 0,
         "usPrice": 0,
@@ -2231,14 +2884,25 @@
         "bWaterDamages": true,
         "bMetal": true,
         "bSinks": true,
-        "bShowStatus": true
+        "bShowStatus": true,
+        "tileGraphic": {
+            "type": "GUNS",
+            "subIndex": 1
+        }
     },
     {
         "itemIndex": 67,
         "internalName": "unused",
         "internalType": "NOWEAPON",
-        "ubGraphicType": 0,
-        "ubGraphicNum": 0,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdguns.sti",
+                "subImageIndex": 0
+            },
+            "big": {
+                "path": "bigitems/gun00.sti"
+            }
+        },
         "ubWeight": 0,
         "ubPerPocket": 0,
         "usPrice": 0,
@@ -2252,14 +2916,25 @@
         "bWaterDamages": true,
         "bMetal": true,
         "bSinks": true,
-        "bShowStatus": true
+        "bShowStatus": true,
+        "tileGraphic": {
+            "type": "GUNS",
+            "subIndex": 1
+        }
     },
     {
         "itemIndex": 68,
         "internalName": "unused",
         "internalType": "NOWEAPON",
-        "ubGraphicType": 0,
-        "ubGraphicNum": 0,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdguns.sti",
+                "subImageIndex": 0
+            },
+            "big": {
+                "path": "bigitems/gun00.sti"
+            }
+        },
         "ubWeight": 0,
         "ubPerPocket": 0,
         "usPrice": 0,
@@ -2273,14 +2948,25 @@
         "bWaterDamages": true,
         "bMetal": true,
         "bSinks": true,
-        "bShowStatus": true
+        "bShowStatus": true,
+        "tileGraphic": {
+            "type": "GUNS",
+            "subIndex": 1
+        }
     },
     {
         "itemIndex": 69,
         "internalName": "unused",
         "internalType": "NOWEAPON",
-        "ubGraphicType": 0,
-        "ubGraphicNum": 0,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdguns.sti",
+                "subImageIndex": 0
+            },
+            "big": {
+                "path": "bigitems/gun00.sti"
+            }
+        },
         "ubWeight": 0,
         "ubPerPocket": 0,
         "usPrice": 0,
@@ -2294,14 +2980,25 @@
         "bWaterDamages": true,
         "bMetal": true,
         "bSinks": true,
-        "bShowStatus": true
+        "bShowStatus": true,
+        "tileGraphic": {
+            "type": "GUNS",
+            "subIndex": 1
+        }
     },
     {
         "itemIndex": 70,
         "internalName": "unused",
         "internalType": "NOWEAPON",
-        "ubGraphicType": 0,
-        "ubGraphicNum": 0,
+        "inventoryGraphics": {
+            "small": {
+                "path": "interface/mdguns.sti",
+                "subImageIndex": 0
+            },
+            "big": {
+                "path": "bigitems/gun00.sti"
+            }
+        },
         "ubWeight": 0,
         "ubPerPocket": 0,
         "usPrice": 0,
@@ -2315,6 +3012,10 @@
         "bWaterDamages": true,
         "bMetal": true,
         "bSinks": true,
-        "bShowStatus": true
+        "bShowStatus": true,
+        "tileGraphic": {
+            "type": "GUNS",
+            "subIndex": 1
+        }
     }
 ]

@@ -19,6 +19,7 @@
 #include "ScreenIDs.h"
 #include "Random.h"
 #include "SGP.h"
+#include "SGPStrings.h"
 #include "SaveLoadGame.h"
 #include "Text.h"
 #include "GameRes.h"
@@ -26,7 +27,10 @@
 #include "ContentManager.h"
 #include "GameInstance.h"
 
-#define GAME_SETTINGS_FILE "../Ja2.set"
+#include <string_theory/format>
+
+
+#define GAME_SETTINGS_FILE "Ja2.set"
 
 GAME_SETTINGS		gGameSettings;
 GAME_OPTIONS		gGameOptions;
@@ -43,18 +47,18 @@ void LoadGameSettings(void)
 {
 	try
 	{
-		AutoSGPFile f(GCM->openUserPrivateFileForReading(GAME_SETTINGS_FILE));
+		AutoSGPFile f(GCM->userPrivateFiles()->openForReading(GAME_SETTINGS_FILE));
 
 		BYTE data[76];
-		if (FileGetSize(f) != sizeof(data)) goto fail;
-		FileRead(f, data, sizeof(data));
+		if (f->size() != sizeof(data)) goto fail;
+		f->read(data, sizeof(data));
 
 		UINT8          music_volume;
 		UINT8          sound_volume;
 		UINT8          speech_volume;
 		UINT32         settings_version;
 		GAME_SETTINGS& g = gGameSettings;
-		BYTE const*    d = data;
+		DataReader d{data};
 		EXTR_I8(  d, g.bLastSavedGameSlot)
 		EXTR_U8(  d, music_volume)
 		EXTR_U8(  d, sound_volume)
@@ -68,12 +72,12 @@ void LoadGameSettings(void)
 		EXTR_U8(  d, g.ubSizeOfDisplayCover)
 		EXTR_U8(  d, g.ubSizeOfLOS)
 		EXTR_SKIP(d, 20)
-		Assert(d == endof(data));
+		Assert(d.getConsumed() == lengthof(data));
 
 		if (settings_version < GAME_SETTING_CURRENT_VERSION) goto fail;
 
 		// Do checking to make sure the settings are valid
-		if (g.bLastSavedGameSlot < 0 || (NUM_SAVE_GAMES * NUM_SAVE_GAMES_TABS) <= g.bLastSavedGameSlot) g.bLastSavedGameSlot = -1;
+		if (g.bLastSavedGameSlot < 0) g.bLastSavedGameSlot = -1;
 
 		// Make sure that at least subtitles or speech is enabled
 		if (!g.fOptions[TOPTION_SUBTITLES] && !g.fOptions[TOPTION_SPEECH])
@@ -111,7 +115,7 @@ void SaveGameSettings(void)
 	GAME_SETTINGS& g = gGameSettings;
 
 	BYTE  data[76];
-	BYTE* d = data;
+	DataWriter d{data};
 	INJ_I8(  d, g.bLastSavedGameSlot)
 	UINT8 const music_volume  = MusicGetVolume();
 	INJ_U8(  d, music_volume)
@@ -129,10 +133,10 @@ void SaveGameSettings(void)
 	INJ_U8(  d, g.ubSizeOfDisplayCover)
 	INJ_U8(  d, g.ubSizeOfLOS)
 	INJ_SKIP(d, 20)
-	Assert(d == endof(data));
+	Assert(d.getConsumed() == lengthof(data));
 
-	AutoSGPFile f(FileMan::openForWriting(GAME_SETTINGS_FILE));
-	FileWrite(f, data, sizeof(data));
+	AutoSGPFile f(GCM->userPrivateFiles()->openForWriting(GAME_SETTINGS_FILE, true));
+	f->write(data, sizeof(data));
 }
 
 
@@ -179,7 +183,7 @@ static void InitGameSettings(void)
 
 void InitGameOptions()
 {
-	memset( &gGameOptions, 0, sizeof( GAME_OPTIONS ) );
+	gGameOptions = GAME_OPTIONS{};
 
 	//Init the game options
 	gGameOptions.fGunNut           = FALSE;
@@ -190,49 +194,30 @@ void InitGameOptions()
 
 }
 
-
-void CDromEjectionErrorMessageBoxCallBack(MessageBoxReturnValue const bExitValue)
-{
-	if( bExitValue == MSG_BOX_RETURN_OK )
-	{
-		guiPreviousOptionScreen = GAME_SCREEN;
-
-		//if we are in a game, save the game
-		if( gTacticalStatus.fHasAGameBeenStarted )
-		{
-			SaveGame( SAVE__ERROR_NUM, pMessageStrings[ MSG_CDROM_SAVE ] );
-		}
-
- 		//quit the game
-		requestGameExit();
-	}
-}
-
-
 void DisplayGameSettings( )
 {
 	//Display the version number
-	ScreenMsg(FONT_MCOLOR_LTYELLOW, MSG_INTERFACE, L"%ls: %hs (%hs)", pMessageStrings[MSG_VERSION], g_version_label, g_version_number);
+	ScreenMsg(FONT_MCOLOR_LTYELLOW, MSG_INTERFACE, ST::format("{}: {} ({})", pMessageStrings[MSG_VERSION], g_version_label, g_version_number));
 
 	//Display the difficulty level
-	ScreenMsg(FONT_MCOLOR_LTYELLOW, MSG_INTERFACE, L"%ls: %ls", gzGIOScreenText[GIO_DIF_LEVEL_TEXT], gzGIOScreenText[gGameOptions.ubDifficultyLevel + GIO_EASY_TEXT - 1]);
+	ScreenMsg(FONT_MCOLOR_LTYELLOW, MSG_INTERFACE, ST::format("{}: {}", gzGIOScreenText[GIO_DIF_LEVEL_TEXT], gzGIOScreenText[gGameOptions.ubDifficultyLevel + GIO_EASY_TEXT - 1]));
 
 	//Iron man option
-	ScreenMsg(FONT_MCOLOR_LTYELLOW, MSG_INTERFACE, L"%ls: %ls", gzGIOScreenText[GIO_GAME_SAVE_STYLE_TEXT], gzGIOScreenText[GIO_SAVE_ANYWHERE_TEXT + gGameOptions.ubGameSaveMode]);
+	ScreenMsg(FONT_MCOLOR_LTYELLOW, MSG_INTERFACE, ST::format("{}: {}", gzGIOScreenText[GIO_GAME_SAVE_STYLE_TEXT], gzGIOScreenText[GIO_SAVE_ANYWHERE_TEXT + gGameOptions.ubGameSaveMode]));
 
 	// Gun option
-	ScreenMsg(FONT_MCOLOR_LTYELLOW, MSG_INTERFACE, L"%ls: %ls", gzGIOScreenText[GIO_GUN_OPTIONS_TEXT], gzGIOScreenText[gGameOptions.fGunNut ? GIO_GUN_NUT_TEXT : GIO_REDUCED_GUNS_TEXT]);
+	ScreenMsg(FONT_MCOLOR_LTYELLOW, MSG_INTERFACE, ST::format("{}: {}", gzGIOScreenText[GIO_GUN_OPTIONS_TEXT], gzGIOScreenText[gGameOptions.fGunNut ? GIO_GUN_NUT_TEXT : GIO_REDUCED_GUNS_TEXT]));
 
 	//Sci fi option
-	ScreenMsg(FONT_MCOLOR_LTYELLOW, MSG_INTERFACE, L"%ls: %ls", gzGIOScreenText[GIO_GAME_STYLE_TEXT], gzGIOScreenText[GIO_REALISTIC_TEXT + gGameOptions.fSciFi]);
+	ScreenMsg(FONT_MCOLOR_LTYELLOW, MSG_INTERFACE, ST::format("{}: {}", gzGIOScreenText[GIO_GAME_STYLE_TEXT], gzGIOScreenText[GIO_REALISTIC_TEXT + gGameOptions.fSciFi]));
 
 	//Timed Turns option
 	// JA2Gold: no timed turns
-	//ScreenMsg(FONT_MCOLOR_LTYELLOW, MSG_INTERFACE, L"%ls: %ls", gzGIOScreenText[GIO_TIMED_TURN_TITLE_TEXT], gzGIOScreenText[GIO_NO_TIMED_TURNS_TEXT + gGameOptions.fTurnTimeLimit]);
+	//ScreenMsg(FONT_MCOLOR_LTYELLOW, MSG_INTERFACE, ST::format("{}: {}", gzGIOScreenText[GIO_TIMED_TURN_TITLE_TEXT], gzGIOScreenText[GIO_NO_TIMED_TURNS_TEXT + gGameOptions.fTurnTimeLimit]));
 
 	if (CHEATER_CHEAT_LEVEL())
 	{
-		ScreenMsg(FONT_MCOLOR_LTYELLOW, MSG_INTERFACE, gzLateLocalizedString[STR_LATE_56], CurrentPlayerProgressPercentage(), HighestPlayerProgressPercentage());
+		ScreenMsg(FONT_MCOLOR_LTYELLOW, MSG_INTERFACE, st_format_printf(gzLateLocalizedString[STR_LATE_56], CurrentPlayerProgressPercentage(), HighestPlayerProgressPercentage()));
 	}
 }
 
@@ -265,9 +250,7 @@ BOOLEAN	CanGameBeSaved()
 		}
 
 		//if there are enemies in the current sector
-		if( gWorldSectorX != -1 && gWorldSectorY != -1 &&
-				gWorldSectorX != 0 && gWorldSectorY != 0 &&
-				NumEnemiesInAnySector( gWorldSectorX, gWorldSectorY, gbWorldSectorZ ) > 0 )
+		if (gWorldSector.IsValid() && NumEnemiesInAnySector(gWorldSector) > 0)
 		{
 			//no save for you
 			return( FALSE );

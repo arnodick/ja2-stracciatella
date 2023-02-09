@@ -7,8 +7,8 @@
 static void LoadEMailFromFile(HWFILE const File)
 {
 	UINT32 uiSizeOfSubject;
-	FileRead(File, &uiSizeOfSubject, sizeof(UINT32)); // XXX HACK000B
-	FileSeek(File, uiSizeOfSubject, FILE_SEEK_FROM_CURRENT); // XXX HACK000B
+	File->read(&uiSizeOfSubject, sizeof(UINT32)); // XXX HACK000B
+	File->seek(uiSizeOfSubject, FILE_SEEK_FROM_CURRENT); // XXX HACK000B
 
 	UINT16	usOffset;
 	UINT16	usLength;
@@ -19,9 +19,9 @@ static void LoadEMailFromFile(HWFILE const File)
 	BOOLEAN fRead;
 
 	BYTE Data[44];
-	FileRead(File, Data, sizeof(Data));
+	File->read(Data, sizeof(Data));
 
-	BYTE* S = Data;
+	DataReader S{Data};
 	EXTR_U16(S, usOffset)
 	EXTR_U16(S, usLength)
 	EXTR_U8(S, ubSender)
@@ -33,7 +33,7 @@ static void LoadEMailFromFile(HWFILE const File)
 	EXTR_SKIP(S, 16)
 	EXTR_BOOL(S, fRead)
 	EXTR_SKIP(S, 3)
-	Assert(S == endof(Data));
+	Assert(S.getConsumed() == lengthof(Data));
 
 	AddEmailMessage(usOffset, usLength, iDate, ubSender, fRead, iFirstData, uiSecondData);
 }
@@ -44,7 +44,7 @@ void LoadEmailFromSavedGame(HWFILE const File)
 	ShutDownEmailList();
 
 	UINT32 uiNumOfEmails;
-	FileRead(File, &uiNumOfEmails, sizeof(UINT32));
+	File->read(&uiNumOfEmails, sizeof(UINT32));
 
 	for (UINT32 cnt = 0; cnt < uiNumOfEmails; cnt++)
 	{
@@ -57,7 +57,7 @@ static void SaveEMailIntoFile(HWFILE const File, Email const* const Mail)
 {
 	BYTE Data[48];
 
-	BYTE* D = Data;
+	DataWriter D{Data};
 	INJ_U32(D, 0) // was size of subject
 	INJ_U16(D, Mail->usOffset)
 	INJ_U16(D, Mail->usLength)
@@ -70,9 +70,9 @@ static void SaveEMailIntoFile(HWFILE const File, Email const* const Mail)
 	INJ_SKIP(D, 16)
 	INJ_BOOL(D, Mail->fRead)
 	INJ_SKIP(D, 3)
-	Assert(D == endof(Data));
+	Assert(D.getConsumed() == lengthof(Data));
 
-	FileWrite(File, Data, sizeof(Data));
+	File->write(Data, sizeof(Data));
 }
 
 
@@ -86,7 +86,7 @@ void SaveEmailToSavedGame(HWFILE const File)
 	{
 		uiNumOfEmails++;
 	}
-	FileWrite(File, &uiNumOfEmails, sizeof(UINT32));
+	File->write(&uiNumOfEmails, sizeof(UINT32));
 
 	for (pEmail = pEmailList; pEmail != NULL; pEmail = pEmail->Next)
 	{

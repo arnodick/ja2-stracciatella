@@ -11,6 +11,26 @@
 #include "Quests.h"
 #include "Queen_Command.h"
 
+/*
+
+Who can use the panic button?
+ * in tixa only the warden
+ * in other places only the army
+
+*/
+static const SGPSector tixa(TIXA_SECTOR_X, TIXA_SECTOR_Y);
+
+static UINT32 PercentEnemiesKilled()
+{
+	Assert(gTacticalStatus.Team[ ENEMY_TEAM ].bMenInSector >= 0);
+	UINT32 totalEnemies = static_cast<UINT32>(gTacticalStatus.Team[ ENEMY_TEAM ].bMenInSector) + gTacticalStatus.ubArmyGuysKilled;
+	if (totalEnemies == 0)
+	{
+		SLOGW("PercentEnemiesKilled was expecting the army in the current sector");
+		return 0;
+	}
+	return 100 * static_cast<UINT32>(gTacticalStatus.ubArmyGuysKilled) / totalEnemies;
+}
 
 void MakeClosestEnemyChosenOne()
 {
@@ -47,19 +67,18 @@ void MakeClosestEnemyChosenOne()
 			continue;  // next soldier
 		}
 
-		if ( gWorldSectorX == TIXA_SECTOR_X && gWorldSectorY == TIXA_SECTOR_Y )
+		if (gWorldSector == tixa)
 		{
 			if ( pSoldier->ubProfile != WARDEN )
 			{
-				continue;
+				continue; // in tixa only the warden
 			}
 		}
 		else
 		{
-			// only consider for army guys
 			if (pSoldier->bTeam != ENEMY_TEAM )
 			{
-				continue;
+				continue; // in other places only the army
 			}
 		}
 
@@ -183,7 +202,7 @@ void PossiblyMakeThisEnemyChosenOne( SOLDIERTYPE * pSoldier )
 
 	sPanicTriggerGridNo = gTacticalStatus.sPanicTriggerGridNo[ bPanicTrigger ];
 
-	uiPercentEnemiesKilled = (UINT32)( 100 * (UINT32)(gTacticalStatus.ubArmyGuysKilled) / (UINT32)( gTacticalStatus.Team[ ENEMY_TEAM ].bMenInSector + gTacticalStatus.ubArmyGuysKilled ) );
+	uiPercentEnemiesKilled = PercentEnemiesKilled();
 	if ( gTacticalStatus.ubPanicTolerance[ bPanicTrigger ] > uiPercentEnemiesKilled )
 	{
 		// not yet... not yet
@@ -242,7 +261,7 @@ INT8 PanicAI(SOLDIERTYPE *pSoldier, UINT8 ubCanMove)
 			// if we have enough APs to activate it now
 			if (pSoldier->bActionPoints >= AP_USE_REMOTE)
 			{
-				SLOGD(DEBUG_TAG_AI, "%ls is activating his detonator",pSoldier->name);
+				SLOGD("{} is activating his detonator", pSoldier->name);
 				// blow up all the PANIC bombs!
 				return(AI_ACTION_USE_DETONATOR);
 			}
@@ -300,8 +319,7 @@ INT8 PanicAI(SOLDIERTYPE *pSoldier, UINT8 ubCanMove)
 					{
 						// blow up the all the PANIC bombs (or just the journal)
 						pSoldier->usActionData = sPanicTriggerGridNo;
-						SLOGD(DEBUG_TAG_AI, "%s pulls panic trigger at grid %d",
-									pSoldier->name,pSoldier->usActionData);
+						SLOGD("{} pulls panic trigger at grid {}", pSoldier->name, pSoldier->usActionData);
 						return(AI_ACTION_PULL_TRIGGER);
 					}
 					else       // otherwise, wait a turn
@@ -325,7 +343,7 @@ INT8 PanicAI(SOLDIERTYPE *pSoldier, UINT8 ubCanMove)
 						}
 						else       // Oh oh, the chosen one can't get to the trigger!
 						{
-							SLOGD(DEBUG_TAG_AI, "!legalDest - ChosenOne can't get to the trigger!");
+							SLOGD("!legalDest - ChosenOne can't get to the trigger!");
 							gTacticalStatus.the_chosen_one = NULL; // strip him of his Chosen One status
 							MakeClosestEnemyChosenOne();     // and replace him!
 						}
@@ -339,7 +357,7 @@ INT8 PanicAI(SOLDIERTYPE *pSoldier, UINT8 ubCanMove)
 			}
 			else     // Oh oh, the chosen one can't get to the trigger!
 			{
-				SLOGD(DEBUG_TAG_AI, "!adjacentFound - ChosenOne can't get to the trigger!");
+				SLOGD("!adjacentFound - ChosenOne can't get to the trigger!");
 				gTacticalStatus.the_chosen_one = NULL; // strip him of his Chosen One status
 				MakeClosestEnemyChosenOne();   // and replace him!
 			}
@@ -365,7 +383,22 @@ INT8 ClosestPanicTrigger( SOLDIERTYPE * pSoldier )
 	INT8		bClosestTrigger = -1;
 	UINT32	uiPercentEnemiesKilled;
 
-	uiPercentEnemiesKilled = (UINT32)( 100 * (UINT32)(gTacticalStatus.ubArmyGuysKilled) / (UINT32)( gTacticalStatus.Team[ ENEMY_TEAM ].bMenInSector + gTacticalStatus.ubArmyGuysKilled ) );
+	if (gWorldSector == tixa)
+	{
+		if (pSoldier->ubProfile != WARDEN)
+		{
+			return -1; // in tixa only the warden
+		}
+	}
+	else
+	{
+		if (pSoldier->bTeam != ENEMY_TEAM)
+		{
+			return -1; // in other places only the army
+		}
+	}
+
+	uiPercentEnemiesKilled = PercentEnemiesKilled();
 
 	for ( bLoop = 0; bLoop < NUM_PANIC_TRIGGERS; bLoop++ )
 	{
@@ -379,14 +412,8 @@ INT8 ClosestPanicTrigger( SOLDIERTYPE * pSoldier )
 			}
 
 			// in Tixa
-			if ( gWorldSectorX == TIXA_SECTOR_X && gWorldSectorY == TIXA_SECTOR_Y )
+			if (gWorldSector == tixa)
 			{
-				// screen out everyone but the warden
-				if ( pSoldier->ubProfile != WARDEN )
-				{
-					break;
-				}
-
 				// screen out the second/later panic trigger if the first one hasn't been triggered
 				if ( bLoop > 0 && gTacticalStatus.sPanicTriggerGridNo[ bLoop - 1 ] != NOWHERE )
 				{
@@ -418,19 +445,20 @@ BOOLEAN NeedToRadioAboutPanicTrigger( void )
 		return( FALSE );
 	}
 
-	if (!IsTeamActive(ENEMY_TEAM)) return FALSE;
-
-	if ( gWorldSectorX == TIXA_SECTOR_X && gWorldSectorY == TIXA_SECTOR_Y )
+	if (gWorldSector == tixa)
 	{
 		const SOLDIERTYPE* const pSoldier = FindSoldierByProfileID(WARDEN);
 		if (!pSoldier || pSoldier == gTacticalStatus.the_chosen_one)
 		{
-			return( FALSE );
+			return( FALSE ); // in tixa only the warden
 		}
 	}
+	else if (!IsTeamActive(ENEMY_TEAM))
+	{
+		return FALSE; // in other places only the army
+	}
 
-
-	uiPercentEnemiesKilled = (UINT32)( 100 * (UINT32)(gTacticalStatus.ubArmyGuysKilled) / (UINT32)( gTacticalStatus.Team[ ENEMY_TEAM ].bMenInSector + gTacticalStatus.ubArmyGuysKilled ) );
+	uiPercentEnemiesKilled = PercentEnemiesKilled();
 
 	for ( bLoop = 0; bLoop < NUM_PANIC_TRIGGERS; bLoop++ )
 	{
@@ -452,7 +480,8 @@ INT8 HeadForTheStairCase( SOLDIERTYPE * pSoldier )
 {
 	UNDERGROUND_SECTORINFO * pBasementInfo;
 
-	pBasementInfo = FindUnderGroundSector( 3, MAP_ROW_P, 1 );
+
+	pBasementInfo = FindUnderGroundSector(SGPSector(3, MAP_ROW_P, 1));
 	if ( pBasementInfo && pBasementInfo->uiTimeCurrentSectorWasLastLoaded != 0 && ( pBasementInfo->ubNumElites + pBasementInfo->ubNumTroops + pBasementInfo->ubNumAdmins ) < 5 )
 	{
 		return( AI_ACTION_NONE );

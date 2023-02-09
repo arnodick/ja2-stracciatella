@@ -1,23 +1,25 @@
 #include "ItemModel.h"
 
+#include <utility>
+
 #include "JsonObject.h"
 #include "MagazineModel.h"
 #include "WeaponModels.h"
 
 
 ItemModel::ItemModel(uint16_t itemIndex,
-			const char* internalName,
+			ST::string internalName,
 			uint32_t usItemClass,
 			uint8_t classIndex,
-			ItemCursor cursor)
+			ItemCursor cursor) :
+	inventoryGraphics(InventoryGraphicsModel(GraphicModel("interface/mdguns.sti", 0), GraphicModel("bigitems/gun00.sti", 0))),
+	tileGraphic(TilesetTileIndexModel(TileTypeDefines::GUNS, 1))
 {
 	this->itemIndex             = itemIndex;
-	this->internalName          = internalName;
+	this->internalName          = std::move(internalName);
 	this->usItemClass           = usItemClass;
 	this->ubClassIndex          = classIndex;
 	this->ubCursor              = cursor;
-	this->ubGraphicType         = 0;
-	this->ubGraphicNum          = 0;
 	this->ubWeight              = 0;
 	this->ubPerPocket           = 0;
 	this->usPrice               = 0;
@@ -28,27 +30,31 @@ ItemModel::ItemModel(uint16_t itemIndex,
 }
 
 ItemModel::ItemModel(uint16_t   itemIndex,
-			const char* internalName,
+			ST::string internalName,
+			ST::string shortName,
+			ST::string name,
+			ST::string description,
 			uint32_t   usItemClass,
 			uint8_t    ubClassIndex,
 			ItemCursor ubCursor,
-			uint8_t    ubGraphicType,
-			uint8_t    ubGraphicNum,
+			InventoryGraphicsModel inventoryGraphics_,
+			TilesetTileIndexModel tileGraphic_,
 			uint8_t    ubWeight,
 			uint8_t    ubPerPocket,
 			uint16_t   usPrice,
 			uint8_t    ubCoolness,
 			int8_t     bReliability,
 			int8_t     bRepairEase,
-			uint16_t   fFlags)
+			uint16_t   fFlags) : inventoryGraphics(inventoryGraphics_), tileGraphic(tileGraphic_)
 {
 	this->itemIndex             = itemIndex;
 	this->internalName          = internalName;
+	this->shortName             = shortName;
+	this->name                  = name;
+	this->description           = description;
 	this->usItemClass           = usItemClass;
 	this->ubClassIndex          = ubClassIndex;
 	this->ubCursor              = ubCursor;
-	this->ubGraphicType         = ubGraphicType;
-	this->ubGraphicNum          = ubGraphicNum;
 	this->ubWeight              = ubWeight;
 	this->ubPerPocket           = ubPerPocket;
 	this->usPrice               = usPrice;
@@ -58,17 +64,18 @@ ItemModel::ItemModel(uint16_t   itemIndex,
 	this->fFlags                = fFlags;
 }
 
-// This could be default in C++11
-ItemModel::~ItemModel() {}
+ItemModel::~ItemModel() = default;
 
-const std::string& ItemModel::getInternalName() const  { return internalName;          }
+const ST::string& ItemModel::getInternalName() const   { return internalName;          }
+
+const ST::string& ItemModel::getShortName() const      { return shortName; }
+const ST::string& ItemModel::getName() const           { return name; }
+const ST::string& ItemModel::getDescription() const     { return description; }
 
 uint16_t        ItemModel::getItemIndex() const        { return itemIndex;             }
 uint32_t        ItemModel::getItemClass() const        { return usItemClass;           }
 uint8_t         ItemModel::getClassIndex() const       { return ubClassIndex;          }
 ItemCursor      ItemModel::getCursor() const           { return ubCursor;              }
-uint8_t         ItemModel::getGraphicType() const      { return ubGraphicType;         }
-uint8_t         ItemModel::getGraphicNum() const       { return ubGraphicNum;          }
 uint8_t         ItemModel::getWeight() const           { return ubWeight;              }
 uint8_t         ItemModel::getPerPocket() const        { return ubPerPocket;           }
 uint16_t        ItemModel::getPrice() const            { return usPrice;               }
@@ -76,6 +83,9 @@ uint8_t         ItemModel::getCoolness() const         { return ubCoolness;     
 int8_t          ItemModel::getReliability() const      { return bReliability;          }
 int8_t          ItemModel::getRepairEase() const       { return bRepairEase;           }
 uint16_t        ItemModel::getFlags() const            { return fFlags;                }
+const GraphicModel& ItemModel::getInventoryGraphicSmall() const { return inventoryGraphics.small; }
+const GraphicModel& ItemModel::getInventoryGraphicBig() const { return inventoryGraphics.big; }
+const TilesetTileIndexModel& ItemModel::getTileGraphic() const { return tileGraphic; }
 
 bool ItemModel::isAmmo() const           { return usItemClass == IC_AMMO; }
 bool ItemModel::isArmour() const         { return usItemClass == IC_ARMOUR; }
@@ -146,4 +156,89 @@ uint32_t ItemModel::deserializeFlags(JsonObjectReader &obj) const
 bool ItemModel::canBeAttached(uint16_t attachment) const
 {
 	return false;
+}
+
+void ItemModel::serializeTo(JsonObject &obj) const
+{
+    obj.AddMember("itemIndex", itemIndex);
+    obj.AddMember("internalName", internalName);
+    obj.AddMember("usItemClass", (uint32_t)getItemClass());
+    obj.AddMember("ubClassIndex", getClassIndex());
+    obj.AddMember("ubCursor",  getCursor());
+    obj.AddMember("inventoryGraphics", inventoryGraphics.serialize(obj.getAllocator()).getValue());
+	obj.AddMember("tileGraphic", tileGraphic.serialize(obj.getAllocator()).getValue());
+    obj.AddMember("ubWeight", getWeight());
+    obj.AddMember("ubPerPocket", getPerPocket());
+    obj.AddMember("usPrice", getPrice());
+    obj.AddMember("ubCoolness", getCoolness());
+    obj.AddMember("bReliability", getReliability());
+    obj.AddMember("bRepairEase", getRepairEase());
+
+    serializeFlags(obj);
+}
+
+ST::string ItemModel::deserializeShortName(JsonObjectReader &obj, const VanillaItemStrings& vanillaItemStrings) {
+	uint16_t itemIndex = obj.GetUInt("itemIndex");
+	ST::string shortName = vanillaItemStrings.getShortName(itemIndex);
+	if (obj.getOptionalString("shortName")) {
+		shortName = obj.getOptionalString("shortName");
+	}
+	return shortName;
+}
+
+ST::string ItemModel::deserializeName(JsonObjectReader &obj, const VanillaItemStrings& vanillaItemStrings) {
+	uint16_t itemIndex = obj.GetUInt("itemIndex");
+	ST::string name = vanillaItemStrings.getName(itemIndex);
+	if (obj.getOptionalString("name")) {
+		name = obj.getOptionalString("name");
+	}
+	return name;
+}
+
+ST::string ItemModel::deserializeDescription(JsonObjectReader &obj, const VanillaItemStrings& vanillaItemStrings) {
+	uint16_t itemIndex = obj.GetUInt("itemIndex");
+	ST::string description = vanillaItemStrings.getDescription(itemIndex);
+	if (obj.getOptionalString("description")) {
+		description = obj.getOptionalString("description");
+	}
+	return description;
+}
+
+const ItemModel* ItemModel::deserialize(JsonObjectReader &obj, const VanillaItemStrings& vanillaItemStrings)
+{
+	uint16_t itemIndex = obj.GetUInt("itemIndex");
+	ST::string internalName = obj.GetString("internalName");
+	const rapidjson::Value& igSource = obj.GetValue("inventoryGraphics");
+	JsonObjectReader igGreader(igSource);
+	auto inventoryGraphics = InventoryGraphicsModel::deserialize(igGreader);
+
+	const rapidjson::Value& tgSource = obj.GetValue("tileGraphic");
+	JsonObjectReader tgReader(tgSource);
+	auto tileGraphic = TilesetTileIndexModel::deserialize(tgReader);
+
+	auto shortName = ItemModel::deserializeShortName(obj, vanillaItemStrings);
+	auto name = ItemModel::deserializeName(obj, vanillaItemStrings);
+	auto description = ItemModel::deserializeDescription(obj, vanillaItemStrings);
+
+	auto* item = new ItemModel(
+		itemIndex,
+		internalName,
+		shortName,
+		name,
+		description,
+		obj.GetUInt("usItemClass"),
+		obj.GetUInt("ubClassIndex"),
+		(ItemCursor)obj.GetUInt("ubCursor"),
+		inventoryGraphics,
+		tileGraphic,
+		obj.GetUInt("ubWeight"),
+		obj.GetUInt("ubPerPocket"),
+		obj.GetUInt("usPrice"),
+		obj.GetUInt("ubCoolness"),
+		obj.GetInt("bReliability"),
+		obj.GetInt("bRepairEase"),
+		0
+	);
+	item->fFlags = item->deserializeFlags(obj);
+	return item;
 }

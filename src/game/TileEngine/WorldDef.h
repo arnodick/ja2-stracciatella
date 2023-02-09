@@ -1,19 +1,26 @@
 #ifndef __WORLDDEF_H
 #define __WORLDDEF_H
 
-#include "JA2Types.h"
+#include "Types.h"
 #include "World_Tileset_Enums.h"
 
+#include <string_theory/string>
+
+struct ANITILE;
+struct ITEM_POOL;
+struct LIGHT_SPRITE;
+struct SOLDIERTYPE;
+struct STRUCTURE;
 
 #define WORLD_TILE_X		40
 #define WORLD_TILE_Y		20
 #define WORLD_COLS		160
 #define WORLD_ROWS		160
-#define WORLD_COORD_COLS	1600
-#define WORLD_COORD_ROWS	1600
 #define WORLD_MAX		25600
 #define CELL_X_SIZE		10
 #define CELL_Y_SIZE		10
+constexpr INT16 WORLD_COORD_COLS = WORLD_COLS * CELL_X_SIZE;
+constexpr INT16 WORLD_COORD_ROWS = WORLD_ROWS * CELL_Y_SIZE;
 
 #define HALF_TILE_WIDTH		((WORLD_TILE_X / CELL_X_SIZE) / 2)	// equals to 2
 #define HALF_TILE_HEIGHT	((WORLD_TILE_Y / CELL_Y_SIZE) / 2)	// equals to 1
@@ -21,11 +28,6 @@
 #define CENTER_GRIDNO (WORLD_ROWS / 2 * WORLD_COLS + WORLD_COLS / 2)
 
 #define WORLD_CLIFF_HEIGHT	80
-
-//A macro that actually memcpy's over data and increments the pointer automatically
-//based on the size.  Works like a FileRead except with a buffer instead of a file pointer.
-//Used by LoadWorld() and child functions.
-#define  LOADDATA( dst, src, size ) memcpy( dst, src, size ); src += size
 
 
 #define LANDHEAD		0
@@ -219,6 +221,20 @@ struct MAP_ELEMENT
 	UINT8 ubSmellInfo;
 };
 
+/**
+ * Specifies where to load a tile surface.
+ */
+struct TILE_SURFACE_RESOURCE
+{
+	ST::string resourceFileName;  // the exact resource file name on the VFS
+	TileSetID tilesetID;  // the actual Tileset ID, after considering default tileset
+
+	// whether or not the default tileset is being used
+	BOOLEAN isDefaultTileset()
+	{
+		return (tilesetID == GENERIC_1 || tilesetID == DEFAULT_JA25_TILESET);
+	}
+};
 
 // World Data
 extern MAP_ELEMENT* gpWorldLevelData;
@@ -249,13 +265,19 @@ void TrashWorld(void);
 /* Deletes everything then re-creates the world with simple ground tiles */
 void NewWorld(void);
 
-BOOLEAN SaveWorld(const char *puiFilename);
+BOOLEAN SaveWorldAbsolute(const ST::string &absolutePath);
+BOOLEAN SaveWorldToSGPFile(SGPFile* f);
 
-void LoadWorld(char const* filename);
+void LoadWorldAbsolute(const ST::string &absolutePath);
+void LoadWorld(const ST::string &name);
+void LoadWorldFromSGPFile(SGPFile* f);
 void CompileWorldMovementCosts(void);
 void RecompileLocalMovementCosts( INT16 sCentreGridNo );
 void RecompileLocalMovementCostsFromRadius( INT16 sCentreGridNo, INT8 bRadius );
 
+TileSetID GetDefaultTileset();
+// Tilesets may not provide all tile types.If a tile type is not available in a tileset, we fall back and use the surface in the default tileset.
+TILE_SURFACE_RESOURCE GetAdjustedTilesetResource(TileSetID tilesetID, UINT32 uiTileType, ST::string const& filePrefix = "");
 
 void LoadMapTileset(TileSetID);
 

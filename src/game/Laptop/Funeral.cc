@@ -6,7 +6,7 @@
 #include "WordWrap.h"
 #include "Cursors.h"
 #include "Text.h"
-#include "Multi_Language_Graphic_Utils.h"
+#include "GameRes.h"
 #include "Button_System.h"
 #include "Video.h"
 #include "VSurface.h"
@@ -103,18 +103,16 @@ static MOUSE_REGION gSelectedFuneralLinkRegion[FUNERAL_NUMBER_OF_LINKS];
 static MOUSE_REGION gSelectedRipSignRegion;
 
 
-static void SelectFuneralLinkRegionCallBack(MOUSE_REGION* pRegion, INT32 iReason);
-static void SelectRipSignRegionCallBack(MOUSE_REGION* pRegion, INT32 iReason);
+static void SelectFuneralLinkRegionCallBack(MOUSE_REGION* pRegion, UINT32 iReason);
+static void SelectRipSignRegionCallBack(MOUSE_REGION* pRegion, UINT32 iReason);
 
 
 void EnterFuneral()
 {
-	const char* ImageFile;
 	UINT16 usPosX, i;
 
 	// load the Closed graphic and add it
-	ImageFile = GetMLGFilename(MLG_CLOSED);
-	guiClosedSign = AddVideoObjectFromFile(ImageFile);
+	guiClosedSign = AddVideoObjectFromFile(MLG_CLOSED);
 
 	// load the Left column graphic and add it
 	guiLeftColumn = AddVideoObjectFromFile(LAPTOPDIR "/leftcolumn.sti");
@@ -126,12 +124,10 @@ void EnterFuneral()
 	guiMarbleBackground = AddVideoObjectFromFile(LAPTOPDIR "/marble.sti");
 
 	// load the McGillicuttys sign graphic and add it
-	ImageFile = GetMLGFilename(MLG_MCGILLICUTTYS);
-	guiMcGillicuttys = AddVideoObjectFromFile(ImageFile);
+	guiMcGillicuttys = AddVideoObjectFromFile(MLG_MCGILLICUTTYS);
 
 	// load the Mortuary  graphic and add it
-	ImageFile = GetMLGFilename(MLG_MORTUARY);
-	guiMortuary = AddVideoObjectFromFile(ImageFile);
+	guiMortuary = AddVideoObjectFromFile(MLG_MORTUARY);
 
 	// load the right column graphic and add it
 	guiRightColumn = AddVideoObjectFromFile(LAPTOPDIR "/rightcolumn.sti");
@@ -253,9 +249,9 @@ static void DisplayFuneralRipTombStone(void)
 }
 
 
-static void SelectFuneralLinkRegionCallBack(MOUSE_REGION* pRegion, INT32 iReason)
+static void SelectFuneralLinkRegionCallBack(MOUSE_REGION* pRegion, UINT32 iReason)
 {
-	if (iReason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (iReason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		UINT32	uiUserData;
 
@@ -273,9 +269,9 @@ static void SelectFuneralLinkRegionCallBack(MOUSE_REGION* pRegion, INT32 iReason
 }
 
 
-static void SelectRipSignRegionCallBack(MOUSE_REGION* pRegion, INT32 iReason)
+static void SelectRipSignRegionCallBack(MOUSE_REGION* pRegion, UINT32 iReason)
 {
-	if (iReason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (iReason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		gSelectedRipSignRegion.Disable();
 		fPausedReDrawScreenFlag = TRUE;

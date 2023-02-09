@@ -36,9 +36,8 @@ void Add3X3Pit( INT32 iMapIndex )
 	AddObjectToTail( iMapIndex - 159, REGWATERTEXTURE9 );
 	if( !gfEditMode )
 	{ //Add the exitgrids associated with the pit.
-		ExitGrid.ubGotoSectorX = (UINT8)gWorldSectorX;
-		ExitGrid.ubGotoSectorY = (UINT8)gWorldSectorY;
-		ExitGrid.ubGotoSectorZ = (UINT8)(gbWorldSectorZ+1);
+		ExitGrid.ubGotoSector = gWorldSector;
+		ExitGrid.ubGotoSector.z++;
 		ExitGrid.usGridNo = (UINT16)iMapIndex;
 		AddExitGridToWorld( iMapIndex + 159, &ExitGrid );
 		AddExitGridToWorld( iMapIndex -   1, &ExitGrid );
@@ -87,9 +86,8 @@ void Add5X5Pit( INT32 iMapIndex )
 	AddObjectToTail( iMapIndex - 318, REGWATERTEXTURE34 );
 	if( !gfEditMode )
 	{ //Add the exitgrids associated with the pit.
-		ExitGrid.ubGotoSectorX = (UINT8)gWorldSectorX;
-		ExitGrid.ubGotoSectorY = (UINT8)gWorldSectorY;
-		ExitGrid.ubGotoSectorZ = (UINT8)(gbWorldSectorZ+1);
+		ExitGrid.ubGotoSector = gWorldSector;
+		ExitGrid.ubGotoSector.z++;
 		ExitGrid.usGridNo = (UINT16)iMapIndex;
 		AddExitGridToWorld( iMapIndex + 318, &ExitGrid );
 		AddExitGridToWorld( iMapIndex + 158, &ExitGrid );
@@ -167,10 +165,8 @@ void Remove5X5Pit( INT32 iMapIndex )
 
 void AddAllPits()
 {
-	UINT32 i;
-	for( i = 0; i < guiNumWorldItems; i++ )
+	for (const WORLDITEM& wi : gWorldItems)
 	{
-		WORLDITEM const& wi = GetWorldItem(i);
 		if (wi.o.usItem != ACTION_ITEM) continue;
 
 		switch (wi.o.bActionValue)
@@ -183,10 +179,8 @@ void AddAllPits()
 
 void RemoveAllPits()
 {
-	UINT32 i;
-	for( i = 0; i < guiNumWorldItems; i++ )
+	for (const WORLDITEM& wi : gWorldItems)
 	{
-		WORLDITEM const& wi = GetWorldItem(i);
 		if (wi.o.usItem != ACTION_ITEM) continue;
 
 		switch (wi.o.bActionValue)
@@ -233,9 +227,7 @@ void HandleFallIntoPitFromAnimation(SOLDIERTYPE& s)
 	// Given exit grid, move buddy to next sector
 	s.ubStrategicInsertionCode = INSERTION_CODE_GRIDNO;
 	s.usStrategicInsertionData = exit_grid.usGridNo;
-	s.sSectorX                 = exit_grid.ubGotoSectorX;
-	s.sSectorY                 = exit_grid.ubGotoSectorY;
-	s.bSectorZ                 = exit_grid.ubGotoSectorZ;
+	s.sSector                  = exit_grid.ubGotoSector;
 	RemoveSoldierFromTacticalSector(s);
 	HandleSoldierLeavingSectorByThemSelf(&s);
 	SetSoldierHeight(&s, 0);

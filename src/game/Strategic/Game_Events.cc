@@ -3,16 +3,14 @@
 #include "Types.h"
 #include "Game_Events.h"
 #include "Game_Clock.h"
-#include "MemMan.h"
 #include "Font_Control.h"
 #include "Message.h"
 #include "Text.h"
 #include "FileMan.h"
-#include "slog/slog.h"
+#include "Logger.h"
 
 STRATEGICEVENT									*gpEventList = NULL;
 
-extern UINT32 guiGameClock;
 BOOLEAN gfPreventDeletionOfAnyEvent = FALSE;
 static BOOLEAN gfEventDeletionPending = FALSE;
 
@@ -38,7 +36,7 @@ static void DeleteEventsWithDeletionPending()
 		if (i->ubFlags & SEF_DELETION_PENDING)
 		{
 			*anchor = i->next;
-			MemFree(i);
+			delete i;
 		}
 		else
 		{
@@ -57,18 +55,14 @@ static void AdjustClockToEventStamp(STRATEGICEVENT* pEvent, UINT32* puiAdjustmen
 	*puiAdjustment -= uiDiff;
 
 	//Calculate the day, hour, and minutes.
-	guiDay = ( guiGameClock / NUM_SEC_IN_DAY );
-	guiHour = ( guiGameClock - ( guiDay * NUM_SEC_IN_DAY ) ) / NUM_SEC_IN_HOUR;
-	guiMin	= ( guiGameClock - ( ( guiDay * NUM_SEC_IN_DAY ) + ( guiHour * NUM_SEC_IN_HOUR ) ) ) / NUM_SEC_IN_MIN;
-
-	swprintf(WORLDTIMESTR, lengthof(WORLDTIMESTR), L"%ls %d, %02d:%02d", gpGameClockString, guiDay, guiHour, guiMin);
+	UpdateGameClockGlobals(gpGameClockString);
 }
 
 
 void ProcessPendingGameEvents(UINT32 uiAdjustment, const UINT8 ubWarpCode)
 {
 	STRATEGICEVENT *curr, *pEvent, *prev, *temp;
-	BOOLEAN fDeleteEvent = FALSE, fDeleteQueuedEvent = FALSE;
+	BOOLEAN fDeleteEvent = FALSE;
 
 	gfTimeInterrupt = FALSE;
 	gfProcessingGameEvents = TRUE;
@@ -97,12 +91,10 @@ void ProcessPendingGameEvents(UINT32 uiAdjustment, const UINT8 ubWarpCode)
 			{ //make sure that we are processing the last event for that second
 				AdjustClockToEventStamp( curr, &uiAdjustment );
 
-				fDeleteEvent = ExecuteStrategicEvent( curr );
+				fDeleteEvent = ExecuteStrategicEvent(curr);
 
-				if( curr && prev && fDeleteQueuedEvent )
-				{ //The only case where we are deleting a node in the middle of the list
-					prev->next = curr->next;
-				}
+				//The only case where we are deleting a node in the middle of the list
+				//This will happen down below in the if (fDeleteEvent) block
 			}
 			else
 			{ //We are at the current target warp time however, there are still other events following in this time cycle.
@@ -139,7 +131,7 @@ void ProcessPendingGameEvents(UINT32 uiAdjustment, const UINT8 ubWarpCode)
 			if( curr == gpEventList )
 			{
 				gpEventList = gpEventList->next;
-				MemFree( curr );
+				delete curr;
 				curr = gpEventList;
 				prev = NULL;
 			}
@@ -148,7 +140,7 @@ void ProcessPendingGameEvents(UINT32 uiAdjustment, const UINT8 ubWarpCode)
 				temp = curr;
 				prev->next = curr->next;
 				curr = curr->next;
-				MemFree( temp );
+				delete temp;
 			}
 		}
 		else
@@ -184,11 +176,11 @@ STRATEGICEVENT* AddAdvancedStrategicEvent(StrategicEventFrequency const event_ty
 	if (gfProcessingGameEvents && timestamp <= guiTimeStampOfCurrentlyExecutingEvent)
 	{ /* Prevent infinite loops of posting events that are the same time or
 		* earlier than the event currently being processed */
-		SLOGD(DEBUG_TAG_EVENTPUMP, "Event Rejected (id %d): Can't post events <= time while inside an event callback. This is a special case situation that isn't a bug.", callback_id);
+		SLOGD("Event Rejected (id {}): Can't post events <= time while inside an event callback. This is a special case situation that isn't a bug.", callback_id);
 		return 0;
 	}
 
-	STRATEGICEVENT* const n = MALLOCZ(STRATEGICEVENT);
+	STRATEGICEVENT* const n = new STRATEGICEVENT{};
 	n->ubCallbackID = callback_id;
 	n->uiParam      = param;
 	n->ubEventType  = event_type;
@@ -284,7 +276,7 @@ void DeleteAllStrategicEventsOfType(StrategicEventKind const callback_id)
 			if (!gfPreventDeletionOfAnyEvent)
 			{ // Detach and delete the node
 				*anchor = e->next;
-				MemFree(e);
+				delete e;
 				continue;
 			}
 
@@ -302,7 +294,7 @@ void DeleteAllStrategicEvents()
 	{
 		STRATEGICEVENT* const del = i;
 		i = i->next;
-		MemFree(del);
+		delete del;
 	}
 	gpEventList = 0;
 }
@@ -325,7 +317,7 @@ void DeleteStrategicEvent(StrategicEventKind const callback_id, UINT32 const par
 		else
 		{
 			*anchor = e->next;
-			MemFree(e);
+			delete e;
 		}
 		return;
 	}
@@ -341,12 +333,12 @@ void SaveStrategicEventsToSavedGame(HWFILE const f)
 	{
 		++n_game_events;
 	}
-	FileWrite(f, &n_game_events, sizeof(UINT32));
+	f->write(&n_game_events, sizeof(UINT32));
 
 	for (STRATEGICEVENT* i = gpEventList; i; i = i->next)
 	{
 		BYTE  data[28];
-		BYTE* d = data;
+		DataWriter d{data};
 		INJ_SKIP(d, 4)
 		INJ_U32( d, i->uiTimeStamp)
 		INJ_U32( d, i->uiParam)
@@ -355,9 +347,9 @@ void SaveStrategicEventsToSavedGame(HWFILE const f)
 		INJ_U8(  d, i->ubCallbackID)
 		INJ_U8(  d, i->ubFlags)
 		INJ_SKIP(d, 9)
-		Assert(d == endof(data));
+		Assert(d.getConsumed() == lengthof(data));
 
-		FileWrite(f, data, sizeof(data));
+		f->write(data, sizeof(data));
 	}
 }
 
@@ -369,16 +361,16 @@ void LoadStrategicEventsFromSavedGame(HWFILE const f)
 
 	// Read the number of strategic events
 	UINT32 n_game_events;
-	FileRead(f, &n_game_events, sizeof(UINT32));
+	f->read(&n_game_events, sizeof(UINT32));
 
 	STRATEGICEVENT** anchor = &gpEventList;
 	for (size_t n = n_game_events; n != 0; --n)
 	{
 		BYTE data[28];
-		FileRead(f, data, sizeof(data));
+		f->read(data, sizeof(data));
 
-		STRATEGICEVENT* const sev = MALLOCZ(STRATEGICEVENT);
-		BYTE const*           d   = data;
+		STRATEGICEVENT* const sev = new STRATEGICEVENT{};
+		DataReader d{data};
 		EXTR_SKIP(d, 4)
 		EXTR_U32( d, sev->uiTimeStamp)
 		EXTR_U32( d, sev->uiParam)
@@ -387,7 +379,7 @@ void LoadStrategicEventsFromSavedGame(HWFILE const f)
 		EXTR_U8(  d, sev->ubCallbackID)
 		EXTR_U8(  d, sev->ubFlags)
 		EXTR_SKIP(d, 9)
-		Assert(d == endof(data));
+		Assert(d.getConsumed() == lengthof(data));
 
 		*anchor = sev;
 		anchor  = &sev->next;

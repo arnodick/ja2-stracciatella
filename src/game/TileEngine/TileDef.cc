@@ -10,8 +10,7 @@
 #include "Edit_Sys.h"
 #include "PathAI.h"
 #include "Tile_Surface.h"
-#include "MemMan.h"
-#include "slog/slog.h"
+#include "Logger.h"
 
 // GLobals
 TILE_ELEMENT		gTileDatabase[ NUMBEROFTILES ];
@@ -59,13 +58,13 @@ void CreateTileDatabase()
 			NumRegions = gNumTilesPerType[cnt1];
 		}
 
-		SLOGD(DEBUG_TAG_TILES, "Type: %s Size: %d Index: %d", gTileSurfaceName[cnt1], gNumTilesPerType[cnt1], gTileDatabaseSize);
+		SLOGD("Type: {} Size: {} Index: {}", gTileSurfaceName[cnt1], gNumTilesPerType[cnt1], gTileDatabaseSize);
 
 		UINT32 cnt2;
 		for (cnt2 = 0; cnt2 < NumRegions; ++cnt2)
 		{
 			TILE_ELEMENT TileElement;
-			memset(&TileElement, 0, sizeof(TileElement));
+			TileElement = TILE_ELEMENT{};
 			TileElement.usRegionIndex = (UINT16)cnt2;
 			TileElement.hTileSurface	= TileSurf->vo;
 			TileElement.sBuddyNum			= -1;
@@ -126,7 +125,7 @@ void CreateTileDatabase()
 		for (; cnt2 < gNumTilesPerType[cnt1]; ++cnt2)
 		{
 			TILE_ELEMENT TileElement;
-			memset(&TileElement, 0, sizeof(TileElement));
+			TileElement = TILE_ELEMENT{};
 			TileElement.usRegionIndex  = 0;
 			TileElement.hTileSurface   = TileSurf->vo;
 			TileElement.fType          = (UINT16)TileSurf->fType;
@@ -138,9 +137,9 @@ void CreateTileDatabase()
 	}
 
 	//Calculate mem usgae
-	SLOGD(DEBUG_TAG_TILES, "Database Sizes: %d vs %d", gTileDatabaseSize, NUMBEROFTILES);
-	SLOGD(DEBUG_TAG_TILES, "Database Types: %d", NUMBEROFTILETYPES);
-	SLOGD(DEBUG_TAG_TILES, "Database Item Mem: %d", gTileDatabaseSize * sizeof(TILE_ELEMENT));
+	SLOGD("Database Sizes: {} vs {}", gTileDatabaseSize, NUMBEROFTILES);
+	SLOGD("Database Types: {}", NUMBEROFTILETYPES);
+	SLOGD("Database Item Mem: {}", gTileDatabaseSize * sizeof(TILE_ELEMENT));
 }
 
 
@@ -281,8 +280,8 @@ UINT16 GetWallOrientation(UINT16 usIndex)
 
 void AllocateAnimTileData(TILE_ELEMENT* const pTileElem, UINT8 const ubNumFrames)
 {
-	pTileElem->pAnimData            = MALLOC(TILE_ANIMATION_DATA);
-	pTileElem->pAnimData->pusFrames = MALLOCN(UINT16, ubNumFrames);
+	pTileElem->pAnimData            = new TILE_ANIMATION_DATA{};
+	pTileElem->pAnimData->pusFrames = new UINT16[ubNumFrames]{};
 
 	// Set # if frames!
 	pTileElem->pAnimData->ubNumFrames = ubNumFrames;
@@ -294,9 +293,9 @@ static void FreeAnimTileData(TILE_ELEMENT* pTileElem)
 	if ( pTileElem->pAnimData != NULL )
 	{
 		// Free frames list
-		MemFree( pTileElem->pAnimData->pusFrames );
+		delete[] pTileElem->pAnimData->pusFrames;
 
 		// Free frames
-		MemFree( pTileElem->pAnimData );
+		delete pTileElem->pAnimData;
 	}
 }

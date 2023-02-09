@@ -7,13 +7,13 @@
 void ExtractUndergroundSectorInfoFromFile(HWFILE const file, UNDERGROUND_SECTORINFO* const u)
 {
 	BYTE data[72];
-	FileRead(file, data, sizeof(data));
+	file->read(data, sizeof(data));
 
-	const BYTE* d = data;
+	DataReader d{data};
 	EXTR_U32(d, u->uiFlags)
-	EXTR_U8(d, u->ubSectorX)
-	EXTR_U8(d, u->ubSectorY)
-	EXTR_U8(d, u->ubSectorZ)
+	EXTR_U8(d, u->ubSector.x)
+	EXTR_U8(d, u->ubSector.y)
+	EXTR_U8(d, u->ubSector.z)
 	EXTR_U8(d, u->ubNumElites)
 	EXTR_U8(d, u->ubNumTroops)
 	EXTR_U8(d, u->ubNumAdmins)
@@ -30,18 +30,18 @@ void ExtractUndergroundSectorInfoFromFile(HWFILE const file, UNDERGROUND_SECTORI
 	EXTR_SKIP(d, 2)
 	EXTR_U32(d, u->uiNumberOfWorldItemsInTempFileThatCanBeSeenByPlayer)
 	EXTR_SKIP(d, 36)
-	Assert(d == endof(data));
+	Assert(d.getConsumed() == lengthof(data));
 }
 
 
 void InjectUndergroundSectorInfoIntoFile(HWFILE const file, UNDERGROUND_SECTORINFO const* const u)
 {
 	BYTE data[72];
-	BYTE* d = data;
+	DataWriter d{data};
 	INJ_U32(d, u->uiFlags)
-	INJ_U8(d, u->ubSectorX)
-	INJ_U8(d, u->ubSectorY)
-	INJ_U8(d, u->ubSectorZ)
+	INJ_U8(d, u->ubSector.x)
+	INJ_U8(d, u->ubSector.y)
+	INJ_U8(d, u->ubSector.z)
 	INJ_U8(d, u->ubNumElites)
 	INJ_U8(d, u->ubNumTroops)
 	INJ_U8(d, u->ubNumAdmins)
@@ -58,7 +58,7 @@ void InjectUndergroundSectorInfoIntoFile(HWFILE const file, UNDERGROUND_SECTORIN
 	INJ_SKIP(d, 2)
 	INJ_U32(d, u->uiNumberOfWorldItemsInTempFileThatCanBeSeenByPlayer)
 	INJ_SKIP(d, 36)
-	Assert(d == endof(data));
+	Assert(d.getConsumed() == lengthof(data));
 
-	FileWrite(file, data, sizeof(data));
+	file->write(data, sizeof(data));
 }

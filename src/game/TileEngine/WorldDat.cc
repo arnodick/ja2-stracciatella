@@ -9,9 +9,13 @@
 #include "ContentManager.h"
 #include "GameInstance.h"
 
+#include <string_theory/format>
+
+
 // THIS FILE CONTAINS DEFINITIONS FOR TILESET FILES
 
-TILESET gTilesets[NUM_TILESETS];
+UINT8 gubNumTilesets;
+TILESET gTilesets[MAX_NUM_TILESETS];
 
 
 static void SetTilesetFourTerrainValues(void);
@@ -25,17 +29,23 @@ try
 	AutoSGPFile f(GCM->openGameResForReading(GCM->getTilesetDBResName()));
 
 	// READ # TILESETS and compare
-	UINT8 ubNumSets;
-	FileRead(f, &ubNumSets, sizeof(ubNumSets));
-	if (ubNumSets != NUM_TILESETS)
+	f->read(&gubNumTilesets, sizeof(gubNumTilesets));
+	switch (gubNumTilesets)
 	{
+	case VANILLA_NUM_TILESETS:
+		SLOGD("Loading vanilla tilesets");
+		break;
+	case JA25_NUM_TILESETS:
+		SLOGI("Loading tilesets for Unfinished Business");
+		break;
+	default:
 		SET_ERROR("Number of tilesets in code does not match data file");
 		return;
 	}
 
 	// READ #files
 	UINT32 uiNumFiles;
-	FileRead(f, &uiNumFiles, sizeof(uiNumFiles));
+	f->read(&uiNumFiles, sizeof(uiNumFiles));
 	if (uiNumFiles != NUMBEROFTILETYPES)
 	{
 		SET_ERROR("Number of tilesets slots in code does not match data file");
@@ -43,26 +53,26 @@ try
 	}
 
 	// Loop through each tileset, load name then files
-	FOR_EACH(TILESET, ts, gTilesets)
+	for (UINT8 i = 0; i < gubNumTilesets; i++)
 	{
+		TILESET& ts = gTilesets[i];
 		//Read name
-		char zName[32];
-		FileRead(f, &zName, sizeof(zName));
-		zName[sizeof(zName) - 1] = '\0';
-		swprintf(ts->zName, lengthof(ts->zName), L"%hs", zName);
+		ts.zName = f->readString(TILESET_NAME_LENGTH);
 
 		// Read ambience value
-		FileRead(f, &ts->ubAmbientID, sizeof(UINT8));
+		f->read(&(ts.ubAmbientID), sizeof(UINT8));
 
 		// Loop for files
 		for (UINT32 cnt2 = 0; cnt2 < uiNumFiles; ++cnt2)
 		{
 			// Read file name
-			FileRead(f, ts->TileSurfaceFilenames[cnt2], sizeof(ts->TileSurfaceFilenames[cnt2]));
+			ts.zTileSurfaceFilenames[cnt2] = f->readString(TILE_SURFACE_FILENAME_LENGTH);
 		}
+
+		ts.MovementCostFnc = SetTilesetOneTerrainValues;
 	}
 
-	// Set callbacks
+	// Set non-default callbacks
 	gTilesets[CAVES_1      ].MovementCostFnc = SetTilesetTwoTerrainValues;
 	gTilesets[AIRSTRIP     ].MovementCostFnc = SetTilesetThreeTerrainValues;
 	gTilesets[DEAD_AIRSTRIP].MovementCostFnc = SetTilesetThreeTerrainValues;

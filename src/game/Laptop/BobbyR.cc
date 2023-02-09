@@ -15,7 +15,7 @@
 #include "LaptopSave.h"
 #include "Random.h"
 #include "Text.h"
-#include "Multi_Language_Graphic_Utils.h"
+#include "GameRes.h"
 #include "ArmsDealerInvInit.h"
 #include "Video.h"
 #include "VSurface.h"
@@ -26,6 +26,8 @@
 #include "ContentManager.h"
 #include "DealerInventory.h"
 #include "GameInstance.h"
+
+#include <algorithm>
 
 #define BOBBIES_SIGN_FONT			FONT14ARIAL
 #define BOBBIES_SIGN_COLOR			2
@@ -186,11 +188,8 @@ void EnterBobbyR()
 
 	InitBobbyRWoodBackground();
 
-	const char* ImageFile;
-
 	// load the Bobbyname graphic and add it
-	ImageFile = GetMLGFilename(MLG_BOBBYNAME);
-	guiBobbyName = AddVideoObjectFromFile(ImageFile);
+	guiBobbyName = AddVideoObjectFromFile(MLG_BOBBYNAME);
 
 	// load the plaque graphic and add it
 	guiPlaque = AddVideoObjectFromFile(LAPTOPDIR "/bobbyplaques.sti");
@@ -202,8 +201,7 @@ void EnterBobbyR()
 	guiBottomHinge = AddVideoObjectFromFile(LAPTOPDIR "/bobbybottomhinge.sti");
 
 	// load the Store Plaque graphic and add it
-	ImageFile = GetMLGFilename(MLG_STOREPLAQUE);
-	guiStorePlaque = AddVideoObjectFromFile(ImageFile);
+	guiStorePlaque = AddVideoObjectFromFile(MLG_STOREPLAQUE);
 
 	// load the Handle graphic and add it
 	guiHandle = AddVideoObjectFromFile(LAPTOPDIR "/bobbyhandle.sti");
@@ -349,7 +347,7 @@ void DrawBobbyRWoodBackground()
 }
 
 
-static void SelectBobbiesSignMenuRegionCallBack(MOUSE_REGION* pRegion, INT32 iReason);
+static void SelectBobbiesSignMenuRegionCallBack(MOUSE_REGION* pRegion, UINT32 iReason);
 
 
 static void InitBobbiesMouseRegion(UINT8 ubNumerRegions, UINT16* usMouseRegionPosArray, MOUSE_REGION* MouseRegion)
@@ -370,9 +368,9 @@ static void InitBobbiesMouseRegion(UINT8 ubNumerRegions, UINT16* usMouseRegionPo
 }
 
 
-static void SelectBobbiesSignMenuRegionCallBack(MOUSE_REGION* pRegion, INT32 iReason)
+static void SelectBobbiesSignMenuRegionCallBack(MOUSE_REGION* pRegion, UINT32 iReason)
 {
-	if (iReason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (iReason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		guiCurrentLaptopMode = static_cast<LaptopMode>(MSYS_GetRegionUserData(pRegion, 0));
 	}
@@ -444,7 +442,7 @@ static void InitBobbyRayNewInventory(void)
 	UINT16	usBobbyrIndex = 0;
 
 
-	memset( LaptopSaveInfo.BobbyRayInventory, 0, sizeof(STORE_INVENTORY) * MAXITEMS);
+	std::fill_n(LaptopSaveInfo.BobbyRayInventory, static_cast<size_t>(MAXITEMS), STORE_INVENTORY{});
 
 	// add all the NEW items he can ever sell into his possible inventory list, for now in order by item #
 	for( i = 0; i < MAXITEMS; i++ )
@@ -478,7 +476,7 @@ static void InitBobbyRayUsedInventory(void)
 	UINT16	usBobbyrIndex = 0;
 
 
-	memset( LaptopSaveInfo.BobbyRayUsedInventory, 0, sizeof(STORE_INVENTORY) * MAXITEMS);
+	std::fill_n(LaptopSaveInfo.BobbyRayUsedInventory, static_cast<size_t>(MAXITEMS), STORE_INVENTORY{});
 
 	// add all the NEW items he can ever sell into his possible inventory list, for now in order by item #
 	for( i = 0; i < MAXITEMS; i++ )
@@ -704,7 +702,7 @@ void AddFreshBobbyRayInventory( UINT16 usItemIndex )
 	sInventorySlot = GetInventorySlotForItem(pInventoryArray, usItemIndex, fUsed);
 	if (sInventorySlot == -1)
 	{
-		AssertMsg( FALSE, String( "AddFreshBobbyRayInventory(), Item %d not found.  AM-0.", usItemIndex ) );
+		AssertMsg(FALSE, ST::format("AddFreshBobbyRayInventory(), Item {} not found. AM-0.", usItemIndex));
 		return;
 	}
 

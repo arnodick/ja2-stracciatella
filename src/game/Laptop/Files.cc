@@ -16,12 +16,14 @@
 #include "Text.h"
 #include "Button_System.h"
 #include "VSurface.h"
-#include "MemMan.h"
 #include "Font_Control.h"
 #include "FileMan.h"
 
 #include "ContentManager.h"
 #include "GameInstance.h"
+
+#include <string_theory/string>
+
 
 struct FilesUnit
 {
@@ -33,7 +35,7 @@ struct FilesUnit
 
 struct FileString
 {
-	wchar_t* pString;
+	ST::string pString;
 	FileString* Next;
 };
 
@@ -189,7 +191,7 @@ static void ClearFilesList(void);
 
 void GameInitFiles(void)
 {
-	FileDelete(FILES_DAT_FILE);
+	GCM->tempFiles()->deleteFile(FILES_DATA_FILE);
 	ClearFilesList( );
 
 	// add background check by RIS
@@ -339,7 +341,7 @@ static void ProcessAndEnterAFilesRecord(const UINT8 ubCode, const BOOLEAN fRead)
 		if ((*anchor)->ubCode == ubCode) return;
 	}
 
-	FilesUnit* const f = MALLOC(FilesUnit);
+	FilesUnit* const f = new FilesUnit{};
 	f->Next   = NULL;
 	f->ubCode = ubCode;
 	f->fRead  = fRead;
@@ -355,27 +357,26 @@ static void OpenAndReadFilesFile(void)
 {
 	ClearFilesList();
 
-	AutoSGPFile f;
-	try
-	{
-		f = GCM->openGameResForReading(FILES_DAT_FILE);
+	if (!GCM->tempFiles()->exists(FILES_DATA_FILE)) {
+		return;
 	}
-	catch (...) { return; /* XXX TODO0019 ignore */ }
 
 	// file exists, read in data, continue until file end
-	for (UINT i = FileGetSize(f) / FILE_ENTRY_SIZE; i != 0; --i)
+	AutoSGPFile f(GCM->tempFiles()->openForReading(FILES_DATA_FILE));
+
+	for (UINT i = f->size() / FILE_ENTRY_SIZE; i != 0; --i)
 	{
 		BYTE data[FILE_ENTRY_SIZE];
-		FileRead(f, data, sizeof(data));
+		f->read(data, sizeof(data));
 
 		UINT8 code;
 		UINT8 already_read;
 
-		const BYTE* d = data;
+		DataReader d{data};
 		EXTR_U8(d, code)
 		EXTR_SKIP(d, 261)
 		EXTR_U8(d, already_read)
-		Assert(d == endof(data));
+		Assert(d.getConsumed() == lengthof(data));
 
 		ProcessAndEnterAFilesRecord(code, already_read);
 	}
@@ -384,18 +385,18 @@ static void OpenAndReadFilesFile(void)
 
 static void OpenAndWriteFilesFile(void)
 {
-	AutoSGPFile f(FileMan::openForWriting(FILES_DAT_FILE));
+	AutoSGPFile f(GCM->tempFiles()->openForWriting(FILES_DATA_FILE, true));
 
 	for (const FilesUnit* i = pFilesListHead; i; i = i->Next)
 	{
 		BYTE  data[FILE_ENTRY_SIZE];
-		BYTE* d = data;
+		DataWriter d{data};
 		INJ_U8(d, i->ubCode)
 		INJ_SKIP(d, 261)
 		INJ_U8(d, i->fRead)
-		Assert(d == endof(data));
+		Assert(d.getConsumed() == lengthof(data));
 
-		FileWrite(f, data, sizeof(data));
+		f->write(data, sizeof(data));
 	}
 
 	ClearFilesList();
@@ -410,7 +411,7 @@ static void ClearFilesList(void)
 	{
 		FilesUnit* const del = i;
 		i = i->Next;
-		MemFree(del);
+		delete del;
 	}
 }
 
@@ -456,7 +457,7 @@ static void DisplayFileMessage(void)
 }
 
 
-static void FilesBtnCallBack(MOUSE_REGION* pRegion, INT32 iReason);
+static void FilesBtnCallBack(MOUSE_REGION* pRegion, UINT32 iReason);
 
 
 static void InitializeFilesMouseRegions(void)
@@ -481,9 +482,9 @@ static void RemoveFilesMouseRegions()
 }
 
 
-static void FilesBtnCallBack(MOUSE_REGION* pRegion, INT32 iReason)
+static void FilesBtnCallBack(MOUSE_REGION* pRegion, UINT32 iReason)
 {
-	if (iReason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (iReason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		FilesUnit* pFilesList = pFilesListHead;
 		INT32 iFileId = MSYS_GetRegionUserData(pRegion, 0);
@@ -652,16 +653,13 @@ static FileString* LoadStringsIntoFileList(char const* const filename, UINT32 of
 {
 	FileString*  head   = 0;
 	FileString** anchor = &head;
-	AutoSGPFile f(GCM->openGameResForReading(filename));
 	for (; n != 0; ++offset, --n)
 	{
-		wchar_t str[FILE_STRING_SIZE];
-		GCM->loadEncryptedString(f, str, lengthof(str) * offset, lengthof(str));
+		ST::string str = GCM->loadEncryptedString(filename, FILE_STRING_SIZE * offset, FILE_STRING_SIZE);
 
-		FileString* const fs = MALLOC(FileString);
+		FileString* const fs = new FileString{};
 		fs->Next    = 0;
-		fs->pString = MALLOCN(wchar_t, wcslen(str) + 1);
-		wcscpy(fs->pString, str);
+		fs->pString = str;
 
 		// Append node to list
 		*anchor = fs;
@@ -679,8 +677,7 @@ namespace
 		{
 			FileString* const del = i;
 			i = i->Next;
-			MemFree(del->pString);
-			MemFree(del);
+			delete del;
 		}
 	}
 
@@ -730,7 +727,7 @@ static void HandleSpecialFiles(void)
 				break;
 		}
 
-		wchar_t const* const txt = i->pString;
+		ST::string txt = i->pString;
 		if (y + IanWrappedStringHeight(max_width, FILE_GAP, font, txt) >= MAX_FILE_MESSAGE_PAGE_SIZE)
 		{
 			// gonna get cut off, end now
@@ -775,7 +772,7 @@ static void LoadNextPage()
 }
 
 
-static void ScrollRegionCallback(MOUSE_REGION* const, INT32 const reason)
+static void ScrollRegionCallback(MOUSE_REGION* const, UINT32 const reason)
 {
 	if (reason & MSYS_CALLBACK_REASON_WHEEL_UP)
 	{
@@ -788,8 +785,8 @@ static void ScrollRegionCallback(MOUSE_REGION* const, INT32 const reason)
 }
 
 
-static void BtnNextFilePageCallback(GUI_BUTTON *btn, INT32 reason);
-static void BtnPreviousFilePageCallback(GUI_BUTTON *btn, INT32 reason);
+static void BtnNextFilePageCallback(GUI_BUTTON *btn, UINT32 reason);
+static void BtnPreviousFilePageCallback(GUI_BUTTON *btn, UINT32 reason);
 
 
 static void CreateButtonsForFilesPage(void)
@@ -816,18 +813,18 @@ static void DeleteButtonsForFilesPage(void)
 }
 
 
-static void BtnPreviousFilePageCallback(GUI_BUTTON *btn, INT32 reason)
+static void BtnPreviousFilePageCallback(GUI_BUTTON *btn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		LoadPreviousPage();
 	}
 }
 
 
-static void BtnNextFilePageCallback(GUI_BUTTON *btn, INT32 reason)
+static void BtnNextFilePageCallback(GUI_BUTTON *btn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		LoadNextPage();
 	}
@@ -855,7 +852,7 @@ static FileRecordWidth* CreateRecordWidth(INT32 iRecordNumber, INT32 iRecordWidt
 {
 	// allocs and inits a width info record for the multipage file viewer...this will tell the procedure that does inital computation on which record is the start of the current page
 	// how wide special records are ( ones that share space with pictures )
-	FileRecordWidth* const pTempRecord = MALLOC(FileRecordWidth);
+	FileRecordWidth* const pTempRecord = new FileRecordWidth{};
 	pTempRecord -> Next = NULL;
 	pTempRecord -> iRecordNumber = iRecordNumber;
 	pTempRecord -> iRecordWidth = iRecordWidth;
@@ -927,7 +924,7 @@ static void ClearOutWidthRecordsList(FileRecordWidth* i)
 	{
 		FileRecordWidth* const del = i;
 		i = i->Next;
-		MemFree(del);
+		delete del;
 	}
 }
 
@@ -989,7 +986,7 @@ static void HandleSpecialTerroristFile(INT32 const file_idx)
 		if (giFilesPage == 0 && clause == 4)
 		{
 			AutoSGPVObject vo(LoadBigPortrait(GetProfile(info.profile_id)));
-			BltVideoObject(    FRAME_BUFFER, vo,                               0, FILE_VIEWER_X + 30, FILE_VIEWER_Y + 136);
+			BltVideoObject(    FRAME_BUFFER, vo.get(),                         0, FILE_VIEWER_X + 30, FILE_VIEWER_Y + 136);
 			BltVideoObjectOnce(FRAME_BUFFER, LAPTOPDIR "/interceptborder.sti", 0, FILE_VIEWER_X + 25, FILE_VIEWER_Y + 131);
 		}
 
@@ -1011,7 +1008,7 @@ static void HandleSpecialTerroristFile(INT32 const file_idx)
 			start_x   = FILE_VIEWER_X + 10;
 		}
 
-		wchar_t const* const txt = i->pString;
+		ST::string txt = i->pString;
 		if (y + IanWrappedStringHeight(max_width, FILE_GAP, font, txt) >= MAX_FILE_MESSAGE_PAGE_SIZE)
 		{
 			// gonna get cut off, end now

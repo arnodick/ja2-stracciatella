@@ -4,6 +4,8 @@
 #include "VanillaDataStructures.h"
 #include "MessageBoxScreen.h"
 
+#include <string_theory/string>
+
 
 //If you add any options, MAKE sure you add the corresponding string to the Options Screen string array
 enum
@@ -58,7 +60,8 @@ enum
 struct GAME_SETTINGS
 {
 	INT8				bLastSavedGameSlot;							// The last saved game number goes in here
-	wchar_t			sCurrentSavedGameName[SIZE_OF_SAVE_GAME_DESC];                     // The name of the current Savegame goes here. Only relevant for Dead is Dead games
+	ST::string sCurrentSavedGameName; // The name of the currently loaded Savegame goes here.
+	ST::string sCurrentSavedGameDescription; // The description of the currently loaded Savegame goes here.
 
 	//The following are set from the status of the toggle boxes in the Options Screen
 	UINT8				fOptions[ NUM_ALL_GAME_OPTIONS ];
@@ -73,7 +76,7 @@ struct GAME_SETTINGS
 
 
 //Enums for the difficulty levels
-enum
+enum DifficultyLevel
 {
 	DIF_LEVEL_EASY = 1,
 	DIF_LEVEL_MEDIUM = 2,
@@ -82,7 +85,7 @@ enum
 };
 
 //Enums for the difficulty levels
-enum
+enum GameSaveMode
 {
 	DIF_CAN_SAVE,
 	DIF_IRON_MAN,
@@ -120,7 +123,5 @@ void SetMeanwhileSceneSeen(UINT8 meanwhile_id);
 BOOLEAN CanGameBeSaved(void);
 
 void DoDeadIsDeadSaveIfNecessary(void);
-
-void CDromEjectionErrorMessageBoxCallBack(MessageBoxReturnValue);
 
 #endif

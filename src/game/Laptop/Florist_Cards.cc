@@ -15,6 +15,9 @@
 #include "ContentManager.h"
 #include "GameInstance.h"
 
+#include <string_theory/string>
+
+
 #define FLORIST_CARDS_SENTENCE_FONT		FONT12ARIAL
 #define FLORIST_CARDS_SENTENCE_COLOR		FONT_MCOLOR_WHITE
 
@@ -52,8 +55,8 @@ static BUTTON_PICS* guiFlowerCardsButtonImage;
 static GUIButtonRef guiFlowerCardsBackButton;
 
 
-static void BtnFlowerCardsBackButtonCallback(GUI_BUTTON* btn, INT32 reason);
-static void SelectFloristCardsRegionCallBack(MOUSE_REGION* pRegion, INT32 iReason);
+static void BtnFlowerCardsBackButtonCallback(GUI_BUTTON* btn, UINT32 reason);
+static void SelectFloristCardsRegionCallBack(MOUSE_REGION* pRegion, UINT32 iReason);
 
 
 void EnterFloristCards()
@@ -142,9 +145,8 @@ void RenderFloristCards()
 			BltVideoObject(FRAME_BUFFER, guiCardBackground, 0, usPosX, usPosY);
 
 			//Get and display the card saying
-			wchar_t sTemp[FLOR_CARD_TEXT_TITLE_SIZE];
 			uiStartLoc = FLOR_CARD_TEXT_TITLE_SIZE * ubCount;
-			GCM->loadEncryptedString(FLOR_CARD_TEXT_FILE, sTemp, uiStartLoc, FLOR_CARD_TEXT_TITLE_SIZE);
+			ST::string sTemp = GCM->loadEncryptedString(FLOR_CARD_TEXT_FILE, uiStartLoc, FLOR_CARD_TEXT_TITLE_SIZE);
 
 			//DisplayWrappedString(usPosX + 7, usPosY + 15, FLORIST_CARD_TEXT_WIDTH, 2, FLORIST_CARDS_SENTENCE_FONT, FLORIST_CARDS_SENTENCE_COLOR, sTemp, FONT_MCOLOR_BLACK, CENTER_JUSTIFIED);
 			usHeightOffset = IanWrappedStringHeight(FLORIST_CARD_TEXT_WIDTH, 2, FLORIST_CARDS_SENTENCE_FONT, sTemp);
@@ -165,9 +167,9 @@ void RenderFloristCards()
 }
 
 
-static void SelectFloristCardsRegionCallBack(MOUSE_REGION* pRegion, INT32 iReason)
+static void SelectFloristCardsRegionCallBack(MOUSE_REGION* pRegion, UINT32 iReason)
 {
-	if (iReason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (iReason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		gbCurrentlySelectedCard = (UINT8) MSYS_GetRegionUserData( pRegion, 0 );
 
@@ -176,9 +178,9 @@ static void SelectFloristCardsRegionCallBack(MOUSE_REGION* pRegion, INT32 iReaso
 }
 
 
-static void BtnFlowerCardsBackButtonCallback(GUI_BUTTON *btn, INT32 reason)
+static void BtnFlowerCardsBackButtonCallback(GUI_BUTTON *btn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		guiCurrentLaptopMode = LAPTOP_MODE_FLORIST_ORDERFORM;
 	}

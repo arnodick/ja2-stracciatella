@@ -2,6 +2,7 @@
 #define __STRATEGIC_TOWN_LOYALTY_H
 
 #include "JA2Types.h"
+#include <vector>
 
 
 // gain pts per real loyalty pt
@@ -85,10 +86,10 @@ struct TownSectorInfo
 	UINT8 sector;
 };
 
-extern TownSectorInfo g_town_sectors[];
+extern std::vector<TownSectorInfo> g_town_sectors;
 
 #define FOR_EACH_TOWN_SECTOR(iter) \
-	for (TownSectorInfo const* iter = g_town_sectors; iter->town != BLANK_SECTOR; ++iter)
+	for (auto iter = g_town_sectors.begin(); iter != g_town_sectors.end(); ++iter)
 
 #define FOR_EACH_SECTOR_IN_TOWN(iter, town_) \
 	FOR_EACH_TOWN_SECTOR(iter) if (iter->town != (town_)) continue; else
@@ -116,7 +117,7 @@ void HandleMurderOfCivilian(const SOLDIERTYPE* pSoldier);
 void HandleTownLoyaltyForNPCRecruitment( SOLDIERTYPE *pSoldier );
 
 // remove random item from this sector
-void RemoveRandomItemsInSector( INT16 sSectorX, INT16 sSectorY, INT16 sSectorZ, UINT8 ubChance );
+void RemoveRandomItemsInSector(const SGPSector& sector, UINT8 ubChance );
 
 // build list of town sectors
 void BuildListOfTownSectors( void );
@@ -134,16 +135,16 @@ INT32 GetNumberOfWholeTownsUnderControl( void );
 INT32 IsTownUnderCompleteControlByPlayer( INT8 bTownId );
 
 // used when monsters attack a town sector without going through tactical and they win
-void AdjustLoyaltyForCivsEatenByMonsters( INT16 sSectorX, INT16 sSectorY, UINT8 ubHowMany);
+void AdjustLoyaltyForCivsEatenByMonsters(const SGPSector& sSector, UINT8 ubHowMany);
 
 // these are used to handle global loyalty events (ones that effect EVERY town on the map)
 void IncrementTownLoyaltyEverywhere( UINT32 uiLoyaltyIncrease );
 void DecrementTownLoyaltyEverywhere( UINT32 uiLoyaltyDecrease );
-void HandleGlobalLoyaltyEvent( UINT8 ubEventType, INT16 sSectorX, INT16 sSectorY, INT8 bSectorZ);
+void HandleGlobalLoyaltyEvent(UINT8 ubEventType, const SGPSector& sSector);
 
 // handle a town being liberated for the first time
-void CheckIfEntireTownHasBeenLiberated( INT8 bTownId, INT16 sSectorX, INT16 sSectorY );
-void CheckIfEntireTownHasBeenLost( INT8 bTownId, INT16 sSectorX, INT16 sSectorY );
+void CheckIfEntireTownHasBeenLiberated(INT8 bTownId, const SGPSector& sSector);
+void CheckIfEntireTownHasBeenLost(INT8 bTownId, const SGPSector& sSector);
 
 void HandleLoyaltyChangeForNPCAction( UINT8 ubNPCProfileId );
 
@@ -160,7 +161,7 @@ INT32 GetNumberOfWholeTownsUnderControlButExcludeCity( INT8 bCityToExclude );
 #define RETREAT_TACTICAL_TRAVERSAL 0
 #define RETREAT_PBI 1
 #define RETREAT_AUTORESOLVE 2
-void HandleLoyaltyImplicationsOfMercRetreat( INT8 bRetreatCode, INT16 sSectorX, INT16 sSectorY, INT16 sSectorZ );
+void HandleLoyaltyImplicationsOfMercRetreat(INT8 bRetreatCode, const SGPSector& sSector);
 
 void MaximizeLoyaltyForDeidrannaKilled( void );
 

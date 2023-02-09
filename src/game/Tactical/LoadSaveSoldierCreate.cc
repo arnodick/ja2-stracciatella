@@ -4,7 +4,10 @@
 #include "LoadSaveData.h"
 #include "LoadSaveObjectType.h"
 
-#include "slog/slog.h"
+#include "Logger.h"
+
+#include <string_theory/string>
+
 
 UINT16 CalcSoldierCreateCheckSum(const SOLDIERCREATE_STRUCT* const s)
 {
@@ -25,7 +28,7 @@ UINT16 CalcSoldierCreateCheckSum(const SOLDIERCREATE_STRUCT* const s)
 		s->bAIMorale        *  3 -
 		s->bBodyType        *  7 +
 		4                   *  6 +
-		s->sSectorX         *  7 -
+		s->sSector.x        *  7 -
 		s->ubSoldierClass   *  4 +
 		s->bTeam            *  7 +
 		s->bDirection       *  5 +
@@ -37,14 +40,14 @@ UINT16 CalcSoldierCreateCheckSum(const SOLDIERCREATE_STRUCT* const s)
 
 static void ExtractSoldierCreate(const BYTE* const data, SOLDIERCREATE_STRUCT* const c, bool stracLinuxFormat)
 {
-	const BYTE* d = data;
+	DataReader d{data};
 	EXTR_BOOL(d, c->fStatic)
 	EXTR_U8(d, c->ubProfile)
 	EXTR_SKIP(d, 2)
 	EXTR_BOOL(d, c->fCopyProfileItemsOver)
 	EXTR_SKIP(d, 1)
-	EXTR_I16(d, c->sSectorX)
-	EXTR_I16(d, c->sSectorY)
+	EXTR_I16(d, c->sSector.x)
+	EXTR_I16(d, c->sSector.y)
 	EXTR_I8(d, c->bDirection)
 	EXTR_SKIP(d, 1)
 	EXTR_I16(d, c->sInsertionGridNo)
@@ -68,31 +71,27 @@ static void ExtractSoldierCreate(const BYTE* const data, SOLDIERCREATE_STRUCT* c
 	EXTR_I8(d, c->bAIMorale)
 	for (size_t i = 0; i < lengthof(c->Inv); i++)
 	{
-		d = ExtractObject(d, &c->Inv[i]);
+		ExtractObject(d, &c->Inv[i]);
 	}
-	EXTR_STR(d, c->HeadPal, lengthof(c->HeadPal))
-	EXTR_STR(d, c->PantsPal, lengthof(c->PantsPal))
-	EXTR_STR(d, c->VestPal, lengthof(c->VestPal))
-	EXTR_STR(d, c->SkinPal, lengthof(c->SkinPal))
+	c->HeadPal = d.readUTF8(PaletteRepID_LENGTH, ST::substitute_invalid);
+	c->PantsPal = d.readUTF8(PaletteRepID_LENGTH, ST::substitute_invalid);
+	c->VestPal = d.readUTF8(PaletteRepID_LENGTH, ST::substitute_invalid);
+	c->SkinPal = d.readUTF8(PaletteRepID_LENGTH, ST::substitute_invalid);
 	EXTR_SKIP(d, 30)
 	EXTR_I16A(d, c->sPatrolGrid, lengthof(c->sPatrolGrid))
 	EXTR_I8(d, c->bPatrolCnt)
 	EXTR_BOOL(d, c->fVisible);
 	if(stracLinuxFormat)
 	{
-		DataReader reader(d);
-		reader.readUTF32(c->name, lengthof(c->name));
-		d += reader.getConsumed();
+		c->name = d.readUTF32(SOLDIERTYPE_NAME_LENGTH);
 	}
 	else
 	{
-		DataReader reader(d);
-		reader.readUTF16(c->name, lengthof(c->name));
-		d += reader.getConsumed();
+		c->name = d.readUTF16(SOLDIERTYPE_NAME_LENGTH);
 	}
 	EXTR_U8(d, c->ubSoldierClass)
 	EXTR_BOOL(d, c->fOnRoof)
-	EXTR_I8(d, c->bSectorZ)
+	EXTR_I8(d, c->sSector.z)
 	EXTR_SKIP(d, 6)
 	EXTR_U8(d, c->ubCivilianGroup)
 	EXTR_SKIP(d, 1)
@@ -103,11 +102,11 @@ static void ExtractSoldierCreate(const BYTE* const data, SOLDIERCREATE_STRUCT* c
 	EXTR_SKIP(d, 117)
 	if(stracLinuxFormat)
 	{
-		Assert(d == data + 1060);
+		Assert(d.getConsumed() == 1060);
 	}
 	else
 	{
-		Assert(d == data + 1040);
+		Assert(d.getConsumed() == 1040);
 	}
 }
 
@@ -117,13 +116,13 @@ void ExtractSoldierCreateFromFile(HWFILE const f, SOLDIERCREATE_STRUCT* const c,
 	if(stracLinuxFormat)
 	{
 		BYTE data[1060];
-		FileRead(f, data, sizeof(data));
+		f->read(data, sizeof(data));
 		ExtractSoldierCreate(data, c, stracLinuxFormat);
 	}
 	else
 	{
 		BYTE data[1040];
-		FileRead(f, data, sizeof(data));
+		f->read(data, sizeof(data));
 		ExtractSoldierCreate(data, c, stracLinuxFormat);
 	}
 }
@@ -136,33 +135,33 @@ void ExtractSoldierCreateFromFileWithChecksumAndGuess(HWFILE f, SOLDIERCREATE_ST
 	// First trying to load the windows format.
 	// If checksum doesn't match, trying to load linux format.
 
-	const INT32 pos = FileGetPos(f);
+	const INT32 pos = f->pos();
 	ExtractSoldierCreateFromFile(f, c, false);
-	FileRead(f, checksum, 2);
+	f->read(checksum, 2);
 
 	UINT16 const fresh_checksum = CalcSoldierCreateCheckSum(c);
 	if(*checksum != fresh_checksum)
 	{
-		SLOGI(DEBUG_TAG_SAVELOAD, "trying SOLDIERCREATE_STRUCT in linux format");
+		SLOGI("trying SOLDIERCREATE_STRUCT in linux format");
 
 		// trying linux format
 		// not validating the checksum - it will be the job of the caller
-		FileSeek(f, pos, FILE_SEEK_FROM_START);
+		f->seek(pos, FILE_SEEK_FROM_START);
 		ExtractSoldierCreateFromFile(f, c, true);
-		FileRead(f, checksum, 2);
+		f->read(checksum, 2);
 	}
 }
 
 static void InjectSoldierCreate(BYTE* const data, const SOLDIERCREATE_STRUCT* const c)
 {
-	BYTE* d = data;
+	DataWriter d{data};
 	INJ_BOOL(d, c->fStatic)
 	INJ_U8(d, c->ubProfile)
 	INJ_SKIP(d, 2)
 	INJ_BOOL(d, c->fCopyProfileItemsOver)
 	INJ_SKIP(d, 1)
-	INJ_I16(d, c->sSectorX)
-	INJ_I16(d, c->sSectorY)
+	INJ_I16(d, c->sSector.x)
+	INJ_I16(d, c->sSector.y)
 	INJ_I8(d, c->bDirection)
 	INJ_SKIP(d, 1)
 	INJ_I16(d, c->sInsertionGridNo)
@@ -186,24 +185,20 @@ static void InjectSoldierCreate(BYTE* const data, const SOLDIERCREATE_STRUCT* co
 	INJ_I8(d, c->bAIMorale)
 	for (size_t i = 0; i < lengthof(c->Inv); i++)
 	{
-		d = InjectObject(d, &c->Inv[i]);
+		InjectObject(d, &c->Inv[i]);
 	}
-	INJ_STR(d, c->HeadPal, lengthof(c->HeadPal))
-	INJ_STR(d, c->PantsPal, lengthof(c->PantsPal))
-	INJ_STR(d, c->VestPal, lengthof(c->VestPal))
-	INJ_STR(d, c->SkinPal, lengthof(c->SkinPal))
+	d.writeUTF8(c->HeadPal, PaletteRepID_LENGTH);
+	d.writeUTF8(c->PantsPal, PaletteRepID_LENGTH);
+	d.writeUTF8(c->VestPal, PaletteRepID_LENGTH);
+	d.writeUTF8(c->SkinPal, PaletteRepID_LENGTH);
 	INJ_SKIP(d, 30)
 	INJ_I16A(d, c->sPatrolGrid, lengthof(c->sPatrolGrid))
 	INJ_I8(d, c->bPatrolCnt)
 	INJ_BOOL(d, c->fVisible)
-	{
-		DataWriter writer(d);
-		writer.writeStringAsUTF16(c->name, lengthof(c->name));
-		d += writer.getConsumed();
-	}
+	d.writeUTF16(c->name, SOLDIERTYPE_NAME_LENGTH);
 	INJ_U8(d, c->ubSoldierClass)
 	INJ_BOOL(d, c->fOnRoof)
-	INJ_I8(d, c->bSectorZ)
+	INJ_I8(d, c->sSector.z)
 	INJ_SKIP(d, 6)
 	INJ_U8(d, c->ubCivilianGroup)
 	INJ_SKIP(d, 1)
@@ -212,7 +207,7 @@ static void InjectSoldierCreate(BYTE* const data, const SOLDIERCREATE_STRUCT* co
 	INJ_I8(d, c->bUseGivenVehicleID)
 	INJ_BOOL(d, c->fHasKeys)
 	INJ_SKIP(d, 117)
-	Assert(d == data + 1040);
+	Assert(d.getConsumed() == 1040);
 }
 
 
@@ -220,5 +215,5 @@ void InjectSoldierCreateIntoFile(HWFILE const f, SOLDIERCREATE_STRUCT const* con
 {
 	BYTE data[1040];
 	InjectSoldierCreate(data, c);
-	FileWrite(f, data, sizeof(data));
+	f->write(data, sizeof(data));
 }

@@ -17,6 +17,12 @@
 #define PATH_SEPARATOR_STR  "/"
 #endif
 
+#if defined(_WIN32) && !defined(__MINGW32__)
+#define SOURCE_ROOT ("src\\")
+#else
+#define SOURCE_ROOT ("src/")
+#endif
+
 /* #if CASE_SENSITIVE_FS */
 /* #include <dirent.h> */
 /* #endif */
@@ -43,11 +49,7 @@
 	#define __func__ __FUNCTION__
 #endif
 
-#if !defined(_WIN32)
-	/* Not Visual Studio, not MINGW */
-	#define __max(a, b) ((a) > (b) ? (a) : (b))
-	#define __min(a, b) ((a) < (b) ? (a) : (b))
-#endif
+#include <algorithm> // std::min, std::max
 
 /**************************************************************
  *

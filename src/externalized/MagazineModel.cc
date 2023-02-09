@@ -3,18 +3,26 @@
 #include "AmmoTypeModel.h"
 #include "CalibreModel.h"
 #include "JsonObject.h"
+#include <utility>
 
 MagazineModel::MagazineModel(uint16_t itemIndex_,
-				const char* internalName_,
+				ST::string internalName_,
+				ST::string shortName_,
+				ST::string name_,
+				ST::string description_,
+				uint32_t itemClass_,
 				const CalibreModel *calibre_,
 				uint16_t capacity_,
 				const AmmoTypeModel *ammoType_,
 				bool dontUseAsDefaultMagazine_
 )
-	:ItemModel(itemIndex_, internalName_, IC_AMMO, 0, INVALIDCURS),
+	:ItemModel(itemIndex_, std::move(internalName_), itemClass_, 0, INVALIDCURS),
 	calibre(calibre_), capacity(capacity_), ammoType(ammoType_),
 	dontUseAsDefaultMagazine(dontUseAsDefaultMagazine_)
 {
+	this->shortName = shortName_;
+	this->name = name_;
+	this->description = description_;
 }
 
 #include "ContentManager.h"
@@ -24,13 +32,13 @@ MagazineModel::MagazineModel(uint16_t itemIndex_,
 void MagazineModel::serializeTo(JsonObject &obj) const
 {
 	obj.AddMember("itemIndex",            itemIndex);
-	obj.AddMember("internalName",         internalName.c_str());
+	obj.AddMember("internalName",         internalName);
 	obj.AddMember("calibre",              calibre->internalName);
 	obj.AddMember("capacity",             capacity);
 	obj.AddMember("ammoType",             ammoType->internalName);
 
-	obj.AddMember("ubGraphicType",        getGraphicType());
-	obj.AddMember("ubGraphicNum",         getGraphicNum());
+	obj.AddMember("inventoryGraphics",      inventoryGraphics.serialize(obj.getAllocator()).getValue());
+	obj.AddMember("tileGraphic",      tileGraphic.serialize(obj.getAllocator()).getValue());
 	obj.AddMember("ubWeight",             getWeight());
 	obj.AddMember("ubPerPocket",          getPerPocket());
 	obj.AddMember("usPrice",              getPrice());
@@ -51,29 +59,52 @@ void MagazineModel::serializeTo(JsonObject &obj) const
 
 MagazineModel* MagazineModel::deserialize(
 	JsonObjectReader &obj,
-	const std::map<std::string, const CalibreModel*> &calibreMap,
-	const std::map<std::string, const AmmoTypeModel*> &ammoTypeMap)
+	const std::map<ST::string, const CalibreModel*> &calibreMap,
+	const std::map<ST::string, const AmmoTypeModel*> &ammoTypeMap,
+	const VanillaItemStrings& vanillaItemStrings)
 {
 	int itemIndex                 = obj.GetInt("itemIndex");
-	const char *internalName      = obj.GetString("internalName");
+	ST::string internalName       = obj.GetString("internalName");
 	const CalibreModel *calibre   = getCalibre(obj.GetString("calibre"), calibreMap);
+	uint32_t itemClass            = (calibre->index != NOAMMO) ? IC_AMMO : IC_NONE;
 	uint16_t capacity             = obj.GetInt("capacity");
 	const AmmoTypeModel *ammoType = getAmmoType(obj.GetString("ammoType"), ammoTypeMap);
 	bool dontUseAsDefaultMagazine = obj.getOptionalBool("dontUseAsDefaultMagazine");
-	MagazineModel *mag = new MagazineModel(itemIndex, internalName, calibre, capacity, ammoType,
-						dontUseAsDefaultMagazine);
+	auto shortName = ItemModel::deserializeShortName(obj, vanillaItemStrings);
+	auto name = ItemModel::deserializeName(obj, vanillaItemStrings);
+	auto description = ItemModel::deserializeDescription(obj, vanillaItemStrings);
+	MagazineModel *mag = new MagazineModel(
+		itemIndex,
+		internalName,
+		shortName,
+		name,
+		description,
+		itemClass,
+		calibre,
+		capacity,
+		ammoType,
+		dontUseAsDefaultMagazine
+	);
 
 	mag->fFlags = mag->deserializeFlags(obj);
 
-	mag->ubGraphicType    = obj.GetInt("ubGraphicType");
-	mag->ubGraphicNum     = obj.GetInt("ubGraphicNum");
+	const rapidjson::Value& igSource = obj.GetValue("inventoryGraphics");
+	JsonObjectReader igReader(igSource);
+	const auto inventoryGraphics = InventoryGraphicsModel::deserialize(igReader);
+	mag->inventoryGraphics  = inventoryGraphics;
+
+	const rapidjson::Value& tgSource = obj.GetValue("tileGraphic");
+	JsonObjectReader tgReader(tgSource);
+	const auto tileGraphic = TilesetTileIndexModel::deserialize(tgReader);
+	mag->tileGraphic = tileGraphic;
+
 	mag->ubWeight         = obj.GetInt("ubWeight");
 	mag->ubPerPocket      = obj.GetInt("ubPerPocket");
 	mag->usPrice          = obj.GetInt("usPrice");
 	mag->ubCoolness       = obj.GetInt("ubCoolness");
 
-	const char *replacement = obj.getOptionalString("standardReplacement");
-	if(replacement)
+	ST::string replacement = obj.getOptionalString("standardReplacement");
+	if (!replacement.empty())
 	{
 		mag->standardReplacement = replacement;
 	}
@@ -82,7 +113,7 @@ MagazineModel* MagazineModel::deserialize(
 }
 
 
-const std::string & MagazineModel::getStandardReplacement() const
+const ST::string & MagazineModel::getStandardReplacement() const
 {
 	return standardReplacement;
 }

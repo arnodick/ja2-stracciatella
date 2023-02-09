@@ -1,6 +1,7 @@
 #include "Cursors.h"
 #include "Directories.h"
 #include "Timer_Control.h"
+#include "Touch_UI.h"
 #include "Font.h"
 #include "Font_Control.h"
 #include "Handle_UI.h"
@@ -10,6 +11,9 @@
 #include "Sound_Control.h"
 #include "Video.h"
 #include "VSurface.h"
+
+#include <string_theory/format>
+#include <string_theory/string>
 
 
 #define SCURSOR(name)         { name, NULL, 0,                   0 }
@@ -101,6 +105,9 @@ static CursorFileData CursorFileDatabase[] =
 #define SUBCNTX(cur, idx) cur, idx, 0, CENTER_SUBCURSOR, 0
 #define SUBHIDE(cur, idx) cur, idx, 0, HIDE_SUBCURSOR,   HIDE_SUBCURSOR
 #define SUBNORM(cur, idx) cur, idx, 0, 0,                0
+// Strictly speaking the CursorDataBrace is missing lots of braces,
+// but globally disabling the warning seems overblown.
+#pragma GCC diagnostic ignored "-Wmissing-braces"
 
 static CursorData CursorDatabase[] =
 {
@@ -109,7 +116,7 @@ static CursorData CursorDatabase[] =
 		SUBNONE(),
 		SUBNONE(),
 		SUBNONE(),
-		1,	0,  0, 0, 0									, 0, 0 },
+		1,	0,  0, 0, 0									, 0, 0, TRUE },
 
 	{ SUBHIDE(C_TRINGS,     6), //SUBCENT(C_TRINGS, 6),
 		SUBCENT(C_ACTIONMODE, 0),
@@ -469,14 +476,14 @@ static CursorData CursorDatabase[] =
 		SUBNONE(),
 		SUBNONE(),
 		SUBNONE(),
-		1,	0,  0, 0, 0									, 0, 0 },
+		1,	4,  0, 0, 0									, 0, 0, TRUE },
 
 	{ SUBNORM(C_LAPTOPSCREEN,        0),
 		SUBNONE(),
 		SUBNONE(),
 		SUBNONE(),
 		SUBNONE(),
-		1,	0,  0, 0, 0									, 0, 0 },
+		1,	0,  0, 0, 0									, 0, 0, TRUE },
 
 	{ SUBNORM(C_IBEAM,               0),
 		SUBNONE(),
@@ -1224,70 +1231,76 @@ static void DrawMouseText(void);
 
 static void BltJA2CursorData(void)
 {
-	if (gViewportRegion.uiFlags & MSYS_MOUSE_IN_AREA)
+	if (gViewportRegion.uiFlags & MSYS_MOUSE_IN_AREA || IsPointerOnTacticalTouchUI())
 	{
 		DrawMouseText();
 	}
 }
 
 
-static const wchar_t* gzLocation;
-static const wchar_t* gzIntTileLocation;
-static const wchar_t* gzIntTileLocation2;
+static ST::string gzLocation;
+static ST::string gzIntTileLocation;
+static ST::string gzIntTileLocation2;
+static ST::string gzHitChance;
 
 
-void SetHitLocationText(const wchar_t* Text)
+void SetHitLocationText(const ST::string& str)
 {
-	gzLocation = Text;
+	gzLocation = str;
 }
 
 
-void SetIntTileLocationText(const wchar_t* Text)
+void SetIntTileLocationText(const ST::string& str)
 {
-	gzIntTileLocation = Text;
+	gzIntTileLocation = str;
 }
 
 
-void SetIntTileLocation2Text(const wchar_t* Text)
+void SetIntTileLocation2Text(const ST::string& str)
 {
-	gzIntTileLocation2 = Text;
+	gzIntTileLocation2 = str;
 }
 
 
-const wchar_t* GetIntTileLocationText(void)
+const ST::string& GetIntTileLocationText(void)
 {
 	return gzIntTileLocation;
 }
 
 
-const wchar_t* GetIntTileLocation2Text(void)
+const ST::string& GetIntTileLocation2Text(void)
 {
 	return gzIntTileLocation2;
 }
 
+void SetChanceToHitText(const ST::string& str)
+{
+	gzHitChance = str;
+}
 
 static void DrawMouseText(void)
 {
 	static BOOLEAN fShow = FALSE;
 	static BOOLEAN fHoldInvalid = TRUE;
 
-	wchar_t pStr[512];
 	INT16 sX;
 	INT16 sY;
 
-	if (gzLocation != NULL)
+	gsMouseSizeYModifier = 0;
+
+	if (!gzLocation.empty())
 	{
 		// Set dest for gprintf to be different
 		SetFontDestBuffer(MOUSE_BUFFER);
 
 		FindFontCenterCoordinates(0, 0, gsCurMouseWidth, gsCurMouseHeight, gzLocation, TINYFONT1, &sX, &sY);
 		SetFontAttributes(TINYFONT1, FONT_MCOLOR_WHITE);
-		MPrint(sX, sY + 12, gzLocation);
+		MPrint(sX, sY + 12, gzLocation); // Below cursor
 		// reset
 		SetFontDestBuffer(FRAME_BUFFER);
 	}
 
-	if (gzIntTileLocation != NULL)
+	if (!gzIntTileLocation.empty())
 	{
 		// Set dest for gprintf to be different
 		SetFontDestBuffer(MOUSE_BUFFER);
@@ -1299,7 +1312,7 @@ static void DrawMouseText(void)
 		SetFontDestBuffer(FRAME_BUFFER);
 	}
 
-	if (gzIntTileLocation2 != NULL)
+	if (!gzIntTileLocation2.empty())
 	{
 		// Set dest for gprintf to be different
 		SetFontDestBuffer(MOUSE_BUFFER);
@@ -1307,6 +1320,24 @@ static void DrawMouseText(void)
 		FindFontCenterCoordinates(0, 0, gsCurMouseWidth, gsCurMouseHeight, gzIntTileLocation2, TINYFONT1, &sX, &sY);
 		SetFontAttributes(TINYFONT1, FONT_MCOLOR_WHITE);
 		MPrint(sX, sY - 2, gzIntTileLocation2);
+		// reset
+		SetFontDestBuffer(FRAME_BUFFER);
+	}
+
+	if (!gzHitChance.empty())
+	{
+		// Set dest for gprintf to be different
+		SetFontDestBuffer(MOUSE_BUFFER);
+		FindFontCenterCoordinates(0, 0, gsCurMouseWidth, gsCurMouseHeight, gzHitChance, TINYFONT1, &sX, &sY);
+		SetFontAttributes(TINYFONT1, FONT_MCOLOR_WHITE);
+		if(gzLocation.empty())
+			MPrint(sX, sY + 12, gzHitChance); // Below cursor
+		else
+		{
+			MPrint(sX, sY + 20, gzHitChance); // Below hit location text
+			gsMouseSizeYModifier = 8 + GetFontHeight(TINYFONT1);
+		}
+
 		// reset
 		SetFontDestBuffer(FRAME_BUFFER);
 	}
@@ -1349,7 +1380,7 @@ static void DrawMouseText(void)
 			// Set dest for gprintf to be different
 			SetFontDestBuffer(MOUSE_BUFFER);
 
-			swprintf(pStr, lengthof(pStr), L"%d", gsCurrentActionPoints);
+			ST::string pStr = ST::format("{}", gsCurrentActionPoints);
 
 			if (gfUIDisplayActionPointsCenter)
 			{
@@ -1379,7 +1410,7 @@ static void DrawMouseText(void)
 				SetFontShadow(DEFAULT_SHADOW);
 			}
 
-			mprintf(sX, sY, L"%d", gsCurrentActionPoints);
+			MPrint(sX, sY, pStr);
 
 			SetFontShadow(DEFAULT_SHADOW);
 
@@ -1395,12 +1426,12 @@ static void DrawMouseText(void)
 		{
 			SetFontDestBuffer(MOUSE_BUFFER);
 
-			swprintf(pStr, lengthof(pStr), L"x%d", gpItemPointer->ubNumberOfObjects);
+			ST::string pStr = ST::format("x{}", gpItemPointer->ubNumberOfObjects);
 
 			FindFontCenterCoordinates(0, 0, gsCurMouseWidth, gsCurMouseHeight, pStr, TINYFONT1, &sX, &sY);
 
 			SetFontAttributes(TINYFONT1, FONT_MCOLOR_WHITE);
-			mprintf(sX + 10, sY - 10, L"x%d", gpItemPointer->ubNumberOfObjects);
+			MPrint(sX + 10, sY - 10, pStr);
 
 			SetFontDestBuffer(FRAME_BUFFER);
 		}
@@ -1411,6 +1442,7 @@ static void DrawMouseText(void)
 
 void UpdateAnimatedCursorFrames(UINT32 uiCursorIndex)
 {
+	uiCursorIndex = ModifyCursorIndex(uiCursorIndex);
 	if (uiCursorIndex == VIDEO_NO_CURSOR) return;
 
 	CursorData* pCurData = &CursorDatabase[uiCursorIndex];
@@ -1433,6 +1465,7 @@ void UpdateAnimatedCursorFrames(UINT32 uiCursorIndex)
 
 static void UpdateFlashingCursorFrames(UINT32 uiCursorIndex)
 {
+	uiCursorIndex = ModifyCursorIndex(uiCursorIndex);
 	if (uiCursorIndex == VIDEO_NO_CURSOR) return;
 
 	CursorData* pCurData = &CursorDatabase[uiCursorIndex];

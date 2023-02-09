@@ -168,21 +168,13 @@ void CalcBestShot(SOLDIERTYPE *pSoldier, ATTACKTYPE *pBestShot)
 			const STRUCTURE_FILE_REF* const pStructureFileRef = GetAnimationStructureRef(pSoldier, usAnimSurface,pSoldier->usUIMovementMode);
 			if ( pStructureFileRef )
 			{
-				UINT16 usStructureID;
 				INT8   bDir;
 
 				// must make sure that structure data can be added in the direction of the target
 				bDir = (INT8) GetDirectionToGridNoFromGridNo( pSoldier->sGridNo, pOpponent->sGridNo );
 
 				// ATE: Only if we have a levelnode...
-				if ( pSoldier->pLevelNode != NULL && pSoldier->pLevelNode->pStructureData != NULL )
-				{
-					usStructureID = pSoldier->pLevelNode->pStructureData->usStructureID;
-				}
-				else
-				{
-					usStructureID = INVALID_STRUCTURE_ID;
-				}
+				UINT16 const usStructureID = GetStructureID(pSoldier);
 
 				if (!OkayToAddStructureToWorld(pSoldier->sGridNo, pSoldier->bLevel, &pStructureFileRef->pDBStructureRef[OneCDirection(bDir)], usStructureID))
 				{
@@ -221,7 +213,7 @@ void CalcBestShot(SOLDIERTYPE *pSoldier, ATTACKTYPE *pBestShot)
 		}
 		else
 		{
-			ubMaxPossibleAimTime = MIN(AP_MAX_AIM_ATTACK,pSoldier->bActionPoints - ubMinAPcost);
+			ubMaxPossibleAimTime = std::min(AP_MAX_AIM_ATTACK,pSoldier->bActionPoints - ubMinAPcost);
 		}
 
 		// consider the various aiming times
@@ -674,9 +666,9 @@ static void CalcBestThrow(SOLDIERTYPE* pSoldier, ATTACKTYPE* pBestThrow)
 		ubSearchRange = MAX_TOSS_SEARCH_DIST;
 
 		// determine maximum horizontal limits
-		//bMaxLeft  = MIN(ubSearchRange,(sOpponentTile[ubLoop] % MAXCOL));
+		//bMaxLeft  = std::min(ubSearchRange,(sOpponentTile[ubLoop] % MAXCOL));
 		bMaxLeft = ubSearchRange;
-		//bMaxRight = MIN(ubSearchRange,MAXCOL - ((sOpponentTile[ubLoop] % MAXCOL) + 1));
+		//bMaxRight = std::min(ubSearchRange,MAXCOL - ((sOpponentTile[ubLoop] % MAXCOL) + 1));
 		bMaxRight = ubSearchRange;
 
 		// determine maximum vertical limits
@@ -702,7 +694,7 @@ static void CalcBestThrow(SOLDIERTYPE* pSoldier, ATTACKTYPE* pBestThrow)
 				if ( PythSpacesAway( pSoldier->sGridNo, sGridNo ) > iTossRange )
 				{
 					// can't throw there!
-					return;
+					continue;
 				}
 
 				// if considering a gas/smoke grenade, check to see if there is such stuff already there!
@@ -844,7 +836,7 @@ static void CalcBestThrow(SOLDIERTYPE* pSoldier, ATTACKTYPE* pBestThrow)
 					}
 
 					//Only use it if we are in a surface sector ( basement will be hard enough, plus more chances of mercs being clumped together )
-					else if( gbWorldSectorZ > 0 && fSkipLocation )
+					else if (gWorldSector.z > 0 && fSkipLocation)
 					{
 						continue;
 					}
@@ -907,7 +899,7 @@ static void CalcBestThrow(SOLDIERTYPE* pSoldier, ATTACKTYPE* pBestThrow)
 				}
 
 				// calculate the maximum possible aiming time
-				ubMaxPossibleAimTime = MIN(AP_MAX_AIM_ATTACK,pSoldier->bActionPoints - ubMinAPcost);
+				ubMaxPossibleAimTime = std::min(AP_MAX_AIM_ATTACK,pSoldier->bActionPoints - ubMinAPcost);
 
 				// calc next attack's minimum AP cost (excludes readying & turning)
 
@@ -958,7 +950,7 @@ static void CalcBestThrow(SOLDIERTYPE* pSoldier, ATTACKTYPE* pBestThrow)
 				// unlike SHOOTing and STABbing, find strictly the highest attackValue
 				if (iAttackValue > pBestThrow->iAttackValue)
 				{
-					SLOGD(DEBUG_TAG_AI, "CalcBestThrow: new best attackValue vs %d = %d\n", opponents[ubLoop]->ubID, iAttackValue);
+					SLOGD("CalcBestThrow: new best attackValue vs {} = {}\n", opponents[ubLoop]->ubID, iAttackValue);
 
 					// OOOF!  That was a lot of work!  But we've got a new best target!
 					pBestThrow->ubPossible           = TRUE;
@@ -1096,7 +1088,7 @@ void CalcBestStab(SOLDIERTYPE *pSoldier, ATTACKTYPE *pBestStab, BOOLEAN fBladeAt
 		iBestHitRate = 0;                     // reset best hit rate to minimum
 
 		// calculate the maximum possible aiming time
-		ubMaxPossibleAimTime = MIN(AP_MAX_AIM_ATTACK,pSoldier->bActionPoints - ubMinAPCost);
+		ubMaxPossibleAimTime = std::min(AP_MAX_AIM_ATTACK,pSoldier->bActionPoints - ubMinAPCost);
 
 		// consider the various aiming times
 		for (ubAimTime = AP_MIN_AIM_ATTACK; ubAimTime <= ubMaxPossibleAimTime; ubAimTime++)
@@ -1250,7 +1242,7 @@ void CalcTentacleAttack(SOLDIERTYPE *pSoldier, ATTACKTYPE *pBestStab )
 
 		// calculate the maximum possible aiming time
 
-		//ubMaxPossibleAimTime = MIN(AP_MAX_AIM_ATTACK,pSoldier->bActionPoints - ubMinAPCost);
+		//ubMaxPossibleAimTime = std::min(AP_MAX_AIM_ATTACK,pSoldier->bActionPoints - ubMinAPCost);
 		ubMaxPossibleAimTime = 0;
 
 		// consider the various aiming times

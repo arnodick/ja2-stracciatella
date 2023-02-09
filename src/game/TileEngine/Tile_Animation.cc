@@ -20,11 +20,10 @@
 #include "Bullets.h"
 #include "Rotting_Corpses.h"
 #include "SmokeEffects.h"
-#include "MemMan.h"
 
 #include "ContentManager.h"
 #include "GameInstance.h"
-#include "slog/slog.h"
+#include "Logger.h"
 
 static ANITILE* pAniTileHead = NULL;
 
@@ -49,7 +48,7 @@ static UINT16 SetFrameByDir(UINT16 frame, const ANITILE* const a)
 
 ANITILE* CreateAnimationTile(const ANITILE_PARAMS* const parms)
 {
-	ANITILE* const a = MALLOC(ANITILE);
+	ANITILE* const a = new ANITILE{};
 
 	INT32                cached_tile = -1;
 	INT16          const gridno      = parms->sGridNo;
@@ -240,7 +239,7 @@ void DeleteAniTile(ANITILE* const a)
 		}
 	}
 
-	MemFree(a);
+	delete a;
 }
 
 
@@ -344,14 +343,6 @@ void UpdateAniTiles( )
 					{
 						pNode->sCurrentFrame = SetFrameByDir(pNode->sStartFrame, pNode);
 					}
-					else if ( pNode->uiFlags & ANITILE_REVERSE_LOOPING )
-					{
-						// Turn off backwards flag
-						pNode->uiFlags &= (~ANITILE_FORWARD );
-
-						// Turn onn forwards flag
-						pNode->uiFlags |= ANITILE_BACKWARD;
-					}
 					else
 					{
 						// Delete from world!
@@ -410,14 +401,6 @@ void UpdateAniTiles( )
 					else if ( pNode->uiFlags & ANITILE_LOOPING )
 					{
 						pNode->sCurrentFrame = SetFrameByDir(pNode->sStartFrame, pNode);
-					}
-					else if ( pNode->uiFlags & ANITILE_REVERSE_LOOPING )
-					{
-						// Turn off backwards flag
-						pNode->uiFlags &= (~ANITILE_BACKWARD );
-
-						// Turn onn forwards flag
-						pNode->uiFlags |= ANITILE_FORWARD;
 					}
 					else
 					{

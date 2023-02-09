@@ -2,9 +2,10 @@
 #define __RADAR_SCREEN_H
 
 #include "Types.h"
+#include "UILayout.h"
 
 
-void LoadRadarScreenBitmap(const char* filename);
+void LoadRadarScreenBitmap(const ST::string&);
 
 // RADAR WINDOW DEFINES
 #define RADAR_WINDOW_X		(g_ui.get_RADAR_WINDOW_X())

@@ -1,4 +1,3 @@
-#include <stdint.h>
 #include "Animation_Control.h"
 #include "Animation_Data.h"
 #include "Debug.h"
@@ -33,10 +32,16 @@
 #include "VObject_Blitters.h"
 #include "VSurface.h"
 #include "WCheck.h"
-#include <math.h>
 #include "UILayout.h"
-#include "GameState.h"
-#include "slog/slog.h"
+#include "GameMode.h"
+#include "Logger.h"
+
+#include <string_theory/format>
+#include <string_theory/string>
+
+#include <algorithm>
+#include <math.h>
+#include <stdint.h>
 
 UINT16* gpZBuffer = NULL;
 UINT16  gZBufferPitch = 0;
@@ -60,7 +65,6 @@ enum RenderTilesFlags
 	TILES_MARKED                    = 0x10000000,
 	TILES_OBSCURED                  = 0x01000000
 };
-ENUM_BITSET(RenderTilesFlags)
 
 
 #define MAX_RENDERED_ITEMS 2
@@ -169,15 +173,20 @@ static INT16 gsLStartPointY_M;
 static INT16 gsLEndXS;
 static INT16 gsLEndYS;
 
-
+INT16 gsScrollXOffset = 0;
+INT16 gsScrollYOffset = 0;
 INT16 gsScrollXIncrement;
 INT16 gsScrollYIncrement;
 
+BOOLEAN gfScrolledToLeft;
+BOOLEAN gfScrolledToRight;
+BOOLEAN gfScrolledToTop;
+BOOLEAN gfScrolledToBottom;
 
 // Rendering flags (full, partial, etc.)
 static RenderFlags gRenderFlags = RENDER_FLAG_NONE;
 
-#define gClippingRect (g_ui.m_wordlClippingRect)
+#define gClippingRect (g_ui.m_worldClippingRect)
 static SGPRect gOldClipRect;
 INT16   gsRenderCenterX;
 INT16   gsRenderCenterY;
@@ -622,7 +631,7 @@ static void RenderTiles(RenderTilesFlags const uiFlags, INT32 const iStartPointX
 									// Position corpse based on it's float position
 									if (uiLevelNodeFlags & LEVELNODE_ROTTINGCORPSE)
 									{
-										pCorpse     = ID2CORPSE(a.v.user.uiData);
+										pCorpse     = ROTTING_CORPSE::FromID(a.v.user.uiData);
 										pShadeTable = pCorpse->pShades[pNode->ubShadeLevel];
 
 										// OK, if this is a corpse.... stop if not visible
@@ -805,7 +814,7 @@ zlevel_objects:
 								uiDirtyFlags = BGND_FLAG_SINGLE | BGND_FLAG_ANIMATED;
 zlevel_shadows:
 								INT16 const world_y = GetMapXYWorldY(iTempPosX_M, iTempPosY_M);
-								sZLevel = __max(((world_y - 80) * Z_SUBLAYERS) + SHADOW_Z_LEVEL, 0);
+								sZLevel = std::max(((world_y - 80) * Z_SUBLAYERS) + SHADOW_Z_LEVEL, 0);
 								break;
 							}
 
@@ -985,7 +994,7 @@ zlevel_topmost:
 								else
 								{
 									ubShadeLevel  = pNode->ubShadeLevel & 0x0f;
-									ubShadeLevel  = __max(ubShadeLevel - 2, DEFAULT_SHADE_LEVEL);
+									ubShadeLevel  = std::max(ubShadeLevel - 2, DEFAULT_SHADE_LEVEL);
 									ubShadeLevel |= pNode->ubShadeLevel & 0x30;
 								}
 								pShadeTable = s.pShades[ubShadeLevel];
@@ -1183,7 +1192,7 @@ zlevel_topmost:
 								sXPos += pTrav.sOffsetX;
 								sYPos += pTrav.sOffsetY;
 
-								INT16 const h = MIN((INT16)uiBrushHeight, gsVIEWPORT_WINDOW_END_Y - sYPos);
+								INT16 const h = std::min((int) uiBrushHeight, gsVIEWPORT_WINDOW_END_Y - sYPos);
 								RegisterBackgroundRect(uiDirtyFlags, sXPos, sYPos, uiBrushWidth, h);
 								if (fSaveZ)
 								{
@@ -1200,8 +1209,7 @@ zlevel_topmost:
 							UINT8 const foreground = gfUIDisplayActionPointsBlack ? FONT_MCOLOR_BLACK : FONT_MCOLOR_WHITE;
 							SetFontAttributes(TINYFONT1, foreground);
 							SetFontDestBuffer(guiSAVEBUFFER, 0, gsVIEWPORT_WINDOW_START_Y, SCREEN_WIDTH, gsVIEWPORT_WINDOW_END_Y);
-							wchar_t buf[16];
-							swprintf(buf, lengthof(buf), L"%d", pNode->uiAPCost);
+							ST::string buf = ST::format("{}", pNode->uiAPCost);
 							INT16 sX;
 							INT16 sY;
 							FindFontCenterCoordinates(sXPos, sYPos, 1, 1, buf, TINYFONT1, &sX, &sY);
@@ -1585,7 +1593,7 @@ next_node:
 						 * taskbar. */
 						if (iTempPosY_S < 360)
 						{
-							ColorFillVideoSurfaceArea(FRAME_BUFFER, iTempPosX_S, iTempPosY_S, iTempPosX_S + 40, MIN(iTempPosY_S + 20, 360), Get16BPPColor(FROMRGB(0, 0, 0)));
+							ColorFillVideoSurfaceArea(FRAME_BUFFER, iTempPosX_S, iTempPosY_S, iTempPosX_S + 40, std::min(iTempPosY_S + 20, 360), Get16BPPColor(FROMRGB(0, 0, 0)));
 						}
 					}
 				}
@@ -1623,7 +1631,7 @@ static void ScrollBackground(INT16 sScrollXIncrement, INT16 sScrollYIncrement)
 	if (!gfDoVideoScroll)
 	{
 		// Clear z-buffer
-		memset(gpZBuffer, LAND_Z_LEVEL, gsVIEWPORT_END_Y * SCREEN_WIDTH * 2);
+		std::fill_n(gpZBuffer, gsVIEWPORT_END_Y * SCREEN_WIDTH, LAND_Z_LEVEL);
 
 		RenderStaticWorldRect(gsVIEWPORT_START_X, gsVIEWPORT_START_Y, gsVIEWPORT_END_X, gsVIEWPORT_END_Y, FALSE);
 
@@ -1847,7 +1855,7 @@ static void RenderStaticWorld(void)
 	CalcRenderParameters(gsVIEWPORT_START_X, gsVIEWPORT_START_Y, gsVIEWPORT_END_X, gsVIEWPORT_END_Y);
 
 	// Clear z-buffer
-	memset(gpZBuffer, LAND_Z_LEVEL, gsVIEWPORT_END_Y * SCREEN_WIDTH * 2);
+	std::fill_n(gpZBuffer, gsVIEWPORT_END_Y * SCREEN_WIDTH, LAND_Z_LEVEL);
 
 	FreeBackgroundRectType(BGND_FLAG_ANIMATED);
 	InvalidateBackgroundRects();
@@ -1939,7 +1947,7 @@ static void RenderDynamicWorld(void)
 	sLevelIDs[8] = RENDER_DYNAMIC_TOPMOST;
 	RenderTiles(TILES_DIRTY, gsStartPointX_M, gsStartPointY_M, gsStartPointX_S, gsStartPointY_S, gsEndXS, gsEndYS, 9, sLevelIDs);
 
-	if (!GameState::getInstance()->isEditorMode() || (!gfEditMode && !gfAniEditMode))
+	if (!GameMode::getInstance()->isEditorMode() || !gfEditMode)
 	{
 		RenderTacticalInterface();
 	}
@@ -2007,7 +2015,10 @@ static BOOLEAN HandleScrollDirections(UINT32 ScrollFlags, INT16 sScrollXStep, IN
 	}
 
 	const BOOLEAN fAGoodMove = (scroll_x != 0 || scroll_y != 0);
-	if (fAGoodMove && !fCheckOnly) ScrollBackground(scroll_x, scroll_y);
+
+	if( fAGoodMove && !fCheckOnly && !( gRenderFlags & RENDER_FLAG_FULL )) {
+		ScrollBackground( scroll_x, scroll_y );
+	}
 
 	return fAGoodMove;
 }
@@ -2109,15 +2120,18 @@ void ScrollWorld(void)
 				RESETCOUNTER(STARTSCROLL);
 			}
 
-			if (gusMouseYPos <  NO_PX_SHOW_EXIT_CURS)                 ScrollFlags |= SCROLL_UP;
-			if (gusMouseYPos >= SCREEN_HEIGHT - NO_PX_SHOW_EXIT_CURS) ScrollFlags |= SCROLL_DOWN;
-			if (gusMouseXPos >= SCREEN_WIDTH  - NO_PX_SHOW_EXIT_CURS) ScrollFlags |= SCROLL_RIGHT;
-			if (gusMouseXPos <  NO_PX_SHOW_EXIT_CURS)                 ScrollFlags |= SCROLL_LEFT;
+			if (!gfIsUsingTouch) {
+				if (gusMouseYPos <  NO_PX_SHOW_EXIT_CURS)                 ScrollFlags |= SCROLL_UP;
+				if (gusMouseYPos >= SCREEN_HEIGHT - NO_PX_SHOW_EXIT_CURS) ScrollFlags |= SCROLL_DOWN;
+				if (gusMouseXPos >= SCREEN_WIDTH  - NO_PX_SHOW_EXIT_CURS) ScrollFlags |= SCROLL_RIGHT;
+				if (gusMouseXPos <  NO_PX_SHOW_EXIT_CURS)                 ScrollFlags |= SCROLL_LEFT;
+			}
 		}
 	}
 	while (FALSE);
 
 
+	BOOLEAN fIsScrollingByOffset = gsScrollXOffset != 0 || gsScrollYOffset != 0;
 	BOOLEAN fAGoodMove   = FALSE;
 	INT16   sScrollXStep = -1;
 	INT16   sScrollYStep = -1;
@@ -2129,12 +2143,33 @@ void ScrollWorld(void)
 		sScrollYStep = speed / 2;
 
 		fAGoodMove = HandleScrollDirections(ScrollFlags, sScrollXStep, sScrollYStep, TRUE);
+	} else if (fIsScrollingByOffset) {
+		if (std::abs(gsScrollXOffset) >= CELL_X_SIZE || std::abs(gsScrollYOffset) >= CELL_Y_SIZE) {
+			sScrollXStep = (gsScrollXOffset / CELL_X_SIZE) * CELL_X_SIZE;
+			sScrollYStep = (gsScrollYOffset / CELL_Y_SIZE) * CELL_Y_SIZE;
+			if (sScrollXStep != 0) {
+				ScrollFlags |= (sScrollXStep > 0) ? SCROLL_LEFT : SCROLL_RIGHT;
+			}
+			if (sScrollYStep != 0) {
+				ScrollFlags |= (sScrollYStep > 0) ? SCROLL_UP : SCROLL_DOWN;
+			}
+			sScrollXStep = std::abs(sScrollXStep);
+			sScrollYStep = std::abs(sScrollYStep);
+
+			fAGoodMove = HandleScrollDirections(ScrollFlags, sScrollXStep, sScrollYStep, TRUE);
+
+			if (fAGoodMove) {
+				SetRenderFlags(RENDER_FLAG_FULL);
+				gsScrollXOffset %= CELL_X_SIZE;
+				gsScrollYOffset %= CELL_Y_SIZE;
+			}
+		}
 	}
 
 	// Has this been an OK scroll?
 	if (fAGoodMove)
 	{
-		if (COUNTERDONE(NEXTSCROLL))
+		if (COUNTERDONE(NEXTSCROLL) || fIsScrollingByOffset)
 		{
 			RESETCOUNTER(NEXTSCROLL);
 
@@ -2193,12 +2228,10 @@ void ScrollWorld(void)
 
 void InitRenderParams(UINT8 ubRestrictionID)
 {
+	// FIXME incorrect use of CELL_X_SIZE/CELL_Y_SIZE and WORLD_ROWS/WORLD_COLS
+	//       it only works as intended because they have the same value as the counterpart
 	INT16 gTopLeftWorldLimitX;     // XXX HACK000E
 	INT16 gTopLeftWorldLimitY;     // XXX HACK000E
-	INT16 gTopRightWorldLimitX;    // XXX HACK000E
-	INT16 gTopRightWorldLimitY;    // XXX HACK000E
-	INT16 gBottomLeftWorldLimitX;  // XXX HACK000E
-	INT16 gBottomLeftWorldLimitY;  // XXX HACK000E
 	INT16 gBottomRightWorldLimitX; // XXX HACK000E
 	INT16 gBottomRightWorldLimitY; // XXX HACK000E
 	switch (ubRestrictionID)
@@ -2207,12 +2240,6 @@ void InitRenderParams(UINT8 ubRestrictionID)
 			gTopLeftWorldLimitX = CELL_X_SIZE;
 			gTopLeftWorldLimitY = CELL_X_SIZE * WORLD_ROWS / 2;
 
-			gTopRightWorldLimitX = CELL_Y_SIZE * WORLD_COLS / 2;
-			gTopRightWorldLimitY = CELL_X_SIZE;
-
-			gBottomLeftWorldLimitX = CELL_Y_SIZE * WORLD_COLS / 2;
-			gBottomLeftWorldLimitY = CELL_Y_SIZE * WORLD_ROWS;
-
 			gBottomRightWorldLimitX = CELL_Y_SIZE * WORLD_COLS;
 			gBottomRightWorldLimitY = CELL_X_SIZE * WORLD_ROWS / 2;
 			break;
@@ -2220,12 +2247,6 @@ void InitRenderParams(UINT8 ubRestrictionID)
 		case 1: // BAEMENT LEVEL 1
 			gTopLeftWorldLimitX = CELL_X_SIZE * WORLD_ROWS * 3 / 10;
 			gTopLeftWorldLimitY = CELL_X_SIZE * WORLD_ROWS     /  2;
-
-			gTopRightWorldLimitX = CELL_X_SIZE * WORLD_ROWS     /  2;
-			gTopRightWorldLimitY = CELL_X_SIZE * WORLD_COLS * 3 / 10;
-
-			gBottomLeftWorldLimitX = CELL_X_SIZE * WORLD_ROWS     /  2;
-			gBottomLeftWorldLimitY = CELL_X_SIZE * WORLD_COLS * 7 / 10;
 
 			gBottomRightWorldLimitX = CELL_X_SIZE * WORLD_ROWS * 7 / 10;
 			gBottomRightWorldLimitY = CELL_X_SIZE * WORLD_ROWS     /  2;
@@ -2246,7 +2267,7 @@ void InitRenderParams(UINT8 ubRestrictionID)
 	gsTopY += ROOF_LEVEL_HEIGHT;
 	gsCY  += ROOF_LEVEL_HEIGHT / 2;
 
-	SLOGD(DEBUG_TAG_RENDERWORLD, "World Screen Width %d Height %d", gsRightX - gsLeftX, gsBottomY - gsTopY);
+	SLOGD("World Screen Width {} Height {}", gsRightX - gsLeftX, gsBottomY - gsTopY);
 
 	// Determine scale factors
 	// First scale world screen coords for VIEWPORT ratio
@@ -2341,12 +2362,6 @@ static BOOLEAN ApplyScrolling(INT16 sTempRenderCenterX, INT16 sTempRenderCenterY
 	// If in editor, anything goes
 	if (gfEditMode && _KeyDown(SHIFT)) fScrollGood = TRUE;
 
-	// Reset some UI flags
-	gfUIShowExitEast  = FALSE;
-	gfUIShowExitWest  = FALSE;
-	gfUIShowExitNorth = FALSE;
-	gfUIShowExitSouth = FALSE;
-
 	if (!fScrollGood)
 	{
 		if (fForceAdjust)
@@ -2389,13 +2404,6 @@ static BOOLEAN ApplyScrolling(INT16 sTempRenderCenterX, INT16 sTempRenderCenterY
 			sTempRenderCenterY = sTempPosY_W;
 			fScrollGood = TRUE;
 		}
-		else
-		{
-			if (fOutRight  && gusMouseXPos >= SCREEN_WIDTH - NO_PX_SHOW_EXIT_CURS)  gfUIShowExitEast  = TRUE;
-			if (fOutLeft   && gusMouseXPos <  NO_PX_SHOW_EXIT_CURS)                 gfUIShowExitWest  = TRUE;
-			if (fOutTop    && gusMouseYPos <  NO_PX_SHOW_EXIT_CURS)                 gfUIShowExitNorth = TRUE;
-			if (fOutBottom && gusMouseYPos >= SCREEN_HEIGHT - NO_PX_SHOW_EXIT_CURS) gfUIShowExitSouth = TRUE;
-		}
 	}
 
 	if (fScrollGood && !fCheckOnly)
@@ -2409,6 +2417,11 @@ static BOOLEAN ApplyScrolling(INT16 sTempRenderCenterX, INT16 sTempRenderCenterY
 
 		gsBottomRightWorldX = sBottomRightWorldX - gsLeftX;
 		gsBottomRightWorldY = sBottomRightWorldY - gsTopY;
+
+		gfScrolledToLeft   = std::abs(sTopLeftWorldX  - gsLeftX) <= std::abs(SCROLL_LEFT_PADDING);
+		gfScrolledToRight  = std::abs(sBottomRightWorldX  - gsRightX) <= std::abs(SCROLL_RIGHT_PADDING) + CELL_X_SIZE;
+		gfScrolledToTop    = std::abs(sTopLeftWorldY  - gsTopY) <= std::abs(SCROLL_TOP_PADDING);
+		gfScrolledToBottom = std::abs(sBottomRightWorldY  - gsBottomY) <= std::abs(SCROLL_BOTTOM_PADDING) + CELL_Y_SIZE * 2;
 
 		SetPositionSndsVolumeAndPanning();
 	}
@@ -2486,10 +2499,10 @@ static void Blt8BPPDataTo16BPPBufferTransZIncClip(UINT16* pBuffer, UINT32 uiDest
 	}
 
 	// Calculate rows hanging off each side of the screen
-	const INT32 LeftSkip   = __min(ClipX1 -   MIN(ClipX1, iTempX), usWidth);
-	INT32       TopSkip    = __min(ClipY1 - __min(ClipY1, iTempY), usHeight);
-	const INT32 RightSkip  = __min(  MAX(ClipX2, iTempX + usWidth)  - ClipX2, usWidth);
-	const INT32 BottomSkip = __min(__max(ClipY2, iTempY + usHeight) - ClipY2, usHeight);
+	const INT32 LeftSkip   = std::min(ClipX1 - std::min(ClipX1, iTempX), usWidth);
+	INT32       TopSkip    = std::min(ClipY1 - std::min(ClipY1, iTempY), usHeight);
+	const INT32 RightSkip  = std::clamp(iTempX + usWidth - ClipX2, 0, usWidth);
+	const INT32 BottomSkip = std::clamp(iTempY + usHeight - ClipY2, 0, usHeight);
 
 	// calculate the remaining rows and columns to blit
 	const INT32 BlitLength = usWidth  - LeftSkip - RightSkip;
@@ -2507,14 +2520,14 @@ static void Blt8BPPDataTo16BPPBufferTransZIncClip(UINT16* pBuffer, UINT32 uiDest
 
 	if (hSrcVObject->ppZStripInfo == NULL)
 	{
-		SLOGW(DEBUG_TAG_RENDERWORLD, "Missing Z-Strip info on multi-Z object");
+		SLOGW("Missing Z-Strip info on multi-Z object");
 		return;
 	}
 	// setup for the z-column blitting stuff
 	const ZStripInfo* const pZInfo = hSrcVObject->ppZStripInfo[usIndex];
 	if (pZInfo == NULL)
 	{
-		SLOGW(DEBUG_TAG_RENDERWORLD, "Missing Z-Strip info on multi-Z object");
+		SLOGW("Missing Z-Strip info on multi-Z object");
 		return;
 	}
 
@@ -2593,7 +2606,7 @@ static void Blt8BPPDataTo16BPPBufferTransZIncClip(UINT16* pBuffer, UINT32 uiDest
 			if (PxCount & 0x80)
 			{
 				PxCount &= 0x7F;
-				if (PxCount > LSCount)
+				if (PxCount > static_cast<UINT32>(LSCount))
 				{
 					PxCount -= LSCount;
 					LSCount = BlitLength;
@@ -2602,7 +2615,7 @@ static void Blt8BPPDataTo16BPPBufferTransZIncClip(UINT16* pBuffer, UINT32 uiDest
 			}
 			else
 			{
-				if (PxCount > LSCount)
+				if (PxCount > static_cast<UINT32>(LSCount))
 				{
 					SrcPtr += LSCount;
 					PxCount -= LSCount;
@@ -2621,7 +2634,7 @@ static void Blt8BPPDataTo16BPPBufferTransZIncClip(UINT16* pBuffer, UINT32 uiDest
 			{
 BlitTransparent: // skip transparent pixels
 				PxCount &= 0x7F;
-				if (PxCount > LSCount) PxCount = LSCount;
+				if (PxCount > static_cast<UINT32>(LSCount)) PxCount = LSCount;
 				LSCount -= PxCount;
 				DestPtr += 2 * PxCount;
 				ZPtr    += 2 * PxCount;
@@ -2652,7 +2665,7 @@ BlitTransparent: // skip transparent pixels
 			else
 			{
 BlitNonTransLoop: // blit non-transparent pixels
-				if (PxCount > LSCount)
+				if (PxCount > static_cast<UINT32>(LSCount))
 				{
 					Unblitted = PxCount - LSCount;
 					PxCount = LSCount;
@@ -2749,10 +2762,10 @@ static void Blt8BPPDataTo16BPPBufferTransZIncClipZSameZBurnsThrough(UINT16* pBuf
 	}
 
 	// Calculate rows hanging off each side of the screen
-	const INT32 LeftSkip   = __min(ClipX1 -   MIN(ClipX1, iTempX), usWidth);
-	INT32       TopSkip    = __min(ClipY1 - __min(ClipY1, iTempY), usHeight);
-	const INT32 RightSkip  = __min(  MAX(ClipX2, iTempX + usWidth)  - ClipX2, usWidth);
-	const INT32 BottomSkip = __min(__max(ClipY2, iTempY + usHeight) - ClipY2, usHeight);
+	const INT32 LeftSkip   = std::min(ClipX1 - std::min(ClipX1, iTempX), usWidth);
+	INT32       TopSkip    = std::min(ClipY1 - std::min(ClipY1, iTempY), usHeight);
+	const INT32 RightSkip  = std::clamp(iTempX + usWidth - ClipX2, 0, usWidth);
+	const INT32 BottomSkip = std::clamp(iTempY + usHeight - ClipY2, 0, usHeight);
 
 	// calculate the remaining rows and columns to blit
 	const INT32 BlitLength = usWidth  - LeftSkip - RightSkip;
@@ -2770,14 +2783,14 @@ static void Blt8BPPDataTo16BPPBufferTransZIncClipZSameZBurnsThrough(UINT16* pBuf
 
 	if (hSrcVObject->ppZStripInfo == NULL)
 	{
-		SLOGW(DEBUG_TAG_RENDERWORLD, "Missing Z-Strip info on multi-Z object");
+		SLOGW("Missing Z-Strip info on multi-Z object");
 		return;
 	}
 	// setup for the z-column blitting stuff
 	const ZStripInfo* const pZInfo = hSrcVObject->ppZStripInfo[usIndex];
 	if (pZInfo == NULL)
 	{
-		SLOGW(DEBUG_TAG_RENDERWORLD, "Missing Z-Strip info on multi-Z object");
+		SLOGW("Missing Z-Strip info on multi-Z object");
 		return;
 	}
 
@@ -2855,7 +2868,7 @@ static void Blt8BPPDataTo16BPPBufferTransZIncClipZSameZBurnsThrough(UINT16* pBuf
 			if (PxCount & 0x80)
 			{
 				PxCount &= 0x7F;
-				if (PxCount > LSCount)
+				if (PxCount > static_cast<UINT32>(LSCount))
 				{
 					PxCount -= LSCount;
 					LSCount = BlitLength;
@@ -2864,7 +2877,7 @@ static void Blt8BPPDataTo16BPPBufferTransZIncClipZSameZBurnsThrough(UINT16* pBuf
 			}
 			else
 			{
-				if (PxCount > LSCount)
+				if (PxCount > static_cast<UINT32>(LSCount))
 				{
 					SrcPtr += LSCount;
 					PxCount -= LSCount;
@@ -2883,7 +2896,7 @@ static void Blt8BPPDataTo16BPPBufferTransZIncClipZSameZBurnsThrough(UINT16* pBuf
 			{
 BlitTransparent: // skip transparent pixels
 				PxCount &= 0x7F;
-				if (PxCount > LSCount) PxCount = LSCount;
+				if (PxCount > static_cast<UINT32>(LSCount)) PxCount = LSCount;
 				LSCount -= PxCount;
 				DestPtr += 2 * PxCount;
 				ZPtr    += 2 * PxCount;
@@ -2914,7 +2927,7 @@ BlitTransparent: // skip transparent pixels
 			else
 			{
 BlitNonTransLoop: // blit non-transparent pixels
-				if (PxCount > LSCount)
+				if (PxCount > static_cast<UINT32>(LSCount))
 				{
 					Unblitted = PxCount - LSCount;
 					PxCount = LSCount;
@@ -3014,10 +3027,10 @@ static void Blt8BPPDataTo16BPPBufferTransZIncObscureClip(UINT16* pBuffer, UINT32
 	}
 
 	// Calculate rows hanging off each side of the screen
-	const INT32 LeftSkip   = __min(ClipX1 -   MIN(ClipX1, iTempX), usWidth);
-	INT32       TopSkip    = __min(ClipY1 - __min(ClipY1, iTempY), usHeight);
-	const INT32 RightSkip  = __min(  MAX(ClipX2, iTempX + usWidth)  - ClipX2, usWidth);
-	const INT32 BottomSkip = __min(__max(ClipY2, iTempY + usHeight) - ClipY2, usHeight);
+	const INT32 LeftSkip   = std::min(ClipX1 - std::min(ClipX1, iTempX), usWidth);
+	INT32       TopSkip    = std::min(ClipY1 - std::min(ClipY1, iTempY), usHeight);
+	const INT32 RightSkip  = std::clamp(iTempX + usWidth - ClipX2, 0, usWidth);
+	const INT32 BottomSkip = std::clamp(iTempY + usHeight - ClipY2, 0, usHeight);
 
 	UINT32 uiLineFlag = iTempY & 1;
 
@@ -3037,14 +3050,14 @@ static void Blt8BPPDataTo16BPPBufferTransZIncObscureClip(UINT16* pBuffer, UINT32
 
 	if (hSrcVObject->ppZStripInfo == NULL)
 	{
-		SLOGW(DEBUG_TAG_RENDERWORLD, "Missing Z-Strip info on multi-Z object");
+		SLOGW("Missing Z-Strip info on multi-Z object");
 		return;
 	}
 	// setup for the z-column blitting stuff
 	const ZStripInfo* const pZInfo = hSrcVObject->ppZStripInfo[usIndex];
 	if (pZInfo == NULL)
 	{
-		SLOGW(DEBUG_TAG_RENDERWORLD, "Missing Z-Strip info on multi-Z object");
+		SLOGW("Missing Z-Strip info on multi-Z object");
 		return;
 	}
 
@@ -3124,7 +3137,7 @@ static void Blt8BPPDataTo16BPPBufferTransZIncObscureClip(UINT16* pBuffer, UINT32
 			if (PxCount & 0x80)
 			{
 				PxCount &= 0x7F;
-				if (PxCount > LSCount)
+				if (PxCount > static_cast<UINT32>(LSCount))
 				{
 					PxCount -= LSCount;
 					LSCount = BlitLength;
@@ -3133,7 +3146,7 @@ static void Blt8BPPDataTo16BPPBufferTransZIncObscureClip(UINT16* pBuffer, UINT32
 			}
 			else
 			{
-				if (PxCount > LSCount)
+				if (PxCount > static_cast<UINT32>(LSCount))
 				{
 					SrcPtr += LSCount;
 					PxCount -= LSCount;
@@ -3152,7 +3165,7 @@ static void Blt8BPPDataTo16BPPBufferTransZIncObscureClip(UINT16* pBuffer, UINT32
 			{
 BlitTransparent: // skip transparent pixels
 				PxCount &= 0x7F;
-				if (PxCount > LSCount) PxCount = LSCount;
+				if (PxCount > static_cast<UINT32>(LSCount)) PxCount = LSCount;
 				LSCount -= PxCount;
 				DestPtr += 2 * PxCount;
 				ZPtr    += 2 * PxCount;
@@ -3183,7 +3196,7 @@ BlitTransparent: // skip transparent pixels
 			else
 			{
 BlitNonTransLoop: // blit non-transparent pixels
-				if (PxCount > LSCount)
+				if (PxCount > static_cast<UINT32>(LSCount))
 				{
 					Unblitted = PxCount - LSCount;
 					PxCount = LSCount;
@@ -3277,10 +3290,10 @@ static void Blt8BPPDataTo16BPPBufferTransZTransShadowIncObscureClip(UINT16* pBuf
 	}
 
 	// Calculate rows hanging off each side of the screen
-	const INT32 LeftSkip   = __min(ClipX1 -   MIN(ClipX1, iTempX), usWidth);
-	INT32       TopSkip    = __min(ClipY1 - __min(ClipY1, iTempY), usHeight);
-	const INT32 RightSkip  = __min(  MAX(ClipX2, iTempX + usWidth)  - ClipX2, usWidth);
-	const INT32 BottomSkip = __min(__max(ClipY2, iTempY + usHeight) - ClipY2, usHeight);
+	const INT32 LeftSkip   = std::min(ClipX1 - std::min(ClipX1, iTempX), usWidth);
+	INT32       TopSkip    = std::min(ClipY1 - std::min(ClipY1, iTempY), usHeight);
+	const INT32 RightSkip  = std::clamp(iTempX + usWidth - ClipX2, 0, usWidth);
+	const INT32 BottomSkip = std::clamp(iTempY + usHeight - ClipY2, 0, usHeight);
 
 	UINT32 uiLineFlag = iTempY & 1;
 
@@ -3299,14 +3312,14 @@ static void Blt8BPPDataTo16BPPBufferTransZTransShadowIncObscureClip(UINT16* pBuf
 
 	if (hSrcVObject->ppZStripInfo == NULL)
 	{
-		SLOGW(DEBUG_TAG_RENDERWORLD, "Missing Z-Strip info on multi-Z object");
+		SLOGW("Missing Z-Strip info on multi-Z object");
 		return;
 	}
 	// setup for the z-column blitting stuff
 	const ZStripInfo* const pZInfo = hSrcVObject->ppZStripInfo[sZIndex];
 	if (pZInfo == NULL)
 	{
-		SLOGW(DEBUG_TAG_RENDERWORLD, "Missing Z-Strip info on multi-Z object");
+		SLOGW("Missing Z-Strip info on multi-Z object");
 		return;
 	}
 
@@ -3385,7 +3398,7 @@ static void Blt8BPPDataTo16BPPBufferTransZTransShadowIncObscureClip(UINT16* pBuf
 			if (PxCount & 0x80)
 			{
 				PxCount &= 0x7F;
-				if (PxCount > LSCount)
+				if (PxCount > static_cast<UINT32>(LSCount))
 				{
 					PxCount -= LSCount;
 					LSCount = BlitLength;
@@ -3394,7 +3407,7 @@ static void Blt8BPPDataTo16BPPBufferTransZTransShadowIncObscureClip(UINT16* pBuf
 			}
 			else
 			{
-				if (PxCount > LSCount)
+				if (PxCount > static_cast<UINT32>(LSCount))
 				{
 					SrcPtr += LSCount;
 					PxCount -= LSCount;
@@ -3413,7 +3426,7 @@ static void Blt8BPPDataTo16BPPBufferTransZTransShadowIncObscureClip(UINT16* pBuf
 			{
 BlitTransparent: // skip transparent pixels
 				PxCount &= 0x7F;
-				if (PxCount > LSCount) PxCount = LSCount;
+				if (PxCount > static_cast<UINT32>(LSCount)) PxCount = LSCount;
 				LSCount -= PxCount;
 				DestPtr += 2 * PxCount;
 				ZPtr    += 2 * PxCount;
@@ -3444,7 +3457,7 @@ BlitTransparent: // skip transparent pixels
 			else
 			{
 BlitNonTransLoop: // blit non-transparent pixels
-				if (PxCount > LSCount)
+				if (PxCount > static_cast<UINT32>(LSCount))
 				{
 					Unblitted = PxCount - LSCount;
 					PxCount = LSCount;
@@ -3545,10 +3558,10 @@ static void Blt8BPPDataTo16BPPBufferTransZTransShadowIncClip(UINT16* pBuffer, UI
 	}
 
 	// Calculate rows hanging off each side of the screen
-	const INT32 LeftSkip   = __min(ClipX1 -   MIN(ClipX1, iTempX), usWidth);
-	INT32       TopSkip    = __min(ClipY1 - __min(ClipY1, iTempY), usHeight);
-	const INT32 RightSkip  = __min(  MAX(ClipX2, iTempX + usWidth)  - ClipX2, usWidth);
-	const INT32 BottomSkip = __min(__max(ClipY2, iTempY + usHeight) - ClipY2, usHeight);
+	const INT32 LeftSkip   = std::min(ClipX1 - std::min(ClipX1, iTempX), usWidth);
+	INT32       TopSkip    = std::min(ClipY1 - std::min(ClipY1, iTempY), usHeight);
+	const INT32 RightSkip  = std::clamp(iTempX + usWidth - ClipX2, 0, usWidth);
+	const INT32 BottomSkip = std::clamp(iTempY + usHeight - ClipY2, 0, usHeight);
 
 	// calculate the remaining rows and columns to blit
 	const INT32 BlitLength = usWidth  - LeftSkip - RightSkip;
@@ -3565,14 +3578,14 @@ static void Blt8BPPDataTo16BPPBufferTransZTransShadowIncClip(UINT16* pBuffer, UI
 
 	if (hSrcVObject->ppZStripInfo == NULL)
 	{
-		SLOGW(DEBUG_TAG_RENDERWORLD, "Missing Z-Strip info on multi-Z object");
+		SLOGW("Missing Z-Strip info on multi-Z object");
 		return;
 	}
 	// setup for the z-column blitting stuff
 	const ZStripInfo* const pZInfo = hSrcVObject->ppZStripInfo[sZIndex];
 	if (pZInfo == NULL)
 	{
-		SLOGW(DEBUG_TAG_RENDERWORLD, "Missing Z-Strip info on multi-Z object");
+		SLOGW("Missing Z-Strip info on multi-Z object");
 		return;
 	}
 
@@ -3651,7 +3664,7 @@ static void Blt8BPPDataTo16BPPBufferTransZTransShadowIncClip(UINT16* pBuffer, UI
 			if (PxCount & 0x80)
 			{
 				PxCount &= 0x7F;
-				if (PxCount > LSCount)
+				if (PxCount > static_cast<UINT32>(LSCount))
 				{
 					PxCount -= LSCount;
 					LSCount = BlitLength;
@@ -3660,7 +3673,7 @@ static void Blt8BPPDataTo16BPPBufferTransZTransShadowIncClip(UINT16* pBuffer, UI
 			}
 			else
 			{
-				if (PxCount > LSCount)
+				if (PxCount > static_cast<UINT32>(LSCount))
 				{
 					SrcPtr += LSCount;
 					PxCount -= LSCount;
@@ -3679,7 +3692,7 @@ static void Blt8BPPDataTo16BPPBufferTransZTransShadowIncClip(UINT16* pBuffer, UI
 			{
 BlitTransparent: // skip transparent pixels
 				PxCount &= 0x7F;
-				if (PxCount > LSCount) PxCount = LSCount;
+				if (PxCount > static_cast<UINT32>(LSCount)) PxCount = LSCount;
 				LSCount -= PxCount;
 				DestPtr += 2 * PxCount;
 				ZPtr    += 2 * PxCount;
@@ -3710,7 +3723,7 @@ BlitTransparent: // skip transparent pixels
 			else
 			{
 BlitNonTransLoop: // blit non-transparent pixels
-				if (PxCount > LSCount)
+				if (PxCount > static_cast<UINT32>(LSCount))
 				{
 					Unblitted = PxCount - LSCount;
 					PxCount = LSCount;
@@ -3813,7 +3826,7 @@ static void RenderRoomInfo(INT16 sStartPointX_M, INT16 sStartPointY_M, INT16 sSt
 						case 3: SetFontForeground(FONT_LTBLUE);  break;
 						case 4: SetFontForeground(FONT_LTGREEN); break;
 					}
-					mprintf_buffer(pDestBuf, uiDestPitchBYTES, sX, sY, L"%d", gubWorldRoomInfo[usTileIndex]);
+					MPrintBuffer(pDestBuf, uiDestPitchBYTES, sX, sY, ST::format("{}", gubWorldRoomInfo[usTileIndex]));
 					SetFontDestBuffer(FRAME_BUFFER);
 				}
 			}
@@ -3880,7 +3893,7 @@ static void RenderFOVDebugInfo(INT16 sStartPointX_M, INT16 sStartPointY_M, INT16
 					SetFont(SMALLCOMPFONT);
 					SetFontDestBuffer(FRAME_BUFFER, 0, 0, SCREEN_WIDTH, gsVIEWPORT_END_Y);
 					SetFontForeground(FONT_GRAY3);
-					mprintf_buffer(pDestBuf, uiDestPitchBYTES, sX, sY, L"%d", gubFOVDebugInfoInfo[usTileIndex]);
+					MPrintBuffer(pDestBuf, uiDestPitchBYTES, sX, sY, ST::format("{}", gubFOVDebugInfoInfo[usTileIndex]));
 					SetFontDestBuffer(FRAME_BUFFER);
 
 					Blt8BPPDataTo16BPPBufferTransparentClip(pDestBuf, uiDestPitchBYTES, gTileDatabase[0].hTileSurface, sTempPosX_S, sTempPosY_S, 0, &gClippingRect);
@@ -3891,7 +3904,7 @@ static void RenderFOVDebugInfo(INT16 sStartPointX_M, INT16 sStartPointY_M, INT16
 					SetFont(SMALLCOMPFONT);
 					SetFontDestBuffer(FRAME_BUFFER, 0, 0, SCREEN_WIDTH, gsVIEWPORT_END_Y);
 					SetFontForeground(FONT_FCOLOR_YELLOW);
-					MPrintBuffer(pDestBuf, uiDestPitchBYTES, sX, sY + 4, L"x");
+					MPrintBuffer(pDestBuf, uiDestPitchBYTES, sX, sY + 4, "x");
 					SetFontDestBuffer(FRAME_BUFFER);
 				}
 			}
@@ -3967,7 +3980,7 @@ static void RenderCoverDebugInfo(INT16 sStartPointX_M, INT16 sStartPointY_M, INT
 					{
 						SetFontForeground(FONT_GRAY3);
 					}
-					mprintf_buffer(pDestBuf, uiDestPitchBYTES, sX, sY, L"%d", gsCoverValue[usTileIndex]);
+					MPrintBuffer(pDestBuf, uiDestPitchBYTES, sX, sY, ST::format("{}", gsCoverValue[usTileIndex]));
 					SetFontDestBuffer(FRAME_BUFFER);
 				}
 			}
@@ -4038,7 +4051,7 @@ static void RenderGridNoVisibleDebugInfo(INT16 sStartPointX_M, INT16 sStartPoint
 				{
 					SetFontForeground(FONT_GRAY3);
 				}
-				mprintf_buffer(pDestBuf, uiDestPitchBYTES, sX, sY, L"%d", usTileIndex);
+				MPrintBuffer(pDestBuf, uiDestPitchBYTES, sX, sY, ST::format("{}", usTileIndex));
 				SetFontDestBuffer(FRAME_BUFFER);
 			}
 
@@ -4178,10 +4191,10 @@ static void CalcRenderParameters(INT16 sLeft, INT16 sTop, INT16 sRight, INT16 sB
 	gOldClipRect = gClippingRect;
 
 	// Set new clipped rect
-	gClippingRect.iLeft   = __max(gsVIEWPORT_START_X,        sLeft);
-	gClippingRect.iRight  = __min(gsVIEWPORT_END_X,          sRight);
-	gClippingRect.iTop    = __max(gsVIEWPORT_WINDOW_START_Y, sTop);
-	gClippingRect.iBottom = __min(gsVIEWPORT_WINDOW_END_Y,   sBottom);
+	gClippingRect.iLeft   = std::max((int) gsVIEWPORT_START_X, (int) sLeft);
+	gClippingRect.iRight  = std::min((int) gsVIEWPORT_END_X, (int) sRight);
+	gClippingRect.iTop    = std::max((int) gsVIEWPORT_WINDOW_START_Y, (int) sTop);
+	gClippingRect.iBottom = std::min((int) gsVIEWPORT_WINDOW_END_Y, (int) sBottom);
 
 	gsEndXS = sRight  + VIEWPORT_XOFFSET_S;
 	gsEndYS = sBottom + VIEWPORT_YOFFSET_S;

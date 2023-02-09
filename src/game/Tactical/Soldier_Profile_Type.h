@@ -4,10 +4,10 @@
 #include "Overhead_Types.h"
 #include "Types.h"
 
+#include <string_theory/string>
+
 
 #define NUM_PROFILES						170
-#define FIRST_RPC						57
-#define FIRST_NPC						75
 
 #define NAME_LENGTH						30
 #define NICKNAME_LENGTH					10
@@ -162,13 +162,13 @@ enum CharacterEvolution
 
 struct MERCPROFILESTRUCT
 {
-	wchar_t zName[ NAME_LENGTH ];
-	wchar_t zNickname[ NICKNAME_LENGTH ];
+	ST::string zName;
+	ST::string zNickname;
 	UINT8 ubFaceIndex;
-	PaletteRepID PANTS;
-	PaletteRepID VEST;
-	PaletteRepID SKIN;
-	PaletteRepID HAIR;
+	ST::string PANTS;
+	ST::string VEST;
+	ST::string SKIN;
+	ST::string HAIR;
 	INT8 bSex;
 	INT8 bArmourAttractiveness;
 	UINT8 ubMiscFlags2;
@@ -200,8 +200,7 @@ struct MERCPROFILESTRUCT
 	UINT16 usMouthY;
 	UINT32 uiBlinkFrequency;
 	UINT32 uiExpressionFrequency;
-	UINT16 sSectorX;
-	UINT16 sSectorY;
+	SGPSector sSector;
 
 	UINT32 uiDayBecomesAvailable; //day the merc will be available. used with the bMercStatus
 

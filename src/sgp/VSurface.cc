@@ -1,68 +1,55 @@
-#include <stdexcept>
-
 #include "Debug.h"
 #include "HImage.h"
-#include "MemMan.h"
 #include "Shading.h"
 #include "VObject_Blitters.h"
 #include "VSurface.h"
 #include "Video.h"
 #include "SGP.h"
-#include "slog/slog.h"
+#include "Logger.h"
+
+#include <string_theory/format>
+#include <string_theory/string>
+
+#include <stdexcept>
 
 extern SGPVSurface* gpVSurfaceHead;
 
 
 SGPVSurface::SGPVSurface(UINT16 const w, UINT16 const h, UINT8 const bpp) :
 	p16BPPPalette(),
-#ifdef SGP_VIDEO_DEBUGGING
-	name_(),
-	code_(),
-#endif
 	next_(gpVSurfaceHead)
 {
-	Assert(w > 0);
-	Assert(h > 0);
+	Assert(w > 0 && h > 0);
 
-	SDL_Surface* s;
+	Uint32 pixelFormat;
 	switch (bpp)
 	{
 		case 8:
-			s = SDL_CreateRGBSurface(0, w, h, bpp, 0, 0, 0, 0);
+			pixelFormat = SDL_PIXELFORMAT_INDEX8;
 			break;
 
 		case 16:
 		{
-			SDL_PixelFormat const* f = SDL_AllocFormat(SDL_PIXELFORMAT_RGB565);
-			s = SDL_CreateRGBSurface(0, w, h, bpp, f->Rmask, f->Gmask, f->Bmask, f->Amask);
+			pixelFormat = SDL_PIXELFORMAT_RGB565;
 			break;
 		}
 
 		default:
 			throw std::logic_error("Tried to create video surface with invalid bpp, must be 8 or 16.");
 	}
+	SDL_Surface * const s = SDL_CreateRGBSurfaceWithFormat(0, w, h, 0, pixelFormat);
 	if (!s) throw std::runtime_error("Failed to create SDL surface");
-	surface_ = s;
+	surface_.reset(s);
 	gpVSurfaceHead = this;
-#ifdef SGP_VIDEO_DEBUGGING
-	++guiVSurfaceSize;
-#endif
 }
 
 
 SGPVSurface::SGPVSurface(SDL_Surface* const s) :
 	surface_(s),
 	p16BPPPalette(),
-#ifdef SGP_VIDEO_DEBUGGING
-	name_(),
-	code_(),
-#endif
 	next_(gpVSurfaceHead)
 {
 	gpVSurfaceHead = this;
-#ifdef SGP_VIDEO_DEBUGGING
-	++guiVSurfaceSize;
-#endif
 }
 
 
@@ -72,18 +59,10 @@ SGPVSurface::~SGPVSurface()
 	{
 		if (*anchor != this) continue;
 		*anchor = next_;
-#ifdef SGP_VIDEO_DEBUGGING
-		--guiVSurfaceSize;
-#endif
 		break;
 	}
 
-	if (p16BPPPalette) MemFree(p16BPPPalette);
-
-#ifdef SGP_VIDEO_DEBUGGING
-	if (name_) MemFree(name_);
-	if (code_) MemFree(code_);
-#endif
+	if (p16BPPPalette) delete[] p16BPPPalette;
 }
 
 
@@ -97,7 +76,7 @@ void SGPVSurface::SetPalette(const SGPPaletteEntry* const src_pal)
 		p[i] = src_pal[i];
 	}
 
-	if (p16BPPPalette != NULL) MemFree(p16BPPPalette);
+	if (p16BPPPalette != NULL) delete[] p16BPPPalette;
 	p16BPPPalette = Create16BPPPalette(src_pal);
 }
 
@@ -112,31 +91,13 @@ void SGPVSurface::SetTransparency(const COLORVAL colour)
 
 		default: abort(); // HACK000E
 	}
-	SDL_SetColorKey(surface_, SDL_TRUE, colour_key);
+	SDL_SetColorKey(surface_.get(), SDL_TRUE, colour_key);
 }
 
 
 void SGPVSurface::Fill(const UINT16 colour)
 {
-	SDL_FillRect(surface_, NULL, colour);
-}
-
-SGPVSurfaceAuto::SGPVSurfaceAuto(UINT16 w, UINT16 h, UINT8 bpp)
-	: SGPVSurface(w, h, bpp)
-{
-}
-
-SGPVSurfaceAuto::SGPVSurfaceAuto(SDL_Surface* surface)
-	: SGPVSurface(surface)
-{
-}
-
-SGPVSurfaceAuto::~SGPVSurfaceAuto()
-{
-	if(surface_)
-	{
-		SDL_FreeSurface(surface_);
-	}
+	SDL_FillRect(surface_.get(), NULL, colour);
 }
 
 
@@ -179,27 +140,12 @@ void SGPVSurface::ShadowRectUsingLowPercentTable(INT32 const x1, INT32 const y1,
 	InternalShadowVideoSurfaceRect(this, x1, y1, x2, y2, IntensityTable);
 }
 
-SGPVSurface* g_back_buffer;
-SGPVSurfaceAuto* g_frame_buffer;
-SGPVSurfaceAuto* g_mouse_buffer;
 
-
-#undef AddVideoSurface
-#undef AddVideoSurfaceFromFile
-
-
-SGPVSurfaceAuto* AddVideoSurface(UINT16 Width, UINT16 Height, UINT8 BitDepth)
-{
-	SGPVSurfaceAuto* const vs = new SGPVSurfaceAuto(Width, Height, BitDepth);
-	return vs;
-}
-
-
-SGPVSurfaceAuto* AddVideoSurfaceFromFile(const char* const Filename)
+SGPVSurface* AddVideoSurfaceFromFile(const char* const Filename)
 {
 	AutoSGPImage img(CreateImage(Filename, IMAGE_ALLIMAGEDATA));
 
-	SGPVSurfaceAuto* const vs = new SGPVSurfaceAuto(img->usWidth, img->usHeight, img->ubBitDepth);
+	auto vs = std::make_unique<SGPVSurface>(img->usWidth, img->usHeight, img->ubBitDepth);
 
 	UINT8 const dst_bpp = vs->BPP();
 	UINT32      buffer_bpp;
@@ -210,42 +156,21 @@ SGPVSurfaceAuto* AddVideoSurfaceFromFile(const char* const Filename)
 		default: throw std::logic_error("Invalid bpp");
 	}
 
-	{ SGPVSurface::Lock l(vs);
+	{ SGPVSurface::Lock l(vs.get());
 		UINT8*  const dst   = l.Buffer<UINT8>();
 		UINT16  const pitch = l.Pitch() / (dst_bpp / 8); // pitch in pixels
 		SGPBox  const box   = { 0, 0, img->usWidth, img->usHeight };
-		BOOLEAN const Ret   = CopyImageToBuffer(img, buffer_bpp, dst, pitch, vs->Height(), 0, 0, &box);
+		BOOLEAN const Ret   = CopyImageToBuffer(img.get(), buffer_bpp, dst, pitch, vs->Height(), 0, 0, &box);
 		if (!Ret)
 		{
-			SLOGE(DEBUG_TAG_VSURFACE, "Error Occured Copying SGPImage to video surface");
+			SLOGE("Error Occured Copying SGPImage to video surface");
 		}
 	}
 
 	if (img->ubBitDepth == 8) vs->SetPalette(img->pPalette);
 
-	return vs;
+	return vs.release();
 }
-
-
-#ifdef SGP_VIDEO_DEBUGGING
-
-static void RecordVSurface(SGPVSurface* const vs, char const* const Filename, UINT32 const LineNum, char const* const SourceFile)
-{
-	//record the filename of the vsurface (some are created via memory though)
-	vs->name_ = MALLOCN(char, strlen(Filename) + 1);
-	strcpy(vs->name_, Filename);
-
-	//record the code location of the calling creating function.
-	char str[256];
-	sprintf(str, "%s -- line(%d)", SourceFile, LineNum);
-	vs->code_ = MALLOCN(char, strlen(str) + 1);
-	strcpy(vs->code_, str);
-}
-
-#	define RECORD(vs, name) RecordVSurface((vs), (name), __LINE__, __FILE__)
-#else
-#	define RECORD(cs, name) ((void)0)
-#endif
 
 void BltVideoSurfaceHalf(SGPVSurface* const dst, SGPVSurface* const src, INT32 const DestX, INT32 const DestY, SGPBox const* const src_rect)
 {
@@ -261,8 +186,7 @@ void BltVideoSurfaceHalf(SGPVSurface* const dst, SGPVSurface* const src, INT32 c
 
 void ColorFillVideoSurfaceArea(SGPVSurface* const dst, INT32 iDestX1, INT32 iDestY1, INT32 iDestX2, INT32 iDestY2, const UINT16 Color16BPP)
 {
-	SGPRect Clip;
-	GetClippingRect(&Clip);
+	SGPRect const Clip = GetClippingRect();
 
 	if (iDestX1 < Clip.iLeft) iDestX1 = Clip.iLeft;
 	if (iDestX1 > Clip.iRight) return;
@@ -283,7 +207,7 @@ void ColorFillVideoSurfaceArea(SGPVSurface* const dst, INT32 iDestX1, INT32 iDes
 	Rect.y = iDestY1;
 	Rect.w = iDestX2 - iDestX1;
 	Rect.h = iDestY2 - iDestY1;
-	SDL_FillRect(dst->surface_, &Rect, Color16BPP);
+	SDL_FillRect(dst->surface_.get(), &Rect, Color16BPP);
 }
 
 
@@ -311,7 +235,7 @@ void BltVideoSurface(SGPVSurface* const dst, SGPVSurface* const src, INT32 const
 		SDL_Rect dstrect;
 		dstrect.x = iDestX;
 		dstrect.y = iDestY;
-		SDL_BlitSurface(src->surface_, src_rect, dst->surface_, &dstrect);
+		SDL_BlitSurface(src->surface_.get(), src_rect, dst->surface_.get(), &dstrect);
 	}
 	else if (src_bpp < dst_bpp)
 	{
@@ -322,12 +246,12 @@ void BltVideoSurface(SGPVSurface* const dst, SGPVSurface* const src, INT32 const
 			// Check Sizes, SRC size MUST be <= DEST size
 			if (dst->Height() < src->Height())
 			{
-				SLOGD(DEBUG_TAG_VSURFACE, "Incompatible height size given in Video Surface blit");
+				SLOGD("Incompatible height size given in Video Surface blit");
 				return;
 			}
 			if (dst->Width() < src->Width())
 			{
-				SLOGD(DEBUG_TAG_VSURFACE, "Incompatible height size given in Video Surface blit");
+				SLOGD("Incompatible height size given in Video Surface blit");
 				return;
 			}
 
@@ -348,7 +272,7 @@ void BltVideoSurface(SGPVSurface* const dst, SGPVSurface* const src, INT32 const
 	}
 	else
 	{
-		SLOGD(DEBUG_TAG_VSURFACE, "Incompatible BPP values with src and dest Video Surfaces for blitting");
+		SLOGD("Incompatible BPP values with src and dest Video Surfaces for blitting");
 	}
 }
 
@@ -357,8 +281,8 @@ void BltStretchVideoSurface(SGPVSurface* const dst, SGPVSurface const* const src
 {
 	if (dst->BPP() != 16 || src->BPP() != 16) return;
 
-	SDL_Surface const* const ssurface = src->surface_;
-	SDL_Surface*       const dsurface = dst->surface_;
+	SDL_Surface const* const ssurface = src->surface_.get();
+	SDL_Surface*       const dsurface = dst->surface_.get();
 
 	const UINT32  s_pitch = ssurface->pitch >> 1;
 	const UINT32  d_pitch = dsurface->pitch >> 1;
@@ -412,15 +336,15 @@ void BltStretchVideoSurface(SGPVSurface* const dst, SGPVSurface const* const src
 
 void BltVideoSurfaceOnce(SGPVSurface* const dst, const char* const filename, INT32 const x, INT32 const y)
 {
-	SGP::AutoPtr<SGPVSurfaceAuto> src(AddVideoSurfaceFromFile(filename));
-	BltVideoSurface(dst, src, x, y, NULL);
+	std::unique_ptr<SGPVSurface> src(AddVideoSurfaceFromFile(filename));
+	BltVideoSurface(dst, src.get(), x, y, NULL);
 }
 
 /** Draw image on the video surface stretching the image if necessary. */
 void BltVideoSurfaceOnceWithStretch(SGPVSurface* const dst, const char* const filename)
 {
-	SGP::AutoPtr<SGPVSurfaceAuto> src(AddVideoSurfaceFromFile(filename));
-	FillVideoSurfaceWithStretch(dst, src);
+	std::unique_ptr<SGPVSurface> src(AddVideoSurfaceFromFile(filename));
+	FillVideoSurfaceWithStretch(dst, src.get());
 }
 
 /** Fill video surface with another one with stretch. */
@@ -432,83 +356,3 @@ void FillVideoSurfaceWithStretch(SGPVSurface* const dst, SGPVSurface* const src)
 	dstRec.set(0, 0, dst->Width(), dst->Height());
 	BltStretchVideoSurface(dst, src, &srcRec, &dstRec);
 }
-
-#ifdef SGP_VIDEO_DEBUGGING
-
-UINT32 guiVSurfaceSize = 0;
-
-
-struct DUMPINFO
-{
-	UINT32 Counter;
-	char Name[256];
-	char Code[256];
-};
-
-
-void DumpVSurfaceInfoIntoFile(const char* filename, BOOLEAN fAppend)
-{
-	if (!guiVSurfaceSize) return;
-
-	FILE* fp = fopen(filename, fAppend ? "a" : "w");
-	Assert(fp != NULL);
-
-	//Allocate enough strings and counters for each node.
-	DUMPINFO* const Info = MALLOCNZ(DUMPINFO, guiVSurfaceSize);
-
-	//Loop through the list and record every unique filename and count them
-	UINT32 uiUniqueID = 0;
-	for (SGPVSurface const* i = gpVSurfaceHead; i; i = i->next_)
-	{
-		char const* const Name = i->name_;
-		char const* const Code = i->code_;
-		BOOLEAN fFound = FALSE;
-		for (UINT32 i = 0; i < uiUniqueID; i++)
-		{
-			if (strcasecmp(Name, Info[i].Name) == 0 && strcasecmp(Code, Info[i].Code) == 0)
-			{ //same string
-				fFound = TRUE;
-				Info[i].Counter++;
-				break;
-			}
-		}
-		if (!fFound)
-		{
-			strcpy(Info[uiUniqueID].Name, Name);
-			strcpy(Info[uiUniqueID].Code, Code);
-			Info[uiUniqueID].Counter++;
-			uiUniqueID++;
-		}
-	}
-
-	//Now dump the info.
-	fprintf(fp, "-----------------------------------------------\n");
-	fprintf(fp, "%d unique vSurface names exist in %d VSurfaces\n", uiUniqueID, guiVSurfaceSize);
-	fprintf(fp, "-----------------------------------------------\n\n");
-	for (UINT32 i = 0; i < uiUniqueID; i++)
-	{
-		fprintf(fp, "%d occurrences of %s\n%s\n\n", Info[i].Counter, Info[i].Name, Info[i].Code);
-	}
-	fprintf(fp, "\n-----------------------------------------------\n\n");
-
-	MemFree(Info);
-	fclose(fp);
-}
-
-
-SGPVSurface* AddAndRecordVSurface(const UINT16 Width, const UINT16 Height, const UINT8 BitDepth, const UINT32 LineNum, const char* const SourceFile)
-{
-	SGPVSurface* const vs = AddVideoSurface(Width, Height, BitDepth);
-	RecordVSurface(vs, "<EMPTY>", LineNum, SourceFile);
-	return vs;
-}
-
-
-SGPVSurface* AddAndRecordVSurfaceFromFile(const char* const Filename, const UINT32 LineNum, const char* const SourceFile)
-{
-	SGPVSurface* const vs = AddVideoSurfaceFromFile(Filename);
-	RecordVSurface(vs, Filename, LineNum, SourceFile);
-	return vs;
-}
-
-#endif

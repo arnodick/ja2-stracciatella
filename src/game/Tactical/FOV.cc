@@ -32,6 +32,11 @@
 #include "Video.h"
 #endif
 
+#include <string_theory/format>
+
+#include <algorithm>
+#include <iterator>
+
 /* view directions */
 #define DLEFT           0
 #define DRIGHT          1
@@ -260,7 +265,6 @@ void RevealRoofsAndItems(SOLDIERTYPE* const pSoldier, const BOOLEAN fShowLocator
 	UINT8   dir,range,Path2;
 	UINT8   ubRoomNo;
 	UINT8   ubMovementCost;
-	BOOLEAN fCheckForRooms = FALSE;
 	BOOLEAN fTravelCostObs;
 	BOOLEAN fGoneThroughDoor = FALSE;
 	BOOLEAN fThroughWindow = FALSE;
@@ -298,7 +302,7 @@ void RevealRoofsAndItems(SOLDIERTYPE* const pSoldier, const BOOLEAN fShowLocator
 	if ( gubGridNoValue == 255 )
 	{
 		//Reset!
-		memset( gubGridNoMarkers, 0, sizeof( gubGridNoMarkers ) );
+		std::fill(std::begin(gubGridNoMarkers), std::end(gubGridNoMarkers), 0);
 		gubGridNoValue = 1;
 	}
 
@@ -319,7 +323,7 @@ void RevealRoofsAndItems(SOLDIERTYPE* const pSoldier, const BOOLEAN fShowLocator
 		range = (AdjustMaxSightRangeForEnvEffects(LightTrueLevel(pSoldier->sGridNo, pSoldier->bLevel), range) + range) / 2;
 	}
 
-	UINT32 Dir[6];
+	UINT32 Dir[6] = { 0 };
 	BuildSightDir(dir,&Dir[0],&Dir[1],&Dir[2],&Dir[3],&Dir[4]);
 	INT32 Inc[6];
 	for (cnt = 0; cnt < 5; cnt++)
@@ -351,7 +355,7 @@ void RevealRoofsAndItems(SOLDIERTYPE* const pSoldier, const BOOLEAN fShowLocator
 #ifdef _DEBUG
 		if (_KeyDown(SDLK_NUMLOCKCLEAR))
 		{
-			memset( gubFOVDebugInfoInfo, 0, sizeof( gubFOVDebugInfoInfo ) );
+			std::fill(std::begin(gubFOVDebugInfoInfo), std::end(gubFOVDebugInfoInfo), 0);
 			SetRenderFlags( RENDER_FLAG_FULL );
 			RenderWorld( );
 		}
@@ -364,7 +368,6 @@ void RevealRoofsAndItems(SOLDIERTYPE* const pSoldier, const BOOLEAN fShowLocator
 			prevmarker = marker;
 
 			nextDir = 99;
-			fCheckForRooms = FALSE;
 			fTravelCostObs = FALSE;
 			if ( fStopRevealingItemsAfterThisTile )
 			{
@@ -389,7 +392,7 @@ void RevealRoofsAndItems(SOLDIERTYPE* const pSoldier, const BOOLEAN fShowLocator
 			{
 				// ATE: Make sure we are going through the same direction!
 				// THis is to solve the drassen SAM problem with seeing through walls
-				if ( Dir[markerDir] == bThroughWindowDirection)
+				if ( static_cast<INT8>(Dir[markerDir]) == bThroughWindowDirection)
 				{
 					fThroughWindow = 2;
 				}
@@ -431,14 +434,14 @@ void RevealRoofsAndItems(SOLDIERTYPE* const pSoldier, const BOOLEAN fShowLocator
 #ifdef _DEBUG
 			if (_KeyDown(SDLK_NUMLOCKCLEAR))
 			{
-				int cnt = GetJA2Clock( );
+				unsigned int cnt = GetJA2Clock();
 
 				gubFOVDebugInfoInfo[ marker ] = (UINT8)markercnt;
 				RenderFOVDebug( );
 				SetFontAttributes(LARGEFONT1, FONT_MCOLOR_WHITE);
-				mprintf( 10,  10 , L"%d", maincnt  );
-				//mprintf( 10,  20 , L"%d", marker  );
-				//mprintf( 50,  20 , L"%d", pSoldier->sGridNo  );
+				MPrint( 10,  10 , ST::format("{}", maincnt) );
+				//MPrint( 10,  20 , ST::format("{}", marker) );
+				//MPrint( 50,  20 , ST::format("{}", pSoldier->sGridNo) );
 				InvalidateScreen( );
 				RefreshScreen();
 				do
@@ -675,17 +678,6 @@ void RevealRoofsAndItems(SOLDIERTYPE* const pSoldier, const BOOLEAN fShowLocator
 						break;
 					}
 
-					//if ( Blocking == NOTHING_BLOCKING || Blocking == BLOCKING_NEXT_TILE )
-					if ( Blocking == NOTHING_BLOCKING )
-					{
-						fCheckForRooms = TRUE;
-					}
-
-					if ( ubLevel != 0 )
-					{
-						fCheckForRooms = FALSE;
-					}
-
 					// CHECK FOR SLANT ROOF!
 					{
 						STRUCTURE* pStructure;
@@ -721,12 +713,12 @@ void RevealRoofsAndItems(SOLDIERTYPE* const pSoldier, const BOOLEAN fShowLocator
 						}
 
 						// CHECK FOR ROOMS
-						//if ( fCheckForRooms )
 						{
 							if ( InAHiddenRoom( (INT16)marker, &ubRoomNo ) )
 							{
 								RemoveRoomRoof( (INT16)marker, ubRoomNo, pSoldier );
-								if ( ubRoomNo == ROOM_SURROUNDING_BOXING_RING && gWorldSectorX == BOXING_SECTOR_X && gWorldSectorY == BOXING_SECTOR_Y && gbWorldSectorZ == BOXING_SECTOR_Z )
+								static const SGPSector ringSector(BOXING_SECTOR_X, BOXING_SECTOR_Y, BOXING_SECTOR_Z);
+								if (ubRoomNo == ROOM_SURROUNDING_BOXING_RING && gWorldSector == ringSector)
 								{
 									// reveal boxing ring at same time
 									RemoveRoomRoof( (INT16)marker, BOXING_RING, pSoldier );

@@ -161,10 +161,8 @@ static UINT8 GetCurrentSuitabilityForItem(ArmsDealerID const bArmsDealer, UINT16
 		}
 	}
 
-
-	ubMinCoolness = MAX( 1, MIN( 9, ubMinCoolness ) );
-	ubMaxCoolness = MAX( 2, MIN( 10, ubMaxCoolness ) );
-
+	ubMinCoolness = std::clamp(int(ubMinCoolness), 1, 9);
+	ubMaxCoolness = std::clamp(int(ubMaxCoolness), 2, 10);
 
 	// if item is too cool for current level of progress
 	if (ubItemCoolness > ubMaxCoolness)
@@ -244,7 +242,7 @@ UINT8 ChanceOfItemTransaction(ArmsDealerID const bArmsDealer, UINT16 const usIte
 			break;
 
 		default:
-			SLOGE(DEBUG_TAG_ASSERTS, "ChanceOfItemTransaction: invalid item suitability");
+			SLOGA("ChanceOfItemTransaction: invalid item suitability");
 			break;
 	}
 
@@ -287,16 +285,13 @@ BOOLEAN ItemTransactionOccurs(ArmsDealerID const bArmsDealer, UINT16 const usIte
 		// mark it as such
 		if (bArmsDealer == ARMS_DEALER_BOBBYR)
 		{
-			if (fUsed)
+			STORE_INVENTORY* pInventory = fUsed ? LaptopSaveInfo.BobbyRayUsedInventory : LaptopSaveInfo.BobbyRayInventory;
+			sInventorySlot = GetInventorySlotForItem(pInventory, usItemIndex, fUsed);
+			if (sInventorySlot == -1)
 			{
-				sInventorySlot = GetInventorySlotForItem(LaptopSaveInfo.BobbyRayUsedInventory, usItemIndex, fUsed);
-				LaptopSaveInfo.BobbyRayUsedInventory[ sInventorySlot ].fPreviouslyEligible = TRUE;
+				return(FALSE);
 			}
-			else
-			{
-				sInventorySlot = GetInventorySlotForItem(LaptopSaveInfo.BobbyRayInventory, usItemIndex, fUsed);
-				LaptopSaveInfo.BobbyRayInventory    [ sInventorySlot ].fPreviouslyEligible = TRUE;
-			}
+			pInventory[ sInventorySlot ].fPreviouslyEligible = TRUE;
 		}
 		else
 		{

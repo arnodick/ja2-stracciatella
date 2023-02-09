@@ -7,6 +7,7 @@
 #include "MouseSystem.h"
 #include "ScreenIDs.h"
 #include "Soldier_Find.h"
+#include <magic_enum.hpp>
 
 
 #define UIEVENT_SINGLEEVENT		0x00000002
@@ -64,6 +65,7 @@ enum	UI_MODE
 	EXITSECTORMENU_MODE,
 	RUBBERBAND_MODE,
 	JUMPOVER_MODE,
+	PAN_MODE,
 };
 
 struct UI_EVENT
@@ -153,19 +155,27 @@ enum UIEventKind
 	JP_ON_TERRAIN,
 	JP_JUMP,
 
+	P_PANMODE,
+
 	NUM_UI_EVENTS
 };
 
 typedef BOOLEAN (*UIKEYBOARD_HOOK)( InputAtom *pInputEvent );
 
-
 // GLOBAL STATUS VARS
 extern UI_MODE     gCurrentUIMode;
 extern UIEventKind guiCurrentEvent;
-extern UICursorID  guiCurrentUICursor;
+extern UIEventKind guiPendingOverrideEvent;
+
+// Currently used cursor
+extern UICursorID		guiCurrentUICursor;
+// GridNo of the tile the mouse cursor is currently over, or NOWHERE if outside of the viewport
+extern GridNo			guiCurrentCursorGridNo;
+// The number of fingers currently down
+extern UINT8 gUIFingersDown;
+
 extern INT16       gsSelectedLevel;
 extern BOOLEAN     gfPlotNewMovement;
-extern UIEventKind guiPendingOverrideEvent;
 
 
 // GLOBALS
@@ -223,6 +233,10 @@ extern BOOLEAN gfUIForceReExamineCursorData;
 void GetKeyboardInput(UIEventKind* puiNewEvent);
 void GetPolledKeyboardInput(UIEventKind* puiNewEvent);
 
+void TacticalViewPortMovementCallback(MOUSE_REGION* region, UINT32 reason);
+void TacticalViewPortTouchCallback(MOUSE_REGION* region, UINT32 reason);
+void ResetCurrentCursorTarget();
+
 void GetTBMouseButtonInput(UIEventKind* puiNewEvent);
 void GetTBMousePositionInput(UIEventKind* puiNewEvent);
 void HandleStanceChangeFromUIKeys( UINT8 ubAnimHeight );
@@ -265,7 +279,7 @@ BOOLEAN UIHandleOnMerc( BOOLEAN fMovementMode );
 
 void ChangeInterfaceLevel( INT16 sLevel );
 
-void EndRubberBanding(void);
+void EndRubberBanding(BOOLEAN fCancel = false);
 void ResetMultiSelection(void);
 void EndMultiSoldierSelection( BOOLEAN fAcknowledge );
 void StopRubberBandedMercFromMoving(void);
@@ -293,11 +307,6 @@ extern MOUSE_REGION    gUserTurnRegion;
 extern BOOLEAN         gfUserTurnRegionActive;
 extern UIKEYBOARD_HOOK gUIKeyboardHook;
 extern BOOLEAN         gfResetUIMovementOptimization;
-
-extern BOOLEAN gfUIShowExitEast;
-extern BOOLEAN gfUIShowExitWest;
-extern BOOLEAN gfUIShowExitNorth;
-extern BOOLEAN gfUIShowExitSouth;
 
 BOOLEAN ValidQuickExchangePosition(void);
 

@@ -1,5 +1,3 @@
-#include <stdexcept>
-
 #include "Directories.h"
 #include "Font.h"
 #include "HImage.h"
@@ -40,9 +38,13 @@
 #include "Text.h"
 #include "WordWrap.h"
 #include "Game_Clock.h"
-#include "MemMan.h"
 #include "JAScreens.h"
 #include "UILayout.h"
+
+#include <string_theory/format>
+#include <string_theory/string>
+#include <memory>
+#include <stdexcept>
 
 
 struct MERCPLACEMENT
@@ -54,11 +56,11 @@ struct MERCPLACEMENT
 	BOOLEAN				fPlaced;
 };
 
-static MERCPLACEMENT* gMercPlacement = 0;
-static INT32          giPlacements   = 0;
+static std::unique_ptr<MERCPLACEMENT[]> gMercPlacement;
+static INT32 giPlacements;
 
 #define FOR_EACH_MERC_PLACEMENT(iter) \
-	for (MERCPLACEMENT* iter = gMercPlacement, * const iter##__end = gMercPlacement + giPlacements; iter != iter##__end; ++i)
+	for (MERCPLACEMENT* iter = &gMercPlacement[0], * const iter##__end = &gMercPlacement[giPlacements]; iter != iter##__end; ++iter)
 
 enum
 {
@@ -98,7 +100,7 @@ static bool gfSouth;
 static bool gfWest;
 
 
-static void MakeButton(UINT idx, INT16 y, GUI_CALLBACK click, const wchar_t* text, const wchar_t* help)
+static void MakeButton(UINT idx, INT16 y, GUI_CALLBACK click, const ST::string& text, const ST::string& help)
 {
 	GUIButtonRef const btn = QuickCreateButton(giOverheadButtonImages[idx], STD_SCREEN_X + 11, STD_SCREEN_Y + y, MSYS_PRIORITY_HIGH, click);
 	iTPButtons[idx] = btn;
@@ -108,14 +110,14 @@ static void MakeButton(UINT idx, INT16 y, GUI_CALLBACK click, const wchar_t* tex
 }
 
 
-static void ClearPlacementsCallback(GUI_BUTTON* btn, INT32 reason);
-static void DoneOverheadPlacementClickCallback(GUI_BUTTON* btn, INT32 reason);
-static void GroupPlacementsCallback(GUI_BUTTON* btn, INT32 reason);
-static void MercClickCallback(MOUSE_REGION* reg, INT32 reason);
-static void MercMoveCallback(MOUSE_REGION* reg, INT32 reason);
+static void ClearPlacementsCallback(GUI_BUTTON* btn, UINT32 reason);
+static void DoneOverheadPlacementClickCallback(GUI_BUTTON* btn, UINT32 reason);
+static void GroupPlacementsCallback(GUI_BUTTON* btn, UINT32 reason);
+static void MercClickCallback(MOUSE_REGION* reg, UINT32 reason);
+static void MercMoveCallback(MOUSE_REGION* reg, UINT32 reason);
 static void PlaceMercs(void);
 static void SetCursorMerc(INT8 placement);
-static void SpreadPlacementsCallback(GUI_BUTTON* btn, INT32 reason);
+static void SpreadPlacementsCallback(GUI_BUTTON* btn, UINT32 reason);
 
 
 void InitTacticalPlacementGUI()
@@ -150,16 +152,15 @@ void InitTacticalPlacementGUI()
 	CFOR_EACH_IN_TEAM(s, OUR_TEAM)
 	{
 		if (s->fBetweenSectors)                 continue;
-		if (s->sSectorX != bg.ubSectorX)        continue;
-		if (s->sSectorY != bg.ubSectorY)        continue;
+		if (s->sSector != bg.ubSector)          continue;
 		if (s->uiStatusFlags & SOLDIER_VEHICLE) continue; // ATE Ignore vehicles
 		if (s->bAssignment == ASSIGNMENT_POW)   continue;
 		if (s->bAssignment == IN_TRANSIT)       continue;
-		if (s->bSectorZ != 0)                   continue;
+		if (s->sSector.z != 0)                  continue;
 		++n;
 	}
 	// Allocate the array based on how many mercs there are.
-	gMercPlacement = MALLOCNZ(MERCPLACEMENT, n);
+	gMercPlacement.reset(new MERCPLACEMENT[n]);
 
 	// Second pass: Assign the mercs to their respective slots.
 	giPlacements = 0;
@@ -171,12 +172,11 @@ void InitTacticalPlacementGUI()
 	{
 		if (s->bLife == 0)                      continue;
 		if (s->fBetweenSectors)                 continue;
-		if (s->sSectorX != bg.ubSectorX)        continue;
-		if (s->sSectorY != bg.ubSectorY)        continue;
+		if (s->sSector != bg.ubSector)          continue;
 		if (s->uiStatusFlags & SOLDIER_VEHICLE) continue; // ATE Ignore vehicles
 		if (s->bAssignment == ASSIGNMENT_POW)   continue;
 		if (s->bAssignment == IN_TRANSIT)       continue;
-		if (s->bSectorZ != 0)                   continue;
+		if (s->sSector.z != 0)                  continue;
 
 		if (s->ubStrategicInsertionCode == INSERTION_CODE_PRIMARY_EDGEINDEX ||
 				s->ubStrategicInsertionCode == INSERTION_CODE_SECONDARY_EDGEINDEX)
@@ -283,9 +283,8 @@ static void RenderTacticalPlacementGUI()
 		}
 
 		SetFontAttributes(BLOCKFONT, FONT_BEIGE);
-		wchar_t str[128];
-		GetSectorIDString(gubPBSectorX, gubPBSectorY, gubPBSectorZ, str, lengthof(str), TRUE);
-		mprintf(STD_SCREEN_X + 120, STD_SCREEN_Y + 335, L"%ls %ls -- %ls...", gpStrategicString[STR_TP_SECTOR], str, gpStrategicString[STR_TP_CHOOSEENTRYPOSITIONS]);
+		ST::string str = GetSectorIDString(gubPBSector, TRUE);
+		MPrint(STD_SCREEN_X + 120, STD_SCREEN_Y + 335, ST::format("{} {} -- {}...", gpStrategicString[STR_TP_SECTOR], str, gpStrategicString[STR_TP_CHOOSEENTRYPOSITIONS]));
 
 		// Shade out the part of the tactical map that isn't considered placable.
 		BlitBufferToBuffer(buf, guiSAVEBUFFER, STD_SCREEN_X + 0, STD_SCREEN_Y + 320, 640, 160);
@@ -355,7 +354,7 @@ static void RenderTacticalPlacementGUI()
 		else
 		{
 			SetFont(FONT10ARIALBOLD);
-			MPrint(qx, qy, L"?");
+			MPrint(qx, qy, "?");
 			InvalidateRegion(qx, qy, qx + 8, qy + 8);
 		}
 	}
@@ -365,8 +364,6 @@ static void RenderTacticalPlacementGUI()
 static void EnsureDoneButtonStatus(void)
 {
 	bool enable = true;
-	//static BOOLEAN fInside = FALSE;
-	//BOOLEAN fChanged = FALSE;
 	FOR_EACH_MERC_PLACEMENT(i)
 	{
 		if (i->fPlaced) continue;
@@ -392,14 +389,14 @@ void TacticalPlacementHandle()
 
 	RenderTacticalPlacementGUI();
 
-	if( gfRightButtonState )
+	if( IsMouseButtonDown(MOUSE_BUTTON_RIGHT) )
 	{
 		gbSelectedMercID = -1;
 		gubSelectedGroupID = 0;
 		gpTacticalPlacementSelectedSoldier = NULL;
 	}
 
-	while( DequeueEvent( &InputEvent ) )
+	while( DequeueSpecificEvent(&InputEvent, KEYBOARD_EVENTS) )
 	{
 		if( InputEvent.usEvent == KEY_DOWN )
 		{
@@ -412,13 +409,13 @@ void TacticalPlacementHandle()
 					}
 					break;
 				case 'c':
-					ClearPlacementsCallback(iTPButtons[CLEAR_BUTTON], MSYS_CALLBACK_REASON_LBUTTON_UP);
+					ClearPlacementsCallback(iTPButtons[CLEAR_BUTTON], MSYS_CALLBACK_REASON_POINTER_UP);
 					break;
 				case 'g':
-					GroupPlacementsCallback(iTPButtons[GROUP_BUTTON], MSYS_CALLBACK_REASON_LBUTTON_UP);
+					GroupPlacementsCallback(iTPButtons[GROUP_BUTTON], MSYS_CALLBACK_REASON_POINTER_UP);
 					break;
 				case 's':
-					SpreadPlacementsCallback(iTPButtons[SPREAD_BUTTON], MSYS_CALLBACK_REASON_LBUTTON_UP);
+					SpreadPlacementsCallback(iTPButtons[SPREAD_BUTTON], MSYS_CALLBACK_REASON_POINTER_UP);
 					break;
 				case 'x':
 					if( InputEvent.usKeyState & ALT_DOWN )
@@ -525,7 +522,7 @@ static void KillTacticalPlacementGUI(void)
 		MSYS_RemoveRegion(&m.region);
 	}
 
-	if( gsCurInterfacePanel < 0 || gsCurInterfacePanel >= NUM_UI_PANELS )
+	if( gsCurInterfacePanel >= NUM_UI_PANELS )
 		gsCurInterfacePanel = TEAM_PANEL;
 
 	SetCurrentInterfacePanel(gsCurInterfacePanel);
@@ -539,6 +536,7 @@ static void KillTacticalPlacementGUI(void)
 
 	FOR_EACH_MERC_PLACEMENT(i) PickUpMercPiece(*i);
 
+	gMercPlacement.reset();
 	PrepareLoadedSector();
 	EnableScrollMessages();
 }
@@ -597,18 +595,18 @@ static void PlaceMercs(void)
 }
 
 
-static void DoneOverheadPlacementClickCallback(GUI_BUTTON* btn, INT32 reason)
+static void DoneOverheadPlacementClickCallback(GUI_BUTTON* btn, UINT32 reason)
 {
-	if( reason & MSYS_CALLBACK_REASON_LBUTTON_UP )
+	if( reason & MSYS_CALLBACK_REASON_POINTER_UP )
 	{
 		gfKillTacticalGUI = 2;
 	}
 }
 
 
-static void SpreadPlacementsCallback(GUI_BUTTON* btn, INT32 reason)
+static void SpreadPlacementsCallback(GUI_BUTTON* btn, UINT32 reason)
 {
-	if( reason & MSYS_CALLBACK_REASON_LBUTTON_UP )
+	if( reason & MSYS_CALLBACK_REASON_POINTER_UP )
 	{
 		gubDefaultButton = SPREAD_BUTTON;
 		iTPButtons[GROUP_BUTTON]->uiFlags &= ~BUTTON_CLICKED_ON;
@@ -621,9 +619,9 @@ static void SpreadPlacementsCallback(GUI_BUTTON* btn, INT32 reason)
 }
 
 
-static void GroupPlacementsCallback(GUI_BUTTON* btn, INT32 reason)
+static void GroupPlacementsCallback(GUI_BUTTON* btn, UINT32 reason)
 {
-	if( reason & MSYS_CALLBACK_REASON_LBUTTON_UP )
+	if( reason & MSYS_CALLBACK_REASON_POINTER_UP )
 	{
 		if( gubDefaultButton == GROUP_BUTTON )
 		{
@@ -644,9 +642,9 @@ static void GroupPlacementsCallback(GUI_BUTTON* btn, INT32 reason)
 }
 
 
-static void ClearPlacementsCallback(GUI_BUTTON* btn, INT32 reason)
+static void ClearPlacementsCallback(GUI_BUTTON* btn, UINT32 reason)
 {
-	if( reason & MSYS_CALLBACK_REASON_LBUTTON_UP )
+	if( reason & MSYS_CALLBACK_REASON_POINTER_UP )
 	{
 		iTPButtons[GROUP_BUTTON]->uiFlags &= ~BUTTON_CLICKED_ON;
 		iTPButtons[GROUP_BUTTON]->uiFlags |= BUTTON_DIRTY;
@@ -656,7 +654,7 @@ static void ClearPlacementsCallback(GUI_BUTTON* btn, INT32 reason)
 }
 
 
-static void MercMoveCallback(MOUSE_REGION* reg, INT32 reason)
+static void MercMoveCallback(MOUSE_REGION* reg, UINT32 reason)
 {
 	if( reg->uiFlags & MSYS_MOUSE_IN_AREA )
 	{
@@ -680,9 +678,9 @@ static void MercMoveCallback(MOUSE_REGION* reg, INT32 reason)
 }
 
 
-static void MercClickCallback(MOUSE_REGION* reg, INT32 reason)
+static void MercClickCallback(MOUSE_REGION* reg, UINT32 reason)
 {
-	if( reason & MSYS_CALLBACK_REASON_LBUTTON_DWN )
+	if( reason & MSYS_CALLBACK_REASON_POINTER_DWN )
 	{
 		INT8 i;
 		for( i = 0; i < giPlacements; i++ )
@@ -756,7 +754,7 @@ static void DialogRemoved(MessageBoxReturnValue);
 void HandleTacticalPlacementClicksInOverheadMap(INT32 reason)
 {
 	BOOLEAN fInvalidArea = FALSE;
-	if( reason & MSYS_CALLBACK_REASON_LBUTTON_UP )
+	if( reason & MSYS_CALLBACK_REASON_POINTER_UP )
 	{ //if we have a selected merc, move him to the new closest map edgepoint of his side.
 		if( gfValidCursor )
 		{

@@ -33,6 +33,13 @@
 #include "Debug.h"
 #include "ScreenIDs.h"
 #include "FileMan.h"
+#include "ContentManager.h"
+#include "GameInstance.h"
+#include "ShippingDestinationModel.h"
+#include "MercProfile.h"
+#include "GamePolicy.h"
+
+#include <string_theory/string>
 
 
 struct CONTRACT_NEWAL_LIST_NODE
@@ -68,15 +75,15 @@ BOOLEAN										gfInContractMenuFromRenewSequence = FALSE;
 
 void SaveContractRenewalDataToSaveGameFile(HWFILE const hFile)
 {
-	FileWrite(hFile, ContractRenewalList,    sizeof(ContractRenewalList));
-	FileWrite(hFile, &ubNumContractRenewals, sizeof(ubNumContractRenewals));
+	hFile->write(ContractRenewalList,    sizeof(ContractRenewalList));
+	hFile->write(&ubNumContractRenewals, sizeof(ubNumContractRenewals));
 }
 
 
 void LoadContractRenewalDataFromSaveGameFile(HWFILE const hFile)
 {
-	FileRead(hFile, ContractRenewalList,    sizeof(ContractRenewalList));
-	FileRead(hFile, &ubNumContractRenewals, sizeof(ubNumContractRenewals));
+	hFile->read(ContractRenewalList,    sizeof(ContractRenewalList));
+	hFile->read(&ubNumContractRenewals, sizeof(ubNumContractRenewals));
 }
 
 
@@ -101,7 +108,7 @@ void BeginContractRenewalSequence()
 		ubCurrentContractRenewal           = 0;
 		ubCurrentContractRenewalInProgress = 0;
 		PauseGame();
-		LockPauseState(LOCK_PAUSE_07);
+		LockPauseState(LOCK_PAUSE_CONTRACT_RENEWAL);
 		InterruptTime();
 		MakeDialogueEventEnterMapScreen();
 		break;
@@ -293,7 +300,7 @@ BOOLEAN MercContractHandling(SOLDIERTYPE* const s, UINT8 const ubDesiredAction)
 
 		HandleImportantMercQuote(s, QUOTE_ACCEPT_CONTRACT_RENEWAL);
 
-		if (iCostOfInsurance > LaptopSaveInfo.iCurrentBalance)
+		if (iCostOfInsurance > LaptopSaveInfo.iCurrentBalance - contract_charge)
 		{
 			HandleNotifyPlayerCantAffordInsurance();
 
@@ -332,7 +339,7 @@ BOOLEAN MercContractHandling(SOLDIERTYPE* const s, UINT8 const ubDesiredAction)
 	 * merc's contract */
 	UINT32 const now = GetWorldTotalMin();
 	AddTransactionToPlayersBook(finances_contract_type, s->ubProfile, now, -contract_charge);
-	AddHistoryToPlayersLog(history_contract_type, s->ubProfile, now, s->sSectorX, s->sSectorY);
+	AddHistoryToPlayersLog(history_contract_type, s->ubProfile, now, s->sSector);
 
 	return TRUE;
 }
@@ -356,9 +363,7 @@ static UINT16 FindRefusalReason(SOLDIERTYPE const* const s)
 		{ // tolerance is > 0, only gripe if in same sector
 			SOLDIERTYPE const* const hated = FindSoldierByProfileIDOnPlayerTeam(bMercID);
 			if (!hated)                         continue;
-			if (hated->sSectorX != s->sSectorX) continue;
-			if (hated->sSectorY != s->sSectorY) continue;
-			if (hated->bSectorZ != s->bSectorZ) continue;
+			if (hated->sSector != s->sSector) continue;
 		}
 
 		// our tolerance has run out!
@@ -380,10 +385,7 @@ static UINT16 FindRefusalReason(SOLDIERTYPE const* const s)
 		else if (p.bLearnToHateCount <= p.bLearnToHateTime / 2)
 		{
 			const SOLDIERTYPE* const pHated = FindSoldierByProfileIDOnPlayerTeam(bMercID);
-			if (pHated &&
-					pHated->sSectorX == s->sSectorX &&
-					pHated->sSectorY == s->sSectorY &&
-					pHated->bSectorZ == s->bSectorZ)
+			if (pHated && pHated->sSector == s->sSector)
 			{
 				return QUOTE_LEARNED_TO_HATE_MERC_1_ON_TEAM_WONT_RENEW;
 			}
@@ -564,7 +566,7 @@ void MakeCharacterDialogueEventContractEnding(SOLDIERTYPE& s, bool const add_reh
 
 				InterruptTime();
 				PauseGame();
-				LockPauseState(LOCK_PAUSE_08);
+				LockPauseState(LOCK_PAUSE_CONTRACT_ENDING);
 
 				SOLDIERTYPE& s = soldier_;
 				// If the soldier may have some special action when he/she leaves the party, handle it
@@ -677,7 +679,7 @@ void StrategicRemoveMerc(SOLDIERTYPE& s)
 	// ATE: Don't do this if they are already dead!
 	if (!(s.uiStatusFlags & SOLDIER_DEAD))
 	{
-		AddHistoryToPlayersLog(ubHistoryCode, s.ubProfile, GetWorldTotalMin(), s.sSectorX, s.sSectorY);
+		AddHistoryToPlayersLog(ubHistoryCode, s.ubProfile, GetWorldTotalMin(), s.sSector);
 	}
 
 	//if the merc was a POW, remember it becuase the merc cant show up in AIM or MERC anymore
@@ -730,7 +732,7 @@ static void CalculateMedicalDepositRefund(SOLDIERTYPE const& s)
 	}
 	else if (s.bLife > 0)
 	{ // The merc is injured, refund a partial amount
-		refund = (2 * refund * s.bLifeMax / s.bLifeMax + 1) / 2;
+		refund = (2 * refund * s.bLife / s.bLifeMax + 1) / 2;
 		AddTransactionToPlayersBook(PARTIAL_MEDICAL_REFUND, pid, now, refund);
 		msg_offset = AIM_MEDICAL_DEPOSIT_PARTIAL_REFUND;
 		msg_length = AIM_MEDICAL_DEPOSIT_PARTIAL_REFUND_LENGTH;
@@ -759,37 +761,34 @@ static void NotifyPlayerOfMercDepartureAndPromptEquipmentPlacement(SOLDIERTYPE& 
 		add_rehire_button = false;
 	}
 
-	INT16 const  x = s.sSectorX;
-	INT16 const  y = s.sSectorY;
-	INT8  const  z = s.bSectorZ;
+	const SGPSector& sSector = s.sSector;
+	ST::string town_sector = sSector.AsShortString();
 
-	wchar_t town_sector[16];
-	GetShortSectorString(x, y, town_sector, lengthof(town_sector));
-
-	wchar_t         msg[1024];
+	ST::string msg;
 	MessageBoxFlags flags;
+	MercProfile     profile(s.ubProfile);
 	INT8 const      sex = GetProfile(s.ubProfile).bSex;
-	if (s.ubProfile < FIRST_RPC || FIRST_NPC <= s.ubProfile)
+	if (!profile.isRPC())
 	{ // The character is not an RPC
 		INT16 const elsewhere =
-			!StrategicMap[SECTOR_INFO_TO_STRATEGIC_INDEX(AIRPORT_SECTOR)].fEnemyControlled ? AIRPORT_SECTOR :
-			START_SECTOR;
-		if (elsewhere == SECTOR(x, y) && z == 0) goto no_choice;
+			!StrategicMap[SGPSector(AIRPORT_SECTOR).AsStrategicIndex()].fEnemyControlled ? AIRPORT_SECTOR :
+			gamepolicy(start_sector);
+		if (elsewhere == sSector.AsByte() && sSector.z == 0) goto no_choice;
 
 		// Set strings for generic buttons
-		wcslcpy(gzUserDefinedButton1, town_sector, lengthof(gzUserDefinedButton1));
-		GetShortSectorString(SECTORX(elsewhere), SECTORY(elsewhere), gzUserDefinedButton2, lengthof(gzUserDefinedButton2));
+		gzUserDefinedButton1 = town_sector;
+		gzUserDefinedButton2 = SGPSector(elsewhere).AsShortString();
 
-		wchar_t const* const town = g_towns_locative[GetTownIdForSector(elsewhere)];
-		wchar_t const* const text = sex == MALE ? str_he_leaves_where_drop_equipment : str_she_leaves_where_drop_equipment;
-		swprintf(msg, lengthof(msg), text, s.name, town_sector, town, gzUserDefinedButton2);
+		ST::string town = GCM->getTownLocative(GetTownIdForSector(elsewhere));
+		ST::string text = sex == MALE ? str_he_leaves_where_drop_equipment : str_she_leaves_where_drop_equipment;
+		msg = st_format_printf(text, s.name, town_sector, town, gzUserDefinedButton2);
 		flags = add_rehire_button ? MSG_BOX_FLAG_GENERICCONTRACT : MSG_BOX_FLAG_GENERIC;
 	}
 	else
 	{
 no_choice:
-		wchar_t const* const text = sex == MALE ? str_he_leaves_drops_equipment : str_she_leaves_drops_equipment;
-		swprintf(msg, lengthof(msg), text, s.name, town_sector);
+		ST::string text = sex == MALE ? str_he_leaves_drops_equipment : str_she_leaves_drops_equipment;
+		msg = st_format_printf(text, s.name, town_sector);
 		flags = add_rehire_button ? MSG_BOX_FLAG_OKCONTRACT : MSG_BOX_FLAG_OK;
 	}
 
@@ -825,7 +824,9 @@ static void MercDepartEquipmentBoxCallBack(MessageBoxReturnValue const exit_valu
 
 		default:
 		{
-			bool const in_drassen = !StrategicMap[BOBBYR_SHIPPING_DEST_SECTOR_X + BOBBYR_SHIPPING_DEST_SECTOR_Y * MAP_WORLD_X].fEnemyControlled;
+			auto primaryAirport = GCM->getPrimaryShippingDestination();
+			auto airportSectorIndex = SGPSector(primaryAirport->getDeliverySector()).AsStrategicIndex();
+			bool const in_drassen = !StrategicMap[airportSectorIndex].fEnemyControlled;
 			HandleMercLeavingEquipment(s, in_drassen);
 			break;
 		}
@@ -931,12 +932,12 @@ static void ExtendMercInsuranceContractCallBack(MessageBoxReturnValue);
 
 static void HandleNotifyPlayerCanAffordInsurance(SOLDIERTYPE* pSoldier, UINT8 ubLength, INT32 iCost)
 {
-	wchar_t sString[ 128 ];
-	wchar_t sStringA[ 32 ];
+	ST::string sString;
+	ST::string sStringA;
 
-	SPrintMoney(sStringA, iCost);
+	sStringA = SPrintMoney(iCost);
 
-	swprintf( sString, lengthof(sString), zMarksMapScreenText[ 10 ], pSoldier->name, sStringA, ubLength );
+	sString = st_format_printf(zMarksMapScreenText[ 10 ], pSoldier->name, sStringA, ubLength);
 
 	//Set the length to the global variable ( so we know how long the contract is in the callback )
 	gubContractLength = ubLength;
@@ -1044,7 +1045,7 @@ static BOOLEAN ContractIsGoingToExpireSoon(SOLDIERTYPE* pSoldier)
 
 TEST(MercContract, asserts)
 {
-	EXPECT_EQ(sizeof(CONTRACT_NEWAL_LIST_NODE), 4);
+	EXPECT_EQ(sizeof(CONTRACT_NEWAL_LIST_NODE), 4u);
 }
 
 #endif

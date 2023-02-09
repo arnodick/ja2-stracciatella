@@ -9,6 +9,8 @@
 #include "Button_System.h"
 #include "UILayout.h"
 
+#include <string_theory/string>
+
 
 GUIButtonRef iMsgBoxBgrnd;
 GUIButtonRef iMsgBoxOk;
@@ -18,11 +20,11 @@ BOOLEAN gfMessageBoxResult = FALSE;
 UINT8 gubMessageBoxStatus = MESSAGEBOX_NONE;
 
 
-static void MsgBoxCnclClkCallback(GUI_BUTTON* butn, INT32 reason);
-static void MsgBoxOkClkCallback(GUI_BUTTON* butn, INT32 reason);
+static void MsgBoxCnclClkCallback(GUI_BUTTON* butn, UINT32 reason);
+static void MsgBoxOkClkCallback(GUI_BUTTON* butn, UINT32 reason);
 
 
-void CreateMessageBox(wchar_t const* const msg)
+void CreateMessageBox(const ST::string& msg)
 {
 	SGPFont  const font   = gpLargeFontType1;
 	INT16       w      = StringPixLength(msg, font) + 10;
@@ -56,7 +58,7 @@ BOOLEAN MessageBoxHandled()
 {
 	InputAtom DummyEvent;
 
-	while( DequeueEvent( &DummyEvent ) )
+	while( DequeueSpecificEvent(&DummyEvent, KEYBOARD_EVENTS) )
 	{
 		if ( DummyEvent.usEvent == KEY_DOWN )
 		{
@@ -100,9 +102,9 @@ void RemoveMessageBox( )
 }
 
 
-static void MsgBoxOkClkCallback(GUI_BUTTON* butn, INT32 reason)
+static void MsgBoxOkClkCallback(GUI_BUTTON* butn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		gubMessageBoxStatus = MESSAGEBOX_DONE;
 		gfMessageBoxResult = TRUE;
@@ -110,9 +112,9 @@ static void MsgBoxOkClkCallback(GUI_BUTTON* butn, INT32 reason)
 }
 
 
-static void MsgBoxCnclClkCallback(GUI_BUTTON* butn, INT32 reason)
+static void MsgBoxCnclClkCallback(GUI_BUTTON* butn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		gubMessageBoxStatus = MESSAGEBOX_DONE;
 		gfMessageBoxResult = FALSE;

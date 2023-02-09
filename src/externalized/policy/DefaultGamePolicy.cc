@@ -1,49 +1,98 @@
 #include "DefaultGamePolicy.h"
+#include "Campaign_Types.h"
+#include "JsonObject.h"
 
-#include "game/Tactical/Item_Types.h"
 
 DefaultGamePolicy::DefaultGamePolicy(rapidjson::Document *json)
 {
-	extra_hotkeys = (*json)["extra_hotkeys"].GetBool();
-	middle_mouse_look         = (*json)["middle_mouse_look"].GetBool();
-	can_enter_turnbased       = (*json)["can_enter_turnbased"].GetBool();
+	JsonObjectReader gp = JsonObjectReader(*json);
+	extra_hotkeys = gp.getOptionalBool("extra_hotkeys", true);
+	can_enter_turnbased = gp.getOptionalBool("can_enter_turnbased");
+	middle_mouse_look = gp.getOptionalBool("middle_mouse_look", true);
 
-	f_draw_item_shadow    = (*json)["draw_item_shadow"].GetBool();
+	f_draw_item_shadow = gp.getOptionalBool("draw_item_shadow", true);
+	ms_per_game_cycle = gp.getOptionalInt("ms_per_game_cycle", 25);
+	ms_per_time_slice = gp.getOptionalInt("ms_per_time_slice", 10);
 
-	ms_per_game_cycle     = (*json)["ms_per_game_cycle"].GetInt();
+	starting_cash_easy = gp.getOptionalInt("starting_cash_easy", 45000);
+	starting_cash_medium = gp.getOptionalInt("starting_cash_medium", 35000);
+	starting_cash_hard = gp.getOptionalInt("starting_cash_hard", 30000);
 
-	starting_cash_easy    = (*json)["starting_cash_easy"].GetInt();
-	starting_cash_medium  = (*json)["starting_cash_medium"].GetInt();
-	starting_cash_hard    = (*json)["starting_cash_hard"].GetInt();
+	f_drop_everything = gp.getOptionalBool("drop_everything");
+	f_all_dropped_visible = gp.getOptionalBool("all_drops_visible");
 
-	f_drop_everything     = (*json)["drop_everything"].GetBool();
-	f_all_dropped_visible = (*json)["all_drops_visible"].GetBool();
+	multiple_interrupts = gp.getOptionalBool("multiple_interrupts");
 
-	multiple_interrupts = (*json)["multiple_interrupts"].GetBool();
+	enemy_weapon_minimal_status = gp.getOptionalInt("enemy_weapon_minimal_status", 0);
 
-	gui_extras            = (*json)["gui_extras"].GetBool();
-	extra_attachments = (*json)["extra_attachments"].GetBool();
+	squad_size = gp.getOptionalUInt("squad_size", 6);
 
-	enemy_weapon_minimal_status   = (*json)["enemy_weapon_minimal_status"].GetInt();
+	JsonObjectReader ai = JsonObjectReader(gp.GetValue("ai"));
+	ai_better_aiming_choice = ai.getOptionalBool("better_aiming_choice");
+	ai_go_prone_more_often = ai.getOptionalBool("go_prone_more_often");
+	threshold_cth_head = ai.getOptionalInt("threshold_cth_head", 67);
+	threshold_cth_legs = ai.getOptionalInt("threshold_cth_legs", 67);
 
-	ai_better_aiming_choice   = (*json)["ai"]["better_aiming_choice"].GetBool();
-	ai_go_prone_more_often    = (*json)["ai"]["go_prone_more_often"].GetBool();
-	threshold_cth_head        = (*json)["threshold_cth_head"].GetInt();
-	threshold_cth_legs        = (*json)["threshold_cth_legs"].GetInt();
-	enemy_elite_minimum_level = (*json)["enemy_elite_minimum_level"].GetInt();
-	enemy_elite_maximum_level = (*json)["enemy_elite_maximum_level"].GetInt();
+	avoid_ambushes = ai.getOptionalBool("avoid_ambushes");
+	stay_on_rooftop = ai.getOptionalBool("stay_on_rooftop");
 
-	pablo_wont_steal          = (*json)["pablo_wont_steal"].GetBool();
+	enemy_elite_minimum_level = gp.getOptionalInt("enemy_elite_minimum_level", 6);
+	enemy_elite_maximum_level = gp.getOptionalInt("enemy_elite_maximum_level", 10);
 
-	critical_damage_head_multiplier = (*json)["tactical_head_damage_multiplier"].GetDouble();
-	critical_damage_legs_multiplier = (*json)["tactical_legs_damage_multiplier"].GetDouble();
-	chance_to_hit_maximum     = (*json)["chance_to_hit_maximum"].GetInt();
-	chance_to_hit_minimum     = (*json)["chance_to_hit_minimum"].GetInt();
+	gui_extras = gp.getOptionalBool("gui_extras", true);
+	extra_attachments = gp.getOptionalBool("extra_attachments");
+	skip_sleep_explanation = gp.getOptionalBool("skip_sleep_explanation");
 
-	imp_attribute_max         = (*json)["imp"]["max_attribute_points"].GetInt();
-	imp_attribute_min         = (*json)["imp"]["min_attribute_points"].GetInt();
-	imp_attribute_bonus       = (*json)["imp"]["bonus_attribute_points"].GetInt();
-	imp_attribute_zero_bonus  = (*json)["imp"]["zero_attribute_points_bonus"].GetInt();
+	pablo_wont_steal = gp.getOptionalBool("pablo_wont_steal");
+
+	critical_damage_head_multiplier = gp.getOptionalDouble("tactical_head_damage_multiplier", 1.5);
+	critical_damage_legs_multiplier = gp.getOptionalDouble("tactical_legs_damage_multiplier", 0.5);
+	chance_to_hit_maximum = gp.getOptionalInt("chance_to_hit_maximum", 99);
+	chance_to_hit_minimum = gp.getOptionalInt("chance_to_hit_minimum", 1);
+
+	aim_bonus_per_std_ap = gp.getOptionalInt("aim_bonus_per_std_ap", 10);
+	aim_bonus_sniperscope = gp.getOptionalInt("aim_bonus_sniperscope", 20);
+	aim_bonus_laserscope = gp.getOptionalInt("aim_bonus_laserscope", 20);
+	range_penalty_silencer = gp.getOptionalInt("range_penalty_silencer", 0);
+	range_bonus_barrel_extender = gp.getOptionalInt("range_bonus_barrel_extender", 100);
+
+	always_show_cursor_in_tactical = gp.getOptionalBool("always_show_cursor_in_tactical", false);
+	show_hit_chance = gp.getOptionalBool("show_hit_chance", false);
+	website_loading_time_scale = gp.getOptionalDouble("website_loading_time_scale", 1.0);
+
+	JsonObjectReader imp = JsonObjectReader(gp.GetValue("imp"));
+	imp_load_saved_merc_by_nickname = imp.getOptionalBool("load_saved_merc_by_nickname");
+	imp_load_keep_inventory = imp.getOptionalBool("load_keep_inventory");
+	imp_attribute_max = imp.getOptionalInt("max_attribute_points", 85);
+	imp_attribute_min = imp.getOptionalInt("min_attribute_points", 35);
+	imp_attribute_zero_bonus = imp.getOptionalInt("zero_attribute_points_bonus", 15);
+	imp_attribute_bonus = imp.getOptionalInt("bonus_attribute_points", 40);
+	imp_pick_skills_directly = imp.getOptionalBool("pick_skills_directly");
+
+	merc_online_min_days = gp.getOptionalUInt("merc_online_min_days", 1);
+	merc_online_max_days = gp.getOptionalUInt("merc_online_max_days", 2);
+
+	JsonObjectReader progress = JsonObjectReader(gp.GetValue("progress"));
+	progress_event_madlab_min = progress.getOptionalInt("event_madlab_min", 35);
+	progress_event_mike_min = progress.getOptionalInt("event_mike_min", 50);
+	progress_event_iggy_min = progress.getOptionalInt("event_iggy_min", 70);
+
+	kills_per_point_easy = progress.getOptionalInt("kills_per_point_easy", 7);
+	kills_per_point_medium = progress.getOptionalInt("kills_per_point_medium", 10);
+	kills_per_point_hard = progress.getOptionalInt("kills_per_point_hard", 15);
+
+	progress_weight_kills = progress.getOptionalDouble("weight_kills", 25.0);
+	progress_weight_control = progress.getOptionalDouble("weight_control", 25.0);
+	progress_weight_income = progress.getOptionalDouble("weight_income", 50.0);
+
+	unhired_merc_deaths_easy = gp.getOptionalInt("unhired_merc_deaths_easy", 1);
+	unhired_merc_deaths_medium = gp.getOptionalInt("unhired_merc_deaths_medium", 2);
+	unhired_merc_deaths_hard = gp.getOptionalInt("unhired_merc_deaths_hard", 3);
+
+	JsonObjectReader campaign = JsonObjectReader(gp.GetValue("campaign"));
+	const char* sector_string = campaign.getOptionalString("start_sector");
+	start_sector = SGPSector::FromShortString(sector_string != nullptr ? sector_string : "A9").AsByte();
+	reveal_start_sector = campaign.getOptionalBool("start_sector_revealed", false);
 }
 
 /** Check if a hotkey is enabled. */
@@ -74,6 +123,13 @@ bool DefaultGamePolicy::isHotkeyEnabled(UIMode mode, HotkeyModifier modifier, ui
 			}
 		}
 		else if(modifier == HKMOD_ALT)
+		{
+			switch(key)
+			{
+				case 'r':         return extra_hotkeys;
+			}
+		}
+		else if(modifier == HKMOD_CTRL_SHIFT)
 		{
 			switch(key)
 			{

@@ -5,12 +5,10 @@
 #include "MessageBoxScreen.h"
 #include "ScreenIDs.h"
 
+#include <string_theory/string>
+
 
 #define NUM_SAVE_GAMES		11
-
-#define NUM_SAVE_GAMES_TABS	2
-#define DEAD_IS_DEAD_TAB_NO	(NUM_SAVE_GAMES_TABS - 1)
-
 
 //This flag is used to diferentiate between loading a game and saveing a game.
 // gfSaveGame=TRUE	For saving a game
@@ -21,9 +19,10 @@ extern	BOOLEAN gfCameDirectlyFromGame;
 
 ScreenID SaveLoadScreenHandle(void);
 
-void DoSaveLoadMessageBox(wchar_t const* zString, ScreenID uiExitScreen, MessageBoxFlags, MSGBOX_CALLBACK ReturnCallback);
+void DoSaveLoadMessageBox(const ST::string& str, ScreenID uiExitScreen, MessageBoxFlags, MSGBOX_CALLBACK ReturnCallback);
 
 void DoQuickSave(void);
+void DoAutoSave(void);
 void DoDeadIsDeadSave(void);
 void DoQuickLoad(void);
 

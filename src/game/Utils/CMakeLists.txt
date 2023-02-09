@@ -6,19 +6,16 @@ set(JA2_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/Cinematics.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/Cursors.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/Debug_Pages.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/Event_Manager.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/Event_Pump.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/Font_Control.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/MapUtility.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/MercTextBox.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/Message.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/Music_Control.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/Observable.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/PopUpBox.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/Quantize.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/STIConvert.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/Slider.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/Sound_Control.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/Text.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/Text_Input.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/Text_Utils.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/Timer_Control.cc
@@ -31,6 +28,7 @@ set(JA2_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/_ItalianText.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/_PolishText.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/_RussianText.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/_ChineseText.cc
     PARENT_SCOPE
 )
 set(JA2_INCLUDES

@@ -1,5 +1,3 @@
-#include <stdexcept>
-
 #include "Button_System.h"
 #include "Directories.h"
 #include "Font.h"
@@ -15,11 +13,15 @@
 #include "SelectWin.h"
 #include "EditorDefines.h"
 #include "Editor_Taskbar_Utils.h"
-#include "MemMan.h"
 #include "VObject.h"
 #include "VObject_Blitters.h"
 #include "WorldDef.h"
 #include "UILayout.h"
+
+#include <string_theory/format>
+#include <string_theory/string>
+
+#include <stdexcept>
 
 
 // defines for DisplaySpec.ubType
@@ -78,7 +80,7 @@ static INT16 iEndClickY;
 #define DOWN_ICON		2
 #define OK_ICON		3
 
-static INT32 iButtonIcons[4];
+static INT16 iButtonIcons[4];
 static GUIButtonRef iSelectWin;
 static GUIButtonRef iCancelWin;
 static GUIButtonRef iScrollUp;
@@ -214,16 +216,16 @@ static UINT16 const SelWinHilightFillColor = 0x000D; // A kind of medium dark bl
 
 
 static BOOLEAN BuildDisplayWindow(DisplaySpec const*, UINT16 usNumSpecs, DisplayList** pDisplayList, SGPBox const* area, SGPPoint const* pSpacing);
-static void CnclClkCallback(GUI_BUTTON* button, INT32 reason);
-static void DwnClkCallback(GUI_BUTTON* button, INT32 reason);
-static void OkClkCallback(GUI_BUTTON* button, INT32 reason);
-static void SelWinClkCallback(GUI_BUTTON* button, INT32 reason);
-static void UpClkCallback(GUI_BUTTON* button, INT32 reason);
+static void CnclClkCallback(GUI_BUTTON* button, UINT32 reason);
+static void DwnClkCallback(GUI_BUTTON* button, UINT32 reason);
+static void OkClkCallback(GUI_BUTTON* button, UINT32 reason);
+static void SelWinClkCallback(GUI_BUTTON* button, UINT32 reason);
+static void UpClkCallback(GUI_BUTTON* button, UINT32 reason);
 
 
-static GUIButtonRef MakeButton(UINT idx, const char* gfx, INT16 y, INT16 h, GUI_CALLBACK click, const wchar_t* help)
+static GUIButtonRef MakeButton(UINT idx, const char* gfx, INT16 y, INT16 h, GUI_CALLBACK click, const ST::string& help)
 {
-	INT32 img = LoadGenericButtonIcon(gfx);
+	INT16 const img = LoadGenericButtonIcon(gfx);
 	iButtonIcons[idx] = img;
 	GUIButtonRef const btn = CreateIconButton(img, 0, SCREEN_WIDTH - 40, y, 40, h, MSYS_PRIORITY_HIGH, click);
 	btn->SetFastHelpText(help);
@@ -244,11 +246,11 @@ void CreateJA2SelectionWindow(SelectWindow const sWhat)
 	iSelectWin = CreateHotSpot(0, 0, SCREEN_WIDTH - 40, TASKBAR_Y, MSYS_PRIORITY_HIGH, SelWinClkCallback);
 
 	INT16 y;
-	iOkWin      = MakeButton(OK_ICON,     EDITORDIR "/checkmark.sti",   y  =  0, 40, OkClkCallback,   L"Accept selections");
-	iCancelWin  = MakeButton(CANCEL_ICON, EDITORDIR "/bigx.sti",        y += 40, 40, CnclClkCallback, L"Cancel selections");
+	iOkWin      = MakeButton(OK_ICON,     EDITORDIR "/checkmark.sti",   y  =  0, 40, OkClkCallback,   "Accept selections");
+	iCancelWin  = MakeButton(CANCEL_ICON, EDITORDIR "/bigx.sti",        y += 40, 40, CnclClkCallback, "Cancel selections");
 	INT16 const h = (TASKBAR_Y - 40 - 40) / 2;
-	iScrollUp   = MakeButton(UP_ICON,     EDITORDIR "/lguparrow.sti",   y += 40,  h, UpClkCallback,   L"Scroll window up");
-	iScrollDown = MakeButton(DOWN_ICON,   EDITORDIR "/lgdownarrow.sti", y += h,   h, DwnClkCallback,  L"Scroll window down");
+	iScrollUp   = MakeButton(UP_ICON,     EDITORDIR "/lguparrow.sti",   y += 40,  h, UpClkCallback,   "Scroll window up");
+	iScrollDown = MakeButton(DOWN_ICON,   EDITORDIR "/lgdownarrow.sti", y += h,   h, DwnClkCallback,  "Scroll window down");
 
 	fButtonsPresent = TRUE;
 
@@ -598,10 +600,8 @@ static DisplayList* TrashList(DisplayList* pNode);
 //
 void ShutdownJA2SelectionWindow( void )
 {
-	INT16 x;
-
-	for (x = 0; x < 4; x++)
-		UnloadGenericButtonIcon( (INT16)iButtonIcons[x] );
+	for (INT16 const icon : iButtonIcons)
+		UnloadGenericButtonIcon(icon);
 
 	if (pDispList != NULL)
 	{
@@ -647,7 +647,7 @@ static DisplayList* TrashList(DisplayList* pNode)
 		pNode->pNext = TrashList(pNode->pNext);
 
 	if (pNode->pNext == NULL)
-		MemFree(pNode);
+		delete pNode;
 
 	return(NULL);
 }
@@ -682,8 +682,8 @@ void RenderSelectionWindow( void )
 		GUIButtonRef const button = iSelectWin;
 		if (!button) return;
 
-		if (ABS(iStartClickX - button->MouseX()) > 9 ||
-				ABS(iStartClickY - (button->MouseY() + iTopWinCutOff - (INT16)g_sel_win_box.y)) > 9)
+		if (std::abs(iStartClickX - button->MouseX()) > 9 ||
+				std::abs(iStartClickY - (button->MouseY() + iTopWinCutOff - (INT16)g_sel_win_box.y)) > 9)
 		{
 //			iSX = (INT32)iStartClickX;
 //			iEX = (INT32)button->MouseX();
@@ -699,10 +699,10 @@ void RenderSelectionWindow( void )
 			if (iEX < iSX) Swap(iEX, iSX);
 			if (iEY < iSY) Swap(iEY, iSY);
 
-			iEX = MIN( iEX, 600 );
-			iSY = MAX(g_sel_win_box.y, iSY);
-			iEY = MIN( 359, iEY );
-			iEY = MAX(g_sel_win_box.y, iEY);
+			iEX = std::min(iEX, 600);
+			iSY = std::max(INT32(g_sel_win_box.y), iSY);
+			iEY = std::min(359, iEY);
+			iEY = std::max(INT32(g_sel_win_box.y), iEY);
 
 			usFillColor = Get16BPPColor(FROMRGB(255, usFillGreen, 0));
 			usFillGreen += usDir;
@@ -727,7 +727,7 @@ static BOOLEAN RemoveFromSelectionList(DisplayList* pNode);
 //	Button callback function for the main selection window. Checks if user clicked on an image,
 //	if so selects or de-selects that object. Also handles the multi-object selection (left-click
 //	and drag to get the selection rectangle)
-static void SelWinClkCallback(GUI_BUTTON* button, INT32 reason)
+static void SelWinClkCallback(GUI_BUTTON* button, UINT32 reason)
 {
 	DisplayList *pNode;
 	BOOLEAN fDone;
@@ -738,7 +738,7 @@ static void SelWinClkCallback(GUI_BUTTON* button, INT32 reason)
 	iClickX = button->MouseX();
 	iClickY = button->MouseY() + iTopWinCutOff - (INT16)g_sel_win_box.y;
 
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_DWN)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_DWN)
 	{
 		button->uiFlags |= BUTTON_CLICKED_ON;
 		iStartClickX = iClickX;
@@ -776,7 +776,7 @@ static void SelWinClkCallback(GUI_BUTTON* button, INT32 reason)
 	{
 		button->uiFlags &= (~BUTTON_CLICKED_ON);
 	}
-	else if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP )
+	else if (reason & MSYS_CALLBACK_REASON_POINTER_UP )
 	{
 		button->uiFlags &= (~BUTTON_CLICKED_ON);
 
@@ -848,20 +848,20 @@ void DisplaySelectionWindowGraphicalInformation()
 	SetFontForeground(FONT_WHITE);
 	if (i)
 	{
-		UINT32      const obj_idx  = i->uiObjIndx;
-		char const* const name     = gTileSurfaceName[obj_idx];
-		char const* const filename = gTilesets[giCurrentTilesetID].TileSurfaceFilenames[obj_idx];
-		if (filename[0] != '\0')
+		UINT32     const obj_idx  = i->uiObjIndx;
+		const ST::string name     = gTileSurfaceName[obj_idx];
+		auto res = GetAdjustedTilesetResource(giCurrentTilesetID, obj_idx);
+		if (!res.isDefaultTileset())
 		{
-			mprintf(2, 2, L"File:  %hs, subindex:  %d (%hs)", filename, i->uiIndex, name);
+			MPrint(2, 2, ST::format("File:  {}, subindex:  {} ({})", res.resourceFileName, i->uiIndex, name));
 		}
 		else
 		{
-			TILESET const& generic = gTilesets[GENERIC_1];
-			mprintf(2, 2, L"%hs[%d] is from default tileset %ls (%hs)", generic.TileSurfaceFilenames[obj_idx], i->uiIndex, generic.zName, name);
+			TILESET const& generic = gTilesets[res.tilesetID];
+			MPrint(2, 2, ST::format("{}[{}] is from default tileset {} ({})", res.resourceFileName, i->uiIndex, generic.zName, name));
 		}
 	}
-	mprintf(350, 2, L"Current Tileset:  %ls", gTilesets[giCurrentTilesetID].zName);
+	MPrint(350, 2, ST::format("Current Tileset:  {}", gTilesets[giCurrentTilesetID].zName));
 }
 
 
@@ -1054,9 +1054,9 @@ void RestoreSelectionList( void )
 
 
 //	Button callback function for the selection window's OK button
-static void OkClkCallback(GUI_BUTTON* button, INT32 reason)
+static void OkClkCallback(GUI_BUTTON* button, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		fAllDone = TRUE;
 	}
@@ -1068,9 +1068,9 @@ static void OkClkCallback(GUI_BUTTON* button, INT32 reason)
 //
 //	Button callback function for the selection window's CANCEL button
 //
-static void CnclClkCallback(GUI_BUTTON* button, INT32 reason)
+static void CnclClkCallback(GUI_BUTTON* button, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		fAllDone = TRUE;
 		RestoreSelectionList();
@@ -1079,9 +1079,9 @@ static void CnclClkCallback(GUI_BUTTON* button, INT32 reason)
 
 
 //	Button callback function for scrolling the selection window up
-static void UpClkCallback(GUI_BUTTON* button, INT32 reason)
+static void UpClkCallback(GUI_BUTTON* button, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP) ScrollSelWinUp();
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP) ScrollSelWinUp();
 }
 
 
@@ -1113,9 +1113,9 @@ void ScrollSelWinDown(void)
 
 
 //	Button callback function to scroll the selection window down.
-static void DwnClkCallback(GUI_BUTTON* button, INT32 reason)
+static void DwnClkCallback(GUI_BUTTON* button, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP) ScrollSelWinDown();
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP) ScrollSelWinDown();
 }
 
 
@@ -1125,15 +1125,14 @@ static void DisplayWindowFunc(DisplayList*, INT16 top_cut_off, SGPBox const* are
 //	Displays the objects in the display list to the selection window.
 static void DrawSelections(void)
 {
-	SGPRect					ClipRect, NewRect;
+	SGPRect NewRect;
 
 	NewRect.iLeft   = g_sel_win_box.x;
 	NewRect.iTop    = g_sel_win_box.y;
 	NewRect.iRight  = g_sel_win_box.x + g_sel_win_box.w - 1;
 	NewRect.iBottom = g_sel_win_box.y + g_sel_win_box.h - 1;
 
-	GetClippingRect(&ClipRect);
-	SetClippingRect(&NewRect);
+	SGPRect const ClipRect = SetClippingRect(NewRect);
 
 	SetFont( gpLargeFontType1 );
 	SetFontShade(LARGEFONT1, FONT_SHADE_GREY_165);
@@ -1142,7 +1141,7 @@ static void DrawSelections(void)
 
 	SetFontShade(LARGEFONT1, FONT_SHADE_NEUTRAL);
 
-	SetClippingRect(&ClipRect);
+	SetClippingRect(ClipRect);
 }
 
 
@@ -1185,7 +1184,7 @@ try
 				max_h = 0;
 			}
 
-			DisplayList* const n = MALLOC(DisplayList);
+			DisplayList* const n = new DisplayList{};
 			n->hObj      = vo;
 			n->uiIndex   = usETRLELoop;
 			n->iX        = x;
@@ -1234,6 +1233,6 @@ static void DisplayWindowFunc(DisplayList* const n, INT16 const top_cut_off, SGP
 	if (n->fChosen)
 	{
 		INT16 const count = FindInSelectionList(*n).sCount;
-		if (count != 0) gprintf(x, y, L"%d", count);
+		if (count != 0) GPrint(x, y, ST::format("{}", count));
 	}
 }

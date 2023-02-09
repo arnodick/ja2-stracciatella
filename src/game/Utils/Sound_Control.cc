@@ -327,25 +327,6 @@ static char const* const szAmbientEffects[NUM_AMBIENTS] =
 	SOUNDSDIR "/night_bird3.wav"
 };
 
-static UINT8 const AmbientVols[NUM_AMBIENTS] =
-{
-	25,		// lightning 1
-	25,		// lightning 2
-	10,		// rain 1
-	25,		// bird 1
-	25,		// bird 2
-	10,		// crickets 1
-	10,		// crickets 2
-	25,		// cricket 1
-	25,		// cricket 2
-	25,		// owl 1
-	25,		// owl 2
-	25,		// owl 3
-	25,		// night bird 1
-	25		// night bird 2
-};
-
-
 void ShutdownJA2Sound(void)
 {
 	SoundStopAll();
@@ -384,7 +365,7 @@ UINT32 PlayJA2Sample(const char *sample, UINT32 const ubVolume, UINT32 const ubL
 UINT32 PlayJA2StreamingSample(SoundID const usNum, UINT32 const ubVolume, UINT32 const ubLoops, UINT32 const uiPan)
 {
 	UINT32 const vol = CalculateSoundEffectsVolume(ubVolume);
-	return SoundPlayStreamedFile(szSoundEffects[usNum], vol, uiPan, ubLoops, NULL, NULL);
+	return SoundPlay(szSoundEffects[usNum], vol, uiPan, ubLoops, NULL, NULL);
 }
 
 
@@ -400,7 +381,7 @@ UINT32 PlayJA2StreamingSampleFromFile(char const* const szFileName, UINT32 const
 {
 	// does the same thing as PlayJA2Sound, but one only has to pass the filename, not the index of the sound array
 	UINT32 const vol = CalculateSoundEffectsVolume(ubVolume);
-	return SoundPlayStreamedFile(szFileName, vol, uiPan, ubLoops, EndsCallback, NULL);
+	return SoundPlay(szFileName, vol, uiPan, ubLoops, EndsCallback, NULL);
 }
 
 
@@ -426,7 +407,7 @@ UINT32 PlayLocationJA2Sample(UINT16 const grid_no, SoundID const idx, UINT32 con
 }
 
 
-UINT32 PlayLocationJA2Sample(UINT16 const grid_no, const std::string &sample, UINT32 const base_vol, UINT32 const loops)
+UINT32 PlayLocationJA2Sample(UINT16 const grid_no, const ST::string &sample, UINT32 const base_vol, UINT32 const loops)
 {
 	UINT32 const vol = SoundVolume(base_vol, grid_no);
 	UINT32 const pan = SoundDir(grid_no);
@@ -461,7 +442,7 @@ UINT32 PlaySoldierJA2Sample(SOLDIERTYPE const* const s, SoundID const usNum, UIN
 
 void SetSpeechVolume(UINT32 uiNewVolume)
 {
-	guiSpeechVolume = __min(uiNewVolume, MAXVOLUME);
+	guiSpeechVolume = std::min(uiNewVolume, UINT32(MAXVOLUME));
 }
 
 
@@ -473,7 +454,7 @@ UINT32 GetSpeechVolume(void)
 
 void SetSoundEffectsVolume(UINT32 uiNewVolume)
 {
-	guiSoundEffectsVolume = __min(uiNewVolume, MAXVOLUME);
+	guiSoundEffectsVolume = std::min(uiNewVolume, UINT32(MAXVOLUME));
 }
 
 
@@ -550,7 +531,7 @@ INT8 SoundDir( INT16 sGridNo )
 
 	sDif = sMiddleX - sScreenX;
 
-	if ( ( sAbsDif = ABS( sDif ) ) > 64 )
+	if ((sAbsDif = std::abs(sDif)) > 64)
 	{
 		// OK, NOT the middle.
 
@@ -609,8 +590,8 @@ INT8 SoundVolume( INT8 bInitialVolume, INT16 sGridNo )
 	sDifX = sMiddleX - sScreenX;
 	sDifY = sMiddleY - sScreenY;
 
-	sAbsDifX = ABS( sDifX );
-	sAbsDifY = ABS( sDifY );
+	sAbsDifX = std::abs(sDifX);
+	sAbsDifY = std::abs(sDifY);
 
 	if ( sAbsDifX  > 64 || sAbsDifY > 64 )
 	{
@@ -620,7 +601,7 @@ INT8 SoundVolume( INT8 bInitialVolume, INT16 sGridNo )
 		if ( sAbsDifX > ( ( gsBottomRightWorldX - gsTopLeftWorldX ) / 2 ) ||
 			sAbsDifY > ( ( gsBottomRightWorldY - gsTopLeftWorldY ) / 2 ) )
 		{
-			return( __max( LOWVOLUME, ( bInitialVolume - SOUND_FAR_VOLUME_MOD ) ) );
+			return( std::max(LOWVOLUME, ( bInitialVolume - SOUND_FAR_VOLUME_MOD ) ));
 		}
 	}
 
@@ -639,7 +620,7 @@ INT8 SoundVolume( INT8 bInitialVolume, INT16 sGridNo )
 struct POSITIONSND
 {
 	INT16         sGridNo;
-	INT32         iSoundSampleID;
+	UINT32        uiSoundSampleID;
 	SoundID       iSoundToPlay;
 	const SOLDIERTYPE* SoundSource;
 	BOOLEAN       fAllocated;
@@ -688,13 +669,13 @@ INT32 NewPositionSnd(INT16 const sGridNo, SOLDIERTYPE const* const SoundSource, 
 	if (idx == -1) return -1;
 
 	POSITIONSND& p = gPositionSndData[idx];
-	memset(&p, 0, sizeof(p));
+	p = POSITIONSND{};
 	p.fInActive      = !gfPositionSoundsActive;
 	p.sGridNo        = sGridNo;
 	p.SoundSource    = SoundSource;
 	p.fAllocated     = TRUE;
 	p.iSoundToPlay   = iSoundToPlay;
-	p.iSoundSampleID = NO_SAMPLE;
+	p.uiSoundSampleID = NO_SAMPLE;
 
 	return idx;
 }
@@ -711,9 +692,9 @@ void DeletePositionSnd( INT32 iPositionSndIndex )
 		pPositionSnd->fInActive = TRUE;
 
 		// End sound...
-		if ( pPositionSnd->iSoundSampleID != NO_SAMPLE )
+		if ( pPositionSnd->uiSoundSampleID != NO_SAMPLE )
 		{
-			SoundStop( pPositionSnd->iSoundSampleID );
+			SoundStop( pPositionSnd->uiSoundSampleID );
 		}
 
 		pPositionSnd->fAllocated = FALSE;
@@ -748,7 +729,7 @@ void SetPositionSndsActive(void)
 
 		p.fInActive      = FALSE;
 		// Begin sound effect, Volume 0
-		p.iSoundSampleID = PlayJA2Sample(p.iSoundToPlay, 0, 0, MIDDLEPAN);
+		p.uiSoundSampleID = PlayJA2Sample(p.iSoundToPlay, 0, 0, MIDDLEPAN);
 	}
 }
 
@@ -763,11 +744,11 @@ void SetPositionSndsInActive(void)
 
 		p.fInActive = TRUE;
 
-		if (p.iSoundSampleID == NO_SAMPLE) continue;
+		if (p.uiSoundSampleID == NO_SAMPLE) continue;
 
 		// End sound
-		SoundStop(p.iSoundSampleID);
-		p.iSoundSampleID = NO_SAMPLE;
+		SoundStop(p.uiSoundSampleID);
+		p.uiSoundSampleID = NO_SAMPLE;
 	}
 }
 
@@ -790,7 +771,7 @@ static INT8 PositionSoundDir(INT16 sGridNo)
 
 	sDif = sMiddleX - sScreenX;
 
-	if ( ( sAbsDif = ABS( sDif ) ) > 64 )
+	if ((sAbsDif = std::abs(sDif)) > 64)
 	{
 		// OK, NOT the middle.
 
@@ -846,8 +827,8 @@ static INT8 PositionSoundVolume(INT8 const initial_volume, GridNo const grid_no)
 	INT16 const sMaxDistX = (gsBottomRightWorldX - gsTopLeftWorldX) * 3 / 2;
 	INT16 const sMaxDistY = (gsBottomRightWorldY - gsTopLeftWorldY) * 3 / 2;
 
-	double const sMaxSoundDist = sqrt((double)(sMaxDistX * sMaxDistX) + (sMaxDistY * sMaxDistY));
-	double       sSoundDist    = sqrt((double)(sDifX * sDifX)  + (sDifY * sDifY));
+	double const sMaxSoundDist = std::hypot(sMaxDistX, sMaxDistY);
+	double       sSoundDist    = std::hypot(sDifX, sDifY);
 
 	if (sSoundDist == 0) return initial_volume;
 
@@ -865,16 +846,16 @@ void SetPositionSndsVolumeAndPanning(void)
 		POSITIONSND const& p = gPositionSndData[i];
 		if (!p.fAllocated)                 continue;
 		if (p.fInActive)                   continue;
-		if (p.iSoundSampleID == NO_SAMPLE) continue;
+		if (p.uiSoundSampleID == NO_SAMPLE) continue;
 
 		INT8 volume = PositionSoundVolume(15, p.sGridNo);
 		if (p.SoundSource && p.SoundSource->bVisible == -1)
 		{ // Limit volume
 			if (volume > 10) volume = 10;
 		}
-		SoundSetVolume(p.iSoundSampleID, volume);
+		SoundSetVolume(p.uiSoundSampleID, volume);
 
 		INT8 const pan = PositionSoundDir(p.sGridNo);
-		SoundSetPan(p.iSoundSampleID, pan);
+		SoundSetPan(p.uiSoundSampleID, pan);
 	}
 }

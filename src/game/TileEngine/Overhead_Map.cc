@@ -1,50 +1,53 @@
-#include "Directories.h"
-#include "Font.h"
-#include "HImage.h"
-#include "Handle_Items.h"
-#include "Interface_Items.h"
-#include "Local.h"
-#include "Structure.h"
-#include "VObject.h"
-#include "TileDef.h"
-#include "VSurface.h"
-#include "WorldDef.h"
-#include "Isometric_Utils.h"
-#include "RenderWorld.h"
-#include "WorldDat.h"
-#include "VObject_Blitters.h"
 #include "Overhead_Map.h"
-#include "Interface.h"
-#include "Interface_Control.h"
-#include "Overhead.h"
-#include "Radar_Screen.h"
+#include "Button_System.h"
+#include "ContentManager.h"
 #include "Cursors.h"
-#include "Sys_Globals.h"
-#include "Render_Dirty.h"
-#include "Soldier_Find.h"
+#include "Directories.h"
+#include "Faces.h"
+#include "Font.h"
 #include "Font_Control.h"
 #include "Game_Clock.h"
+#include "GameInstance.h"
+#include "GameLoop.h"
+#include "GameMode.h"
+#include "Handle_Items.h"
+#include "Handle_UI.h"
+#include "HImage.h"
+#include "Input.h"
+#include "Interface.h"
+#include "Interface_Control.h"
+#include "Interface_Items.h"
 #include "Interface_Panels.h"
-#include "English.h"
+#include "Isometric_Utils.h"
+#include "LightEffects.h"
 #include "Line.h"
 #include "Map_Information.h"
-#include "Tactical_Placement_GUI.h"
-#include "World_Items.h"
-#include "Environment.h"
-#include "Faces.h"
-#include "Squads.h"
-#include "GameLoop.h"
-#include "SysUtil.h"
-#include "Tile_Surface.h"
-#include "Button_System.h"
-#include "Video.h"
-#include "UILayout.h"
-#include "GameState.h"
-
-#include "ContentManager.h"
-#include "GameInstance.h"
-
+#include "MouseSystem.h"
+#include "Overhead.h"
+#include "Overhead_Types.h"
+#include "Radar_Screen.h"
+#include "Render_Dirty.h"
+#include "RenderWorld.h"
+#include "SmokeEffects.h"
+#include "Soldier_Control.h"
 #include "Soldier_Init_List.h"
+#include "Structure.h"
+#include "Structure_Internals.h"
+#include "Sys_Globals.h"
+#include "SysUtil.h"
+#include "Tactical_Placement_GUI.h"
+#include "Tile_Surface.h"
+#include "TileDat.h"
+#include "TileDef.h"
+#include "UILayout.h"
+#include "Video.h"
+#include "VObject.h"
+#include "VObject_Blitters.h"
+#include "VSurface.h"
+#include "World_Items.h"
+#include "WorldDef.h"
+#include <string_theory/string>
+
 extern SOLDIERINITNODE *gpSelected;
 
 // OK, these are values that are calculated in InitRenderParams( ) with normal view settings.
@@ -95,25 +98,17 @@ void InitNewOverheadDB(TileSetID const ubTilesetID)
 
 	for (UINT32 i = 0; i < NUMBEROFTILETYPES; ++i)
 	{
-		const char* filename    = gTilesets[ubTilesetID].TileSurfaceFilenames[i];
-		TileSetID   use_tileset = ubTilesetID;
-		if (filename[0] == '\0')
-		{
-			// Try loading from default tileset
-			filename    = gTilesets[GENERIC_1].TileSurfaceFilenames[i];
-			use_tileset = GENERIC_1;
-		}
-
-		std::string adjusted_file(GCM->getTilesetResourceName(use_tileset, std::string("t/") + filename));
+		auto res = GetAdjustedTilesetResource(ubTilesetID, i, "t/");
 		SGPVObject* vo;
 		try
 		{
-			vo = AddVideoObjectFromFile(adjusted_file.c_str());
+			vo = AddVideoObjectFromFile(res.resourceFileName);
 		}
-		catch (...)
+		catch (std::exception &e)
 		{
+			SLOGD("{}", e.what());
 			// Load one we know about
-			vo = AddVideoObjectFromFile(GCM->getTilesetResourceName(0, std::string("t/") + "grass.sti").c_str());
+			vo = AddVideoObjectFromFile(GCM->getTilesetResourceName(GetDefaultTileset(), "t/grass.sti"));
 		}
 
 		gSmTileSurf[i].vo = vo;
@@ -126,7 +121,7 @@ void InitNewOverheadDB(TileSetID const ubTilesetID)
 		SGPVObject* const vo = gSmTileSurf[i].vo;
 
 		// Get number of regions and check for overflow
-		UINT32 const NumRegions = MIN(vo->SubregionCount(), gNumTilesPerType[i]);
+		UINT32 const NumRegions = std::min(vo->SubregionCount(), gNumTilesPerType[i]);
 
 		UINT32 k = 0;
 		for (; k < NumRegions; ++k)
@@ -279,6 +274,13 @@ void HandleOverheadMap(void)
 
 	RestoreBackgroundRects();
 
+	// clear for broken saves before TrashWorld took care of this
+	if (!gfEditMode && gfTacticalPlacementGUIActive)
+	{
+		DecaySmokeEffects(GetWorldTotalSeconds(), false);
+		DecayLightEffects(GetWorldTotalSeconds(), false);
+	}
+
 	RenderOverheadMap(0, WORLD_COLS / 2, STD_SCREEN_X, STD_SCREEN_Y, STD_SCREEN_X + 640, STD_SCREEN_Y + 320, FALSE);
 
 	HandleTalkingAutoFaces();
@@ -361,7 +363,7 @@ void HandleOverheadMap(void)
 
 	RenderButtons();
 	SaveBackgroundRects();
-	RenderButtonsFastHelp();
+	RenderFastHelp();
 	ExecuteBaseDirtyRectQueue();
 	EndFrameBufferRender();
 	fInterfacePanelDirty = DIRTYLEVEL0;
@@ -374,7 +376,8 @@ BOOLEAN InOverheadMap( )
 }
 
 
-static void ClickOverheadRegionCallback(MOUSE_REGION* reg, INT32 reason);
+static void ClickOverheadRegionCallbackPrimary(MOUSE_REGION* reg, UINT32 reason);
+static void ClickOverheadRegionCallbackSecondary(MOUSE_REGION* reg, UINT32 reason);
 
 
 void GoIntoOverheadMap( )
@@ -383,7 +386,7 @@ void GoIntoOverheadMap( )
 
 	MSYS_DefineRegion(&OverheadBackgroundRegion, STD_SCREEN_X, STD_SCREEN_Y, STD_SCREEN_X + 640, STD_SCREEN_Y + 360, MSYS_PRIORITY_HIGH, CURSOR_NORMAL, MSYS_NO_CALLBACK, MSYS_NO_CALLBACK);
 
-	MSYS_DefineRegion(&OverheadRegion, STD_SCREEN_X, STD_SCREEN_Y, STD_SCREEN_X + 640, STD_SCREEN_Y + 320, MSYS_PRIORITY_HIGH, CURSOR_NORMAL, MSYS_NO_CALLBACK, ClickOverheadRegionCallback);
+	MSYS_DefineRegion(&OverheadRegion, STD_SCREEN_X, STD_SCREEN_Y, STD_SCREEN_X + 640, STD_SCREEN_Y + 320, MSYS_PRIORITY_HIGH, CURSOR_NORMAL, MSYS_NO_CALLBACK, MouseCallbackPrimarySecondary(ClickOverheadRegionCallbackPrimary, ClickOverheadRegionCallbackSecondary));
 
 	// LOAD CLOSE ANIM
 	uiOVERMAP = AddVideoObjectFromFile(INTERFACEDIR "/map_bord.sti");
@@ -423,7 +426,7 @@ void GoIntoOverheadMap( )
 static void HandleOverheadUI(void)
 {
 	InputAtom a;
-	while (DequeueEvent(&a))
+	while (DequeueSpecificEvent(&a, KEYBOARD_EVENTS))
 	{
 		if (a.usEvent == KEY_DOWN)
 		{
@@ -781,7 +784,7 @@ static void RenderOverheadOverlays(void)
 			0;
 		marker->CurrentShade(shade);
 
-		if (gfEditMode && GameState::getInstance()->isEditorMode() && gpSelected && gpSelected->pSoldier == &s)
+		if (gfEditMode && GameMode::getInstance()->isEditorMode() && gpSelected && gpSelected->pSoldier == &s)
 		{ //editor:  show the selected edited merc as the yellow one.
 			Blt8BPPDataTo16BPPBufferTransparent(pDestBuf, uiDestPitchBYTES, marker, sX, sY, 0);
 		}
@@ -804,14 +807,14 @@ static void RenderOverheadOverlays(void)
 	{
 		CFOR_EACH_WORLD_ITEM(wi)
 		{
-			if (wi->bVisible != VISIBLE && !(gTacticalStatus.uiFlags & SHOW_ALL_ITEMS))
+			if (wi.bVisible != VISIBLE && !(gTacticalStatus.uiFlags & SHOW_ALL_ITEMS))
 			{
 				continue;
 			}
 
 			INT16 sX;
 			INT16 sY;
-			GetOverheadScreenXYFromGridNo(wi->sGridNo, &sX, &sY);
+			GetOverheadScreenXYFromGridNo(wi.sGridNo, &sX, &sY);
 
 			sX += STD_SCREEN_X;
 			sY += STD_SCREEN_Y;
@@ -820,7 +823,7 @@ static void RenderOverheadOverlays(void)
 			sY += 6;
 
 			UINT32 col;
-			if (gsOveritemPoolGridNo == wi->sGridNo)
+			if (gsOveritemPoolGridNo == wi.sGridNo)
 			{
 				col = FROMRGB(255, 0, 0);
 			}
@@ -828,7 +831,7 @@ static void RenderOverheadOverlays(void)
 			{
 				col = FROMRGB(0, 0, 0);
 			}
-			else switch (wi->bVisible)
+			else switch (wi.bVisible)
 			{
 				case HIDDEN_ITEM:      col = FROMRGB(  0,   0, 255); break;
 				case BURIED:           col = FROMRGB(255,   0,   0); break;
@@ -844,35 +847,34 @@ static void RenderOverheadOverlays(void)
 }
 
 
-static void ClickOverheadRegionCallback(MOUSE_REGION* reg, INT32 reason)
+static void ClickOverheadRegionCallbackPrimary(MOUSE_REGION* reg, UINT32 reason)
 {
-	INT16  sWorldScreenX, sWorldScreenY;
-
 	if( gfTacticalPlacementGUIActive )
 	{
 		HandleTacticalPlacementClicksInOverheadMap(reason);
 		return;
 	}
 
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	// Get new proposed center location.
+	const GridNo pos = GetOverheadMouseGridNo();
+	INT16 cell_x;
+	INT16 cell_y;
+	ConvertGridNoToCenterCellXY(pos, &cell_x, &cell_y);
+
+	SetRenderCenter(cell_x, cell_y);
+
+	KillOverheadMap();
+}
+
+static void ClickOverheadRegionCallbackSecondary(MOUSE_REGION* reg, UINT32 reason)
+{
+	if( gfTacticalPlacementGUIActive )
 	{
-		sWorldScreenX = ( gusMouseXPos - gsStartRestrictedX ) * 5;
-		sWorldScreenY = ( gusMouseYPos - gsStartRestrictedY ) * 5;
-
-		// Get new proposed center location.
-		const GridNo pos = GetMapPosFromAbsoluteScreenXY(sWorldScreenX, sWorldScreenY);
-		INT16 cell_x;
-		INT16 cell_y;
-		ConvertGridNoToCenterCellXY(pos, &cell_x, &cell_y);
-
-		SetRenderCenter(cell_x, cell_y);
-
-		KillOverheadMap();
+		HandleTacticalPlacementClicksInOverheadMap(reason);
+		return;
 	}
-	else if(reason & MSYS_CALLBACK_REASON_RBUTTON_DWN)
-	{
-		KillOverheadMap();
-	}
+
+	KillOverheadMap();
 }
 
 
@@ -916,13 +918,13 @@ void CalculateRestrictedMapCoords( INT8 bDirection, INT16 *psX1, INT16 *psY1, IN
 			*psX1 = 0;
 			*psX2 = sEndXS;
 			*psY1 = 0;
-			*psY2 = ( ABS( NORMAL_MAP_SCREEN_TY - gsTopY ) / 5 );
+			*psY2 = std::abs(NORMAL_MAP_SCREEN_TY - gsTopY) / 5;
 			break;
 
 		case WEST:
 
 			*psX1 = 0;
-			*psX2 = ( ABS( -NORMAL_MAP_SCREEN_X - gsLeftX ) / 5 );
+			*psX2 = std::abs(-NORMAL_MAP_SCREEN_X - gsLeftX) / 5;
 			*psY1 = 0;
 			*psY2 = sEndYS;
 			break;
@@ -931,13 +933,13 @@ void CalculateRestrictedMapCoords( INT8 bDirection, INT16 *psX1, INT16 *psY1, IN
 
 			*psX1 = 0;
 			*psX2 = sEndXS;
-			*psY1 = ( NORMAL_MAP_SCREEN_HEIGHT - ABS( NORMAL_MAP_SCREEN_BY - gsBottomY ) ) / 5;
+			*psY1 = (NORMAL_MAP_SCREEN_HEIGHT - std::abs(NORMAL_MAP_SCREEN_BY - gsBottomY)) / 5;
 			*psY2 = sEndYS;
 			break;
 
 		case EAST:
 
-			*psX1 = ( NORMAL_MAP_SCREEN_WIDTH - ABS( NORMAL_MAP_SCREEN_X - gsRightX ) ) / 5;
+			*psX1 = (NORMAL_MAP_SCREEN_WIDTH - std::abs(NORMAL_MAP_SCREEN_X - gsRightX)) / 5;
 			*psX2 = sEndXS;
 			*psY1 = 0;
 			*psY2 = sEndYS;

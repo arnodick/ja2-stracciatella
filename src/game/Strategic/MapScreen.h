@@ -2,10 +2,14 @@
 #define __MAPSCREEN_H
 
 #include "Button_System.h"
-#include "Item_Types.h"
-#include "JA2Types.h"
 #include "MessageBoxScreen.h"
 #include "ScreenIDs.h"
+#include "Types.h"
+#include <string_theory/string>
+
+struct OBJECTTYPE;
+struct PathSt;
+struct SOLDIERTYPE;
 
 
 // Sector name identifiers
@@ -49,7 +53,7 @@ void ReBuildCharactersList( void );
 void HandlePreloadOfMapGraphics(void);
 void HandleRemovalOfPreLoadedMapGraphics( void );
 
-void ChangeSelectedMapSector( INT16 sMapX, INT16 sMapY, INT8 bMapZ );
+void ChangeSelectedMapSector(const SGPSector& sector);
 
 BOOLEAN CanExtendContractForSoldier(const SOLDIERTYPE* s);
 
@@ -74,10 +78,10 @@ BOOLEAN CanChangeSleepStatusForSoldier(const SOLDIERTYPE* s);
 
 bool MapCharacterHasAccessibleInventory(SOLDIERTYPE const&);
 
-wchar_t const* GetMapscreenMercAssignmentString(SOLDIERTYPE const&);
-void GetMapscreenMercLocationString(SOLDIERTYPE const&, wchar_t* buf, size_t n);
-void GetMapscreenMercDestinationString(SOLDIERTYPE const&, wchar_t* buf, size_t n);
-void GetMapscreenMercDepartureString(SOLDIERTYPE const&, wchar_t* buf, size_t n, UINT8* text_colour);
+ST::string GetMapscreenMercAssignmentString(SOLDIERTYPE const& s);
+ST::string GetMapscreenMercLocationString(SOLDIERTYPE const& s);
+ST::string GetMapscreenMercDestinationString(SOLDIERTYPE const& s);
+ST::string GetMapscreenMercDepartureString(SOLDIERTYPE const& s, UINT8* text_colour);
 
 // mapscreen wrapper to init the item description box
 void MAPInternalInitItemDescriptionBox(OBJECTTYPE* pObject, UINT8 ubStatusIndex, SOLDIERTYPE* pSoldier);
@@ -87,14 +91,13 @@ void RebuildContractBoxForMerc(const SOLDIERTYPE* s);
 
 void    InternalMAPBeginItemPointer(SOLDIERTYPE* pSoldier);
 BOOLEAN ContinueDialogue(SOLDIERTYPE* pSoldier, BOOLEAN fDone);
-BOOLEAN GetMouseMapXY(INT16* psMapWorldX, INT16* psMapWorldY);
 void    EndConfirmMapMoveMode(void);
 BOOLEAN CanDrawSectorCursor(void);
 void    RememberPreviousPathForAllSelectedChars(void);
 void    MapScreenDefaultOkBoxCallback(MessageBoxReturnValue);
 void    SetUpCursorForStrategicMap(void);
 void    DrawFace(void);
-void 		DrawStringRight(const wchar_t* str, UINT16 x, UINT16 y, UINT16 w, UINT16 h, SGPFont);
+void DrawStringRight(const ST::string& str, UINT16 x, UINT16 y, UINT16 w, UINT16 h, SGPFont font);
 
 extern GUIButtonRef giMapInvDoneButton;
 extern BOOLEAN      fInMapMode;
@@ -104,6 +107,7 @@ extern BOOLEAN      fShowDescriptionFlag;
 extern GUIButtonRef giMapContractButton;
 extern GUIButtonRef giCharInfoButton[2];
 extern BOOLEAN      fDrawCharacterList;
+extern SGPSector    gsHighlightSector;
 
 // create/destroy inventory button as needed
 void CreateDestroyMapInvButton(void);

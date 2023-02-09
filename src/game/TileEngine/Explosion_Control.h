@@ -3,6 +3,7 @@
 
 #include "JA2Types.h"
 #include "Weapons.h"
+#include "Observable.h"
 
 #define MAX_DISTANCE_EXPLOSIVE_CAN_DESTROY_STRUCTURES 2
 
@@ -57,6 +58,10 @@ struct ExplosionQueueElement
 extern UINT8 gubElementsOnExplosionQueue;
 extern BOOLEAN gfExplosionQueueActive;
 
+
+extern Observable<INT16, INT16, INT8, INT16, STRUCTURE*, UINT32, BOOLEAN_S*> BeforeStructureDamaged;
+extern Observable<INT16, INT16, INT8, INT16, STRUCTURE*, UINT8, BOOLEAN> OnStructureDamaged;
+
 void IgniteExplosion(SOLDIERTYPE* owner, INT16 z, INT16 sGridNo, UINT16 item, INT8 level);
 void IgniteExplosionXY(SOLDIERTYPE* owner, INT16 sX, INT16 sY, INT16 sZ, INT16 sGridNo, UINT16 usItem, INT8 bLevel);
 void InternalIgniteExplosion(SOLDIERTYPE* owner, INT16 sX, INT16 sY, INT16 sZ, INT16 sGridNo, UINT16 usItem, BOOLEAN fLocate, INT8 bLevel);
@@ -74,10 +79,6 @@ void SetOffPanicBombs(SOLDIERTYPE* s, INT8 bPanicTrigger);
 void UpdateExplosionFrame(EXPLOSIONTYPE* e, INT16 sCurrentFrame);
 void RemoveExplosionData(EXPLOSIONTYPE* e);
 
-void UpdateAndDamageSAMIfFound( INT16 sSectorX, INT16 sSectorY, INT16 sSectorZ, INT16 sGridNo, UINT8 ubDamage );
-void UpdateSAMDoneRepair(INT16 x, INT16 y, INT16 z);
-
-
 void SaveExplosionTableToSaveGameFile(HWFILE);
 void LoadExplosionTableFromSavedGameFile(HWFILE);
 
@@ -89,7 +90,5 @@ void RemoveAllActiveTimedBombs( void );
 BOOLEAN DishOutGasDamage(SOLDIERTYPE* pSoldier, EXPLOSIVETYPE const* pExplosive, INT16 sSubsequent, BOOLEAN fRecompileMovementCosts, INT16 sWoundAmt, INT16 sBreathAmt, SOLDIERTYPE* owner);
 
 void HandleExplosionQueue();
-
-bool DoesSAMExistHere(INT16 x, INT16 y, INT16 z, GridNo);
 
 #endif

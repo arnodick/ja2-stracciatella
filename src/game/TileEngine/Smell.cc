@@ -61,15 +61,15 @@
 #define BLOOD_STRENGTH_MAX		7
 #define BLOOD_DELAY_MAX       3
 
-#define SMELL_TYPE_BITS( s )	(s & 0x03)
+#define SMELL_TYPE_BITS( s )	((s) & 0x03)
 
-#define BLOOD_ROOF_TYPE( s )  (s & 0x02)
-#define BLOOD_FLOOR_TYPE( s )	(s & 0x01)
+#define BLOOD_ROOF_TYPE( s )  ((s) & 0x02)
+#define BLOOD_FLOOR_TYPE( s )	((s) & 0x01)
 
-#define BLOOD_ROOF_STRENGTH( b )    (b & 0xE0)
-#define BLOOD_FLOOR_STRENGTH( b )		( (b & 0x1C) >> 2 )
-#define BLOOD_DELAY_TIME( b )				(b & 0x03)
-#define NO_BLOOD_STRENGTH( b )			((b & 0xFC) == 0)
+#define BLOOD_ROOF_STRENGTH( b )    ((b) & 0xE0)
+#define BLOOD_FLOOR_STRENGTH( b )		( ((b) & 0x1C) >> 2 )
+#define BLOOD_DELAY_TIME( b )				((b) & 0x03)
+#define NO_BLOOD_STRENGTH( b )			(((b) & 0xFC) == 0)
 
 #define DECAY_SMELL_STRENGTH( s ) \
 { \
@@ -86,7 +86,7 @@
 // preserve the type value for the blood on the roof
 #define SET_SMELL( s, ns, ntf ) \
 { \
-	(s) = (BLOOD_ROOF_TYPE( s )) | SMELL_TYPE( ntf ) | (ns << SMELL_TYPE_NUM_BITS); \
+	(s) = (BLOOD_ROOF_TYPE( (s) )) | SMELL_TYPE( (ntf) ) | ((ns) << SMELL_TYPE_NUM_BITS); \
 }
 
 #define DECAY_BLOOD_DELAY_TIME( b ) \
@@ -109,7 +109,7 @@
 	UINT8 ubFloorStrength; \
 	ubFloorStrength = BLOOD_FLOOR_STRENGTH( (b) ); \
 	ubFloorStrength--; \
-	SET_BLOOD_FLOOR_STRENGTH( b, ubFloorStrength ); \
+	SET_BLOOD_FLOOR_STRENGTH( (b), ubFloorStrength ); \
 }
 
 #define DECAY_BLOOD_ROOF_STRENGTH( b ) \
@@ -117,22 +117,22 @@
 	UINT8 ubRoofStrength; \
 	ubRoofStrength = BLOOD_ROOF_STRENGTH( (b) ); \
 	ubRoofStrength--; \
-	SET_BLOOD_FLOOR_STRENGTH( b, ubRoofStrength ); \
+	SET_BLOOD_FLOOR_STRENGTH( (b), ubRoofStrength ); \
 }
 
 #define SET_BLOOD_DELAY_TIME( b ) \
 { \
-	(b) = BLOOD_DELAY_TIME( (UINT8) Random( BLOOD_DELAY_MAX ) + 1 ) | (b & 0xFC); \
+	(b) = BLOOD_DELAY_TIME( (UINT8) Random( BLOOD_DELAY_MAX ) + 1 ) | ((b) & 0xFC); \
 }
 
 #define SET_BLOOD_FLOOR_TYPE( s, ntg ) \
 { \
-	(s) = BLOOD_FLOOR_TYPE( ntg ) | (s & 0xFE); \
+	(s) = BLOOD_FLOOR_TYPE( (ntg) ) | ((s) & 0xFE); \
 }
 
 #define SET_BLOOD_ROOF_TYPE( s, ntr ) \
 { \
-	(s) = BLOOD_ROOF_TYPE( ntr ) | (s & 0xFD); \
+	(s) = BLOOD_ROOF_TYPE( (ntr) ) | ((s) & 0xFD); \
 }
 
 
@@ -300,8 +300,9 @@ void DropSmell(SOLDIERTYPE& s)
 			{
 				// same smell; increase the strength to the bigger of the two strengths,
 				// plus 1/5 of the smaller
-				ubStrength = __max( ubStrength, ubOldStrength ) + __min( ubStrength, ubOldStrength ) / 5;
-				ubStrength = __max( ubStrength, SMELL_STRENGTH_MAX );
+				ubStrength = std::max( ubStrength, ubOldStrength ) + std::min( ubStrength, ubOldStrength ) / 5;
+				ubStrength = std::max(ubStrength, UINT8(SMELL_STRENGTH_MAX));
+				SET_SMELL(pMapElement->ubSmellInfo, ubStrength, ubSmell);
 			}
 			else
 			{
@@ -344,14 +345,14 @@ void InternalDropBlood(GridNo const gridno, INT8 const level, BloodKind const bl
 	// ATE: Send warning if dropping blood nowhere
 	if (gridno == NOWHERE)
 	{
-		SLOGW(DEBUG_TAG_TILES, "Attempting to drop blood NOWHERE");
+		SLOGW("Attempting to drop blood NOWHERE");
 		return;
 	}
 
 	if (Water(gridno)) return;
 
 	// Ensure max strength is okay
-	strength = __min(strength, BLOOD_STRENGTH_MAX);
+	strength = std::min(strength, UINT8(BLOOD_STRENGTH_MAX));
 
 	UINT8 new_strength = 0;
 	MAP_ELEMENT& me = gpWorldLevelData[gridno];
@@ -363,7 +364,7 @@ void InternalDropBlood(GridNo const gridno, INT8 const level, BloodKind const bl
 			// blood already there... we'll leave the decay time as it is
 			if (BLOOD_FLOOR_TYPE(me.ubBloodInfo) == blood_kind)
 			{ // Combine blood strengths
-				new_strength = __min(old_strength + strength, BLOOD_STRENGTH_MAX);
+				new_strength = std::min(old_strength + strength, BLOOD_STRENGTH_MAX);
 				SET_BLOOD_FLOOR_STRENGTH(me.ubBloodInfo, new_strength);
 			}
 			else
@@ -393,9 +394,9 @@ void InternalDropBlood(GridNo const gridno, INT8 const level, BloodKind const bl
 			// Blood already there, we'll leave the decay time as it is
 			if (BLOOD_ROOF_TYPE(me.ubSmellInfo) == blood_kind)
 			{ // Combine blood strengths
-				new_strength = __max(old_strength, strength) + 1;
+				new_strength = std::max(old_strength, strength) + 1;
 				// make sure the strength is legal
-				new_strength = __max(new_strength, BLOOD_STRENGTH_MAX);
+				new_strength = std::max(new_strength, UINT8(BLOOD_STRENGTH_MAX));
 				SET_BLOOD_ROOF_STRENGTH(me.ubBloodInfo, new_strength);
 			}
 			else

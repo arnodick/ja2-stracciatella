@@ -1,6 +1,3 @@
-#include <stdexcept>
-
-#include "Event_Manager.h"
 #include "Timer_Control.h"
 #include "Event_Pump.h"
 #include "Soldier_Control.h"
@@ -8,137 +5,154 @@
 #include "Weapons.h"
 #include "OppList.h"
 #include "Debug.h"
-#include "slog/slog.h"
+#include "Logger.h"
 
-static void AddGameEventToQueue(UINT32 uiEvent, UINT16 usDelay, PTR pEventData, EventQueueID ubQueueID);
+#include <stdexcept>
+#include <vector>
+
+struct EVENT
+{
+	UINT32 TimeStamp;
+	UINT16 usDelay;
+	bool eventExpired;
+	GAMEEVENT gameEvent;
+};
+
+enum class EventQueueID
+{
+	PRIMARY_EVENT_QUEUE,
+	SECONDARY_EVENT_QUEUE,
+	DEMAND_EVENT_QUEUE
+};
 
 
-void AddGameEvent(GameEvent const uiEvent, UINT16 const usDelay, PTR const pEventData)
+typedef std::vector<EVENT*>EventList;
+static EventList hEventQueue;
+static EventList hDelayEventQueue;
+static EventList hDemandEventQueue;
+
+
+static EventList& GetQueue(EventQueueID ubQueueID);
+
+
+static void AddEvent(GAMEEVENT const& gameEvent, UINT16 const usDelay, EventQueueID const ubQueueID)
+{
+	EVENT* pEvent = new EVENT{};
+	pEvent->TimeStamp  = GetJA2Clock();
+	pEvent->usDelay    = usDelay;
+	pEvent->eventExpired = false;
+	pEvent->gameEvent  = gameEvent;
+	GetQueue(ubQueueID).push_back(pEvent);
+}
+
+// Remove the first element from a queue and return it.
+// Calling this function on an empty queue is undefined behavior, don't do it.
+static EVENT* PopFrontEvent(EventQueueID ubQueueID)
+{
+	EventList& queue = GetQueue(ubQueueID);
+	Assert(!queue.empty());
+	EVENT* const ret = queue.front();
+	queue.erase(queue.begin());
+	return ret;
+}
+
+
+static UINT32 EventQueueSize(EventQueueID ubQueueID)
+{
+	return static_cast<UINT32>(GetQueue(ubQueueID).size());
+}
+
+
+static EventList& GetQueue(EventQueueID const ubQueueID)
+{
+	switch (ubQueueID)
+	{
+		case EventQueueID::PRIMARY_EVENT_QUEUE:   return hEventQueue;
+		case EventQueueID::SECONDARY_EVENT_QUEUE: return hDelayEventQueue;
+		case EventQueueID::DEMAND_EVENT_QUEUE:    return hDemandEventQueue;
+	}
+	// Never reached, squelches GCC -Wreturn-type warning
+	return hEventQueue;
+}
+
+
+void AddGameEvent(GAMEEVENT const& gameEvent, UINT16 usDelay)
 {
 	if (usDelay == DEMAND_EVENT_DELAY)
 	{
-		SLOGD(DEBUG_TAG_EVENTPUMP, "AddGameEvent: Sending Local #%d", uiEvent);
-		AddGameEventToQueue(uiEvent, 0, pEventData, DEMAND_EVENT_QUEUE);
+		AddEvent(gameEvent, 0, EventQueueID::DEMAND_EVENT_QUEUE);
 	}
 	else
 	{
-		SLOGD(DEBUG_TAG_EVENTPUMP, "AddGameEvent: Sending Local #%d", uiEvent);
-		AddGameEventToQueue(uiEvent, usDelay, pEventData, PRIMARY_EVENT_QUEUE);
+		AddEvent(gameEvent, usDelay, EventQueueID::PRIMARY_EVENT_QUEUE);
 	}
 }
 
+static void ExecuteGameEvent(EVENT* pEvent);
 
-static void AddGameEventToQueue(UINT32 const uiEvent, UINT16 const usDelay, PTR const pEventData, EventQueueID const ubQueueID)
+void DequeAllGameEvents(void)
 {
-	// Switch on event type and set size accordingly
-	UINT32 uiDataSize;
-	switch (uiEvent)
-	{
-		case S_SETDESIREDDIRECTION: uiDataSize = sizeof(EV_S_SETDESIREDDIRECTION); break;
-		case S_BEGINFIREWEAPON:     uiDataSize = sizeof(EV_S_BEGINFIREWEAPON);     break; // Delay this event
-		case S_FIREWEAPON:          uiDataSize = sizeof(EV_S_FIREWEAPON);          break;
-		case S_WEAPONHIT:           uiDataSize = sizeof(EV_S_WEAPONHIT);           break;
-		case S_NOISE:               uiDataSize = sizeof(EV_S_NOISE);               break;
-		case S_GETNEWPATH:          uiDataSize = sizeof(EV_S_GETNEWPATH);          break;
-
-		default: throw std::logic_error("Event Pump: Unknown event type");
-	}
-
-	AddEvent(uiEvent, usDelay, pEventData, uiDataSize, ubQueueID);
-}
-
-
-static BOOLEAN ExecuteGameEvent(EVENT* pEvent);
-
-
-BOOLEAN DequeAllGameEvents(void)
-{
-	UINT32  uiQueueSize;
-	UINT32  cnt;
-
 	// First dequeue all primary events
-	while (EventQueueSize(PRIMARY_EVENT_QUEUE) > 0)
+	while (EventQueueSize(EventQueueID::PRIMARY_EVENT_QUEUE) > 0)
 	{
-		EVENT* pEvent = RemoveEvent(0, PRIMARY_EVENT_QUEUE);
-		if (pEvent == NULL) return FALSE;
+		EVENT* pEvent = PopFrontEvent(EventQueueID::PRIMARY_EVENT_QUEUE);
 
 		// Check if event has a delay and add to secondary queue if so
 		if (pEvent->usDelay > 0)
 		{
-			AddGameEventToQueue(pEvent->uiEvent, pEvent->usDelay, pEvent->Data, SECONDARY_EVENT_QUEUE);
+			AddEvent(pEvent->gameEvent, pEvent->usDelay, EventQueueID::SECONDARY_EVENT_QUEUE);
 		}
 		else
 		{
 			ExecuteGameEvent(pEvent);
 		}
 
-		FreeEvent(pEvent);
+		delete pEvent;
 	}
 
 	// NOW CHECK SECONDARY QUEUE FOR ANY EXPRIED EVENTS
-	uiQueueSize = EventQueueSize(SECONDARY_EVENT_QUEUE);
-	for (cnt = 0; cnt < uiQueueSize; cnt++)
+	EventList& queue = GetQueue(EventQueueID::SECONDARY_EVENT_QUEUE);
+	for (EVENT* const pEvent : queue)
 	{
-		EVENT* pEvent = PeekEvent(cnt, SECONDARY_EVENT_QUEUE);
-		if (pEvent == NULL) return FALSE;
-
 		// Check time
 		if (GetJA2Clock() - pEvent->TimeStamp > pEvent->usDelay)
 		{
 			ExecuteGameEvent(pEvent);
-			pEvent->uiFlags = EVENT_EXPIRED;
+			pEvent->eventExpired = true;
 		}
 	}
 
-	do
-	{
-		uiQueueSize = EventQueueSize(SECONDARY_EVENT_QUEUE);
-		for (cnt = 0; cnt < uiQueueSize; cnt++)
+	// Remove and free all expired events from the secondary queue.
+	queue.erase(std::remove_if(queue.begin(), queue.end(),
+		[](EVENT* const ep)
 		{
-			EVENT* pEvent = PeekEvent(cnt, SECONDARY_EVENT_QUEUE);
-			if (pEvent == NULL)
-			{
-				return FALSE;
-			}
-
-			// Check time
-			if (pEvent->uiFlags & EVENT_EXPIRED)
-			{
-				pEvent = RemoveEvent(cnt, SECONDARY_EVENT_QUEUE);
-				FreeEvent(pEvent);
-				// Restart loop
-				break;
-			}
-		}
-	} while (cnt != uiQueueSize);
-
-	return TRUE;
+			if (!ep->eventExpired) return false;
+			delete ep;
+			return true;
+		}), queue.end());
 }
 
 
-BOOLEAN DequeueAllDemandGameEvents(void)
+void DequeueAllDemandGameEvents(void)
 {
 	// Dequeue all events on the demand queue (only)
 
-	while (EventQueueSize(DEMAND_EVENT_QUEUE) > 0)
+	while (EventQueueSize(EventQueueID::DEMAND_EVENT_QUEUE) > 0)
 	{
-		EVENT* pEvent = RemoveEvent(0, DEMAND_EVENT_QUEUE);
-		if (pEvent == NULL) return FALSE;
+		EVENT* pEvent = PopFrontEvent(EventQueueID::DEMAND_EVENT_QUEUE);
 
 		// Check if event has a delay and add to secondary queue if so
 		if (pEvent->usDelay > 0)
 		{
-			AddGameEventToQueue(pEvent->uiEvent, pEvent->usDelay, pEvent->Data, SECONDARY_EVENT_QUEUE);
+			AddEvent(pEvent->gameEvent, pEvent->usDelay, EventQueueID::SECONDARY_EVENT_QUEUE);
 		}
 		else
 		{
 			ExecuteGameEvent(pEvent);
 		}
 
-		FreeEvent(pEvent);
+		delete pEvent;
 	}
-
-	return TRUE;
 }
 
 
@@ -150,156 +164,124 @@ static SOLDIERTYPE* GetSoldier(const UINT16 soldier_idx)
 }
 
 
-static BOOLEAN ExecuteGameEvent(EVENT* pEvent)
+// Source: https://en.cppreference.com/w/cpp/utility/variant/visit
+template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
+// explicit deduction guide (not needed as of C++20)
+template<class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
+
+static void ExecuteGameEvent(EVENT* pEvent)
 {
 	// Switch on event type
-	switch (pEvent->uiEvent)
-	{
-		case S_GETNEWPATH:
+	std::visit(overloaded{
+		[](EV_S_GETNEWPATH const& SGetNewPath)
 		{
-			EV_S_GETNEWPATH SGetNewPath;
-			memcpy(&SGetNewPath, pEvent->Data, pEvent->uiDataSize);
-
 			SOLDIERTYPE* pSoldier = GetSoldier(SGetNewPath.usSoldierID);
 			if (pSoldier == NULL)
 			{
 				// Handle Error?
-				SLOGE(DEBUG_TAG_EVENTPUMP, "Invalid Soldier ID");
-				break;
+				SLOGE("Invalid Soldier ID");
+				return;
 			}
 
 			// check for error
 			if (pSoldier->uiUniqueSoldierIdValue != SGetNewPath.uiUniqueId)
 			{
-				break;
+				return;
 			}
 			// Call soldier function
-			SLOGD(DEBUG_TAG_EVENTPUMP, "GetNewPath");
+			SLOGD("GetNewPath");
 			EVENT_GetNewSoldierPath(pSoldier, SGetNewPath.sDestGridNo, SGetNewPath.usMovementAnim);
-			break;
-		}
-
-		case S_SETDESIREDDIRECTION:
+		},
+		[](EV_S_SETDESIREDDIRECTION const& SSetDesiredDirection)
 		{
-			EV_S_SETDESIREDDIRECTION SSetDesiredDirection;
-			memcpy(&SSetDesiredDirection, pEvent->Data, pEvent->uiDataSize);
-
 			SOLDIERTYPE* pSoldier = GetSoldier(SSetDesiredDirection.usSoldierID);
 			if (pSoldier == NULL)
 			{
 				// Handle Error?
-				SLOGE(DEBUG_TAG_EVENTPUMP, "Invalid Soldier ID");
-				break;
+				SLOGE("Invalid Soldier ID");
+				return;
 			}
 
 			// check for error
 			if (pSoldier-> uiUniqueSoldierIdValue != SSetDesiredDirection.uiUniqueId)
 			{
-				break;
+				return;
 			}
 
 			// Call soldier function
-			SLOGD(DEBUG_TAG_EVENTPUMP, "SetDesiredDirection: Dir( %d )", SSetDesiredDirection.usDesiredDirection);
+			SLOGD("SetDesiredDirection: Dir( {} )", SSetDesiredDirection.usDesiredDirection);
 			EVENT_SetSoldierDesiredDirection(pSoldier, SSetDesiredDirection.usDesiredDirection);
-			break;
-		}
-
-		case S_BEGINFIREWEAPON:
+		},
+		[](EV_S_BEGINFIREWEAPON const& SBeginFireWeapon)
 		{
-			EV_S_BEGINFIREWEAPON SBeginFireWeapon;
-			memcpy(&SBeginFireWeapon, pEvent->Data, pEvent->uiDataSize);
-
 			SOLDIERTYPE* pSoldier = GetSoldier(SBeginFireWeapon.usSoldierID);
 			if (pSoldier == NULL)
 			{
-				pSoldier = NULL;
-				break;
 				// Handle Error?
-				SLOGE(DEBUG_TAG_EVENTPUMP, "Invalid Soldier ID");
+				SLOGE("Invalid Soldier ID");
+				return;
 			}
 
 			// check for error
 			if (pSoldier->uiUniqueSoldierIdValue != SBeginFireWeapon.uiUniqueId)
 			{
-				break;
+				return;
 			}
 
 			// Call soldier function
-			SLOGD(DEBUG_TAG_EVENTPUMP, "Begin Fire Weapon");
+			SLOGD("Begin Fire Weapon");
 			pSoldier->sTargetGridNo    = SBeginFireWeapon.sTargetGridNo;
 			pSoldier->bTargetLevel     = SBeginFireWeapon.bTargetLevel;
 			pSoldier->bTargetCubeLevel = SBeginFireWeapon.bTargetCubeLevel;
 			EVENT_FireSoldierWeapon(pSoldier, SBeginFireWeapon.sTargetGridNo);
-			break;
-		}
-
-		case S_FIREWEAPON:
+		},
+		[](EV_S_FIREWEAPON const& SFireWeapon)
 		{
-			EV_S_FIREWEAPON SFireWeapon;
-			memcpy(&SFireWeapon, pEvent->Data, pEvent->uiDataSize);
-
 			SOLDIERTYPE* pSoldier = GetSoldier(SFireWeapon.usSoldierID);
 			if (pSoldier == NULL)
 			{
 				// Handle Error?
-				SLOGE(DEBUG_TAG_EVENTPUMP, "Invalid Soldier ID");
-				break;
+				SLOGE("Invalid Soldier ID");
+				return;
 			}
 
 			// check for error
 			if (pSoldier->uiUniqueSoldierIdValue != SFireWeapon.uiUniqueId)
 			{
-				break;
+				return;
 			}
 
-
 			// Call soldier function
-			SLOGD(DEBUG_TAG_EVENTPUMP, "FireWeapon");
+			SLOGD("FireWeapon");
 			pSoldier->sTargetGridNo    = SFireWeapon.sTargetGridNo;
 			pSoldier->bTargetLevel     = SFireWeapon.bTargetLevel;
 			pSoldier->bTargetCubeLevel = SFireWeapon.bTargetCubeLevel;
 			FireWeapon(pSoldier, SFireWeapon.sTargetGridNo);
-			break;
-		}
 
-		case S_WEAPONHIT:
+		},
+		[](EV_S_WEAPONHIT const& SWeaponHit)
 		{
-			EV_S_WEAPONHIT SWeaponHit;
-			memcpy(&SWeaponHit, pEvent->Data, pEvent->uiDataSize);
-			SLOGD(DEBUG_TAG_EVENTPUMP, "WeaponHit %d Damage", SWeaponHit.sDamage);
-			WeaponHit(&GetMan(SWeaponHit.usSoldierID), SWeaponHit.usWeaponIndex, SWeaponHit.sDamage, SWeaponHit.sBreathLoss, SWeaponHit.usDirection, SWeaponHit.sXPos, SWeaponHit.sYPos, SWeaponHit.sZPos, SWeaponHit.sRange, &GetMan(SWeaponHit.ubAttackerID), SWeaponHit.ubSpecial, SWeaponHit.ubLocation);
-			break;
-		}
-
-		case S_NOISE:
+			SLOGD("WeaponHit {} Damage", SWeaponHit.sDamage);
+			auto & s = GetMan(SWeaponHit.usSoldierID);
+			WeaponHit(&s, SWeaponHit.usWeaponIndex, SWeaponHit.sDamage, SWeaponHit.sBreathLoss, SWeaponHit.usDirection,
+			          SWeaponHit.sXPos, SWeaponHit.sYPos, SWeaponHit.sZPos, SWeaponHit.sRange, &GetMan(SWeaponHit.ubAttackerID),
+			          SWeaponHit.ubSpecial, s.bAimShotLocation);
+		},
+		[](EV_S_NOISE const& SNoise)
 		{
-			EV_S_NOISE SNoise;
-			memcpy(&SNoise, pEvent->Data, pEvent->uiDataSize);
-			SLOGD(DEBUG_TAG_EVENTPUMP, "Noise from %d at %d/%d, type %d volume %d",
+			SLOGD("Noise from {} at {}/{}, type {} volume {}",
 						SNoise.ubNoiseMaker, SNoise.sGridNo, SNoise.bLevel,
 						SNoise.ubNoiseType, SNoise.ubVolume);
 			OurNoise(ID2SOLDIER(SNoise.ubNoiseMaker), SNoise.sGridNo, SNoise.bLevel, SNoise.ubVolume, static_cast<NoiseKind>(SNoise.ubNoiseType));
-			break;
 		}
-
-		default:
-			SLOGE(DEBUG_TAG_EVENTPUMP, "Invalid Event Received");
-			return FALSE;
-	}
-
-	return TRUE;
+	}, pEvent->gameEvent);
 }
 
 
-BOOLEAN ClearEventQueue(void)
+void ClearEventQueue(void)
 {
 	// clear out the event queue
-	while (EventQueueSize(PRIMARY_EVENT_QUEUE) > 0)
-	{
-		EVENT* Event = RemoveEvent(0, PRIMARY_EVENT_QUEUE);
-		if (Event == NULL) return FALSE;
-		FreeEvent(Event);
-	}
-
-	return TRUE;
+	EventList& queue = GetQueue(EventQueueID::PRIMARY_EVENT_QUEUE);
+	for (EVENT *pEvent : queue) delete pEvent;
+	queue.clear();
 }

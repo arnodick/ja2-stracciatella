@@ -1,23 +1,22 @@
-#include <stdexcept>
-#include <vector>
-
+#include "Tile_Cache.h"
+#include "ContentManager.h"
 #include "Directories.h"
+#include "FileMan.h"
+#include "GameInstance.h"
 #include "HImage.h"
 #include "Structure.h"
-#include "TileDef.h"
-#include "Animation_Cache.h"
-#include "Animation_Data.h"
+#include "Structure_Internals.h"
 #include "Tile_Surface.h"
-#include "Tile_Cache.h"
-#include "FileMan.h"
-#include "MemMan.h"
+#include "TileDef.h"
+#include "WorldDef.h"
+#include <stdexcept>
+#include <vector>
+struct AuxObjectData;
 
-#include "ContentManager.h"
-#include "GameInstance.h"
 
 struct TILE_CACHE_STRUCT
 {
-	std::string rootName;
+	ST::string rootName;
 	STRUCTURE_FILE_REF* pStructureFileRef;
 };
 
@@ -33,7 +32,7 @@ static std::vector<TILE_CACHE_STRUCT> gpTileCacheStructInfo;
 
 void InitTileCache(void)
 {
-	gpTileCache         = MALLOCN(TILE_CACHE_ELEMENT, guiMaxTileCacheSize);
+	gpTileCache         = new TILE_CACHE_ELEMENT[guiMaxTileCacheSize]{};
 	guiCurTileCacheSize = 0;
 
 	// Zero entries
@@ -44,15 +43,15 @@ void InitTileCache(void)
 	}
 
 	// Look for JSD files in the tile cache directory and load any we find
-	std::vector<std::string> jsdFiles = GCM->getAllTilecache();
+	std::vector<ST::string> jsdFiles = GCM->getAllTilecache();
 
-	for (const std::string &file : jsdFiles)
+	for (const ST::string &file : jsdFiles)
 	{
 		TILE_CACHE_STRUCT tc;
 		tc.rootName = FileMan::getFileNameWithoutExt(file);
-		tc.pStructureFileRef = LoadStructureFile(file.c_str());
+		tc.pStructureFileRef = LoadStructureFile(file);
 
-		if (strcasecmp(tc.rootName.c_str(), "l_dead1") == 0)
+		if (tc.rootName.compare_i("l_dead1") == 0)
 		{
 			giDefaultStructIndex = (INT32)gpTileCacheStructInfo.size();
 		}
@@ -77,7 +76,7 @@ void DeleteTileCache( )
 				DeleteTileSurface( gpTileCache[ cnt ].pImagery );
 			}
 		}
-		MemFree( gpTileCache );
+		delete[] gpTileCache;
 	}
 
 	gpTileCacheStructInfo.clear();
@@ -86,7 +85,7 @@ void DeleteTileCache( )
 }
 
 
-INT32 GetCachedTile(const char* const filename)
+INT32 GetCachedTile(ST::string const& filename)
 {
 	INT32 idx = -1;
 
@@ -100,7 +99,7 @@ INT32 GetCachedTile(const char* const filename)
 			continue;
 		}
 
-		if (strcasecmp(i->zName, filename) != 0) continue;
+		if (i->zName.compare_i(filename) != 0) continue;
 
 		// Found surface, return
 		++i->sHits;
@@ -141,11 +140,11 @@ INT32 GetCachedTile(const char* const filename)
 
 	tce->pImagery = LoadTileSurface(filename);
 
-	strcpy(tce->zName, filename);
+	tce->zName = filename;
 	tce->sHits = 1;
 
-	std::string root_name(FileMan::getFileNameWithoutExt(filename));
-	STRUCTURE_FILE_REF* const sfr = GetCachedTileStructureRefFromFilename(root_name.c_str());
+	ST::string root_name(FileMan::getFileNameWithoutExt(filename));
+	STRUCTURE_FILE_REF* const sfr = GetCachedTileStructureRefFromFilename(root_name);
 	tce->struct_file_ref = sfr;
 	if (sfr) AddZStripInfoToVObject(tce->pImagery->vo, sfr, TRUE, 0);
 
@@ -181,13 +180,13 @@ static STRUCTURE_FILE_REF* GetCachedTileStructureRef(INT32 const idx)
 }
 
 
-STRUCTURE_FILE_REF* GetCachedTileStructureRefFromFilename(char const* const filename)
+STRUCTURE_FILE_REF* GetCachedTileStructureRefFromFilename(ST::string const& filename)
 {
 	size_t const n = gpTileCacheStructInfo.size();
 	for (size_t i = 0; i != n; ++i)
 	{
 		TILE_CACHE_STRUCT& t = gpTileCacheStructInfo[i];
-		if (strcasecmp(t.rootName.c_str(), filename) == 0) return t.pStructureFileRef;
+		if (t.rootName.compare_i(filename) == 0) return t.pStructureFileRef;
 	}
 	return 0;
 }

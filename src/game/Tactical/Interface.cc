@@ -1,5 +1,3 @@
-#include <stdexcept>
-
 #include "Directories.h"
 #include "Font.h"
 #include "Isometric_Utils.h"
@@ -52,11 +50,18 @@
 #include "Debug.h"
 #include "Video.h"
 #include "Items.h"
+#include "GameScreen.h"
+#include "MercProfile.h"
 
 #include "UILayout.h"
 
 #include "ContentManager.h"
 #include "GameInstance.h"
+
+#include <string_theory/format>
+#include <string_theory/string>
+
+#include <stdexcept>
 
 
 #define ARROWS_X_OFFSET					10
@@ -73,7 +78,6 @@ BOOLEAN	gfInMovementMenu = FALSE;
 static INT32 giMenuAnchorX;
 static INT32 giMenuAnchorY;
 
-static BOOLEAN gfProgBarActive   = FALSE;
 static UINT8   gubProgNumEnemies = 0;
 static UINT8   gubProgCurEnemy   = 0;
 
@@ -337,6 +341,11 @@ void CreateCurrentTacticalPanelButtons(void)
 
 void SetCurrentInterfacePanel(InterfacePanelKind const ubNewPanel)
 {
+	if(gfEnteringMapScreen)
+		return;
+	if(gfPanelAllocated && gsCurInterfacePanel == ubNewPanel)
+		return;
+
 	ShutdownCurrentPanel( );
 
 	// INit new panel
@@ -393,10 +402,10 @@ void HandleInterfaceBackgrounds( )
 }
 
 
-static void BtnMovementCallback(GUI_BUTTON* btn, INT32 reason);
+static void BtnMovementCallback(GUI_BUTTON* btn, UINT32 reason);
 
 
-static void MakeButtonMove(UINT const idx, UINT const gfx, INT16 const x, INT16 const y, UI_EVENT* const event, wchar_t const* const help, bool const disabled)
+static void MakeButtonMove(UINT const idx, UINT const gfx, INT16 const x, INT16 const y, UI_EVENT* const event, const ST::string& help, bool const disabled)
 {
 	GUIButtonRef const btn = QuickCreateButton(iIconImages[gfx], x, y, MSYS_PRIORITY_HIGHEST - 1, BtnMovementCallback);
 	iActionIcons[idx] = btn;
@@ -406,7 +415,7 @@ static void MakeButtonMove(UINT const idx, UINT const gfx, INT16 const x, INT16 
 }
 
 
-static void MovementMenuBackregionCallback(MOUSE_REGION* pRegion, INT32 iReason);
+static void MovementMenuBackregionCallback(MOUSE_REGION* pRegion, UINT32 iReason);
 
 
 void PopupMovementMenu(UI_EVENT* const ev)
@@ -445,11 +454,11 @@ void PopupMovementMenu(UI_EVENT* const ev)
 			is_vehicle || is_uncontrolled_robot);
 	MakeButtonMove(RUN_ICON, RUN_IMAGES, x + 20, y, ev, pTacticalPopupButtonStrings[RUN_ICON],
 			is_vehicle || is_robot || MercInWater(s));
-	wchar_t const* const help = is_vehicle ? TacticalStr[DRIVE_POPUPTEXT] : pTacticalPopupButtonStrings[WALK_ICON];
+	ST::string help = is_vehicle ? TacticalStr[DRIVE_POPUPTEXT] : pTacticalPopupButtonStrings[WALK_ICON];
 	MakeButtonMove(WALK_ICON, WALK_IMAGES, x + 40, y, ev, help, is_uncontrolled_robot);
 
 	UINT32         action_image;
-	wchar_t const* action_text;
+	ST::string action_text;
 	bool           disable_action = false;
 	if (is_vehicle)
 	{
@@ -586,9 +595,9 @@ void CancelMovementMenu( )
 }
 
 
-static void BtnMovementCallback(GUI_BUTTON* btn, INT32 reason)
+static void BtnMovementCallback(GUI_BUTTON* btn, UINT32 reason)
 {
-	if ( reason & MSYS_CALLBACK_REASON_LBUTTON_UP )
+	if ( reason & MSYS_CALLBACK_REASON_POINTER_UP )
 	{
 		btn->uiFlags |= BUTTON_CLICKED_ON;
 
@@ -962,7 +971,7 @@ void GetSoldierAboveGuyPositions(SOLDIERTYPE const* const s, INT16* const psX, I
 }
 
 
-static void PrintAboveGuy(INT16 const x, INT16 const y, wchar_t const* const text)
+static void PrintAboveGuy(INT16 const x, INT16 const y, const ST::string& text)
 {
 	INT16 cx;
 	INT16 cy;
@@ -1057,8 +1066,7 @@ void DrawSelectedUIAboveGuy(SOLDIERTYPE& s)
 
 	if (s.ubProfile != NO_PROFILE || s.uiStatusFlags & SOLDIER_VEHICLE)
 	{
-		wchar_t const* action = 0;
-		wchar_t        buf[50];
+		ST::string action;
 		if (&s == gUIValidCatcher && gfUIMouseOnValidCatcher == 1)
 		{
 			action = TacticalStr[CATCH_STR];
@@ -1074,20 +1082,18 @@ void DrawSelectedUIAboveGuy(SOLDIERTYPE& s)
 		else if (s.bAssignment >= ON_DUTY)
 		{
 			SetFontForeground(FONT_YELLOW);
-			swprintf(buf, lengthof(buf), L"(%ls)", pAssignmentStrings[s.bAssignment]);
-			action = buf;
+			action = ST::format("({})", pAssignmentStrings[s.bAssignment]);
 		}
 		else if (s.bTeam == OUR_TEAM &&
 			s.bAssignment < ON_DUTY &&
 			s.bAssignment != CurrentSquad() &&
 			!(s.uiStatusFlags & SOLDIER_MULTI_SELECTED))
 		{
-			swprintf(buf, lengthof(buf), gzLateLocalizedString[STR_LATE_34], s.bAssignment + 1);
-			action = buf;
+			action = st_format_printf(gzLateLocalizedString[STR_LATE_34], s.bAssignment + 1);
 		}
 
 		bool raise_name = false;
-		if (action)
+		if (!action.empty())
 		{
 			PrintAboveGuy(sXPos, sYPos, action);
 			raise_name = true;
@@ -1108,7 +1114,7 @@ void DrawSelectedUIAboveGuy(SOLDIERTYPE& s)
 
 		PrintAboveGuy(sXPos, raise_name ? sYPos - 10 : sYPos, s.name);
 
-		if (s.ubProfile < FIRST_RPC ||
+		if ((s.ubProfile != NO_PROFILE && MercProfile(s.ubProfile).isPlayerMerc()) ||
 			RPC_RECRUITED(&s) ||
 			AM_AN_EPC(&s) ||
 			s.uiStatusFlags & SOLDIER_VEHICLE)
@@ -1332,7 +1338,7 @@ void InitDoorOpenMenu(SOLDIERTYPE* const pSoldier, BOOLEAN const fClosingDoor)
 
 	InterruptTime();
 	PauseGame();
-	LockPauseState(LOCK_PAUSE_19);
+	LockPauseState(LOCK_PAUSE_DOOR_OPEN);
 	// Pause timers as well....
 	PauseTime( TRUE );
 
@@ -1380,10 +1386,10 @@ void InitDoorOpenMenu(SOLDIERTYPE* const pSoldier, BOOLEAN const fClosingDoor)
 }
 
 
-static void BtnDoorMenuCallback(GUI_BUTTON* btn, INT32 reason);
+static void BtnDoorMenuCallback(GUI_BUTTON* btn, UINT32 reason);
 
 
-static void MakeButtonDoor(UINT idx, UINT gfx, INT16 x, INT16 y, INT16 ap, INT16 bp, BOOLEAN disable, const wchar_t* help)
+static void MakeButtonDoor(UINT idx, UINT gfx, INT16 x, INT16 y, INT16 ap, INT16 bp, BOOLEAN disable, const ST::string& help)
 {
 	GUIButtonRef const btn = QuickCreateButton(iIconImages[gfx], x, y, MSYS_PRIORITY_HIGHEST - 1, BtnDoorMenuCallback);
 	iActionIcons[idx] = btn;
@@ -1393,8 +1399,7 @@ static void MakeButtonDoor(UINT idx, UINT gfx, INT16 x, INT16 y, INT16 ap, INT16
 	}
 	else
 	{
-		wchar_t zDisp[100];
-		swprintf(zDisp, lengthof(zDisp), L"%ls ( %d )", help, ap);
+		ST::string zDisp = ST::format("{} ( {} )", help, ap);
 		btn->SetFastHelpText(zDisp);
 	}
 	if (disable || (ap != 0 && !EnoughPoints(gOpenDoorMenu.pSoldier, ap, bp, FALSE)))
@@ -1404,7 +1409,7 @@ static void MakeButtonDoor(UINT idx, UINT gfx, INT16 x, INT16 y, INT16 ap, INT16
 }
 
 
-static void DoorMenuBackregionCallback(MOUSE_REGION* pRegion, INT32 iReason);
+static void DoorMenuBackregionCallback(MOUSE_REGION* pRegion, UINT32 iReason);
 
 
 static void PopupDoorOpenMenu(BOOLEAN fClosingDoor)
@@ -1437,7 +1442,7 @@ static void PopupDoorOpenMenu(BOOLEAN fClosingDoor)
 	MakeButtonDoor(EXPLOSIVE_DOOR_ICON, EXPLOSIVE_DOOR_IMAGES, dx + 40, dy + 40, AP_EXPLODE_DOOR, BP_EXPLODE_DOOR,
 			d, pTacticalPopupButtonStrings[EXPLOSIVE_DOOR_ICON]);
 
-	const wchar_t* const help = pTacticalPopupButtonStrings[fClosingDoor ? CANCEL_ICON + 1 : OPEN_DOOR_ICON];
+	ST::string help = pTacticalPopupButtonStrings[fClosingDoor ? CANCEL_ICON + 1 : OPEN_DOOR_ICON];
 	MakeButtonDoor(OPEN_DOOR_ICON, OPEN_DOOR_IMAGES, dx, dy, AP_OPEN_DOOR, BP_OPEN_DOOR, FALSE, help);
 
 	MakeButtonDoor(EXAMINE_DOOR_ICON, EXAMINE_DOOR_IMAGES, dx, dy + 20, AP_EXAMINE_DOOR, BP_EXAMINE_DOOR, d0,
@@ -1540,9 +1545,9 @@ static void DoorAction(INT16 const ap, INT16 const bp, HandleDoor const action)
 }
 
 
-static void BtnDoorMenuCallback(GUI_BUTTON* btn, INT32 reason)
+static void BtnDoorMenuCallback(GUI_BUTTON* btn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		btn->uiFlags |= BUTTON_CLICKED_ON;
 
@@ -1637,10 +1642,10 @@ static void RenderUIMessage(VIDEO_OVERLAY* pBlitter)
 }
 
 
-static UINT32 CalcUIMessageDuration(const wchar_t* wString);
+static UINT32 CalcUIMessageDuration(const ST::string& str);
 
 
-void BeginUIMessage(BOOLEAN fUseSkullIcon, const wchar_t* text)
+void BeginUIMessage(BOOLEAN fUseSkullIcon, const ST::string& text)
 {
 	guiUIMessageTime = GetJA2Clock( );
 	guiUIMessageTimeDelay = CalcUIMessageDuration(text);
@@ -1668,7 +1673,7 @@ void BeginUIMessage(BOOLEAN fUseSkullIcon, const wchar_t* text)
 }
 
 
-void BeginMapUIMessage(INT16 delta_y, const wchar_t* text)
+void BeginMapUIMessage(INT16 delta_y, const ST::string& text)
 {
 	guiUIMessageTime      = GetJA2Clock();
 	guiUIMessageTimeDelay = CalcUIMessageDuration(text);
@@ -1788,33 +1793,33 @@ static void CreateTopMessage(void)
 	{
 		AutoSGPVObject bar_vo(AddVideoObjectFromFile(bar_file));
 
-		BltVideoObject(dst, bar_vo, bar_gfx, STD_SCREEN_X, 0);
+		BltVideoObject(dst, bar_vo.get(), bar_gfx, STD_SCREEN_X, 0);
 
 		if (fDoLimitBar)
 		{
 			INT32 bar_x = bar->x;
 			// Render end piece
-			BltVideoObject(dst, bar_vo, 1, bar_x, bar->y);
+			BltVideoObject(dst, bar_vo.get(), 1, bar_x, bar->y);
 
 			INT32  gfx    = 2;
 			// -3 for the end pieces
 			UINT32 length = (bar->w - 3) * ts->usTactialTurnLimitCounter / ts->usTactialTurnLimitMax;
 			while (length-- != 0)
 			{
-				BltVideoObject(dst, bar_vo, gfx, ++bar_x, bar->y);
+				BltVideoObject(dst, bar_vo.get(), gfx, ++bar_x, bar->y);
 				if (++gfx == 12) gfx = 2;
 			}
 
 			if (ts->usTactialTurnLimitCounter == ts->usTactialTurnLimitMax)
 			{
 				// Render end piece
-				BltVideoObject(dst, bar_vo, gfx, ++bar_x, bar->y);
-				BltVideoObject(dst, bar_vo, 12,  ++bar_x, bar->y);
+				BltVideoObject(dst, bar_vo.get(), gfx, ++bar_x, bar->y);
+				BltVideoObject(dst, bar_vo.get(), 12,  ++bar_x, bar->y);
 			}
 		}
 	}
 
-	const wchar_t* msg;
+	ST::string msg;
 	switch (ts->ubTopMessageType)
 	{
 		case COMPUTER_TURN_MESSAGE:
@@ -1983,7 +1988,6 @@ void InitEnemyUIBar( UINT8 ubNumEnemies, UINT8 ubDoneEnemies )
 	// OK, set value
 	gubProgNumEnemies = ubNumEnemies + ubDoneEnemies;
 	gubProgCurEnemy = ubDoneEnemies;
-	gfProgBarActive = TRUE;
 
 	gTacticalStatus.usTactialTurnLimitCounter = ubDoneEnemies * PLAYER_TEAM_TIMER_TICKS_PER_ENEMY;
 	gTacticalStatus.usTactialTurnLimitMax = ( (ubNumEnemies + ubDoneEnemies) * PLAYER_TEAM_TIMER_TICKS_PER_ENEMY );
@@ -1992,15 +1996,10 @@ void InitEnemyUIBar( UINT8 ubNumEnemies, UINT8 ubDoneEnemies )
 
 void UpdateEnemyUIBar( )
 {
-	// Are we active?
-	if ( gfProgBarActive )
-	{
-		// OK, update team limit counter....
-		gTacticalStatus.usTactialTurnLimitCounter = ( gubProgCurEnemy * PLAYER_TEAM_TIMER_TICKS_PER_ENEMY );
+	// OK, update team limit counter....
+	gTacticalStatus.usTactialTurnLimitCounter = gubProgCurEnemy * PLAYER_TEAM_TIMER_TICKS_PER_ENEMY;
 
-		gubProgCurEnemy++;
-
-	}
+	gubProgCurEnemy++;
 
 	// Do we have an active enemy bar?
 	if (gTacticalStatus.fInTopMessage &&
@@ -2065,25 +2064,25 @@ void InitPlayerUIBar( BOOLEAN fInterrupt )
 }
 
 
-static void MovementMenuBackregionCallback(MOUSE_REGION* pRegion, INT32 iReason)
+static void MovementMenuBackregionCallback(MOUSE_REGION* pRegion, UINT32 iReason)
 {
-	if ( iReason & MSYS_CALLBACK_REASON_LBUTTON_UP )
+	if ( iReason & MSYS_CALLBACK_REASON_POINTER_UP )
 	{
 		CancelMovementMenu( );
 	}
 }
 
 
-static void DoorMenuBackregionCallback(MOUSE_REGION* pRegion, INT32 iReason)
+static void DoorMenuBackregionCallback(MOUSE_REGION* pRegion, UINT32 iReason)
 {
-	if ( iReason & MSYS_CALLBACK_REASON_LBUTTON_UP )
+	if ( iReason & MSYS_CALLBACK_REASON_POINTER_UP )
 	{
 		CancelOpenDoorMenu( );
 	}
 }
 
 
-const wchar_t* GetSoldierHealthString(const SOLDIERTYPE* const s)
+ST::string GetSoldierHealthString(const SOLDIERTYPE* const s)
 {
 	INT32 i;
 	const INT32 start = (s->bLife == s->bLifeMax ? 4 : 0);
@@ -2153,10 +2152,10 @@ void DirtyTopMessage( )
 
 
 
-static UINT32 CalcUIMessageDuration(const wchar_t* wString)
+static UINT32 CalcUIMessageDuration(const ST::string& str)
 {
 	// base + X per letter
-	return( 1000 + 50 * (UINT32)wcslen( wString ) );
+	return( 1000 + 50 * static_cast<UINT32>(str.to_utf32().size()) );
 }
 
 

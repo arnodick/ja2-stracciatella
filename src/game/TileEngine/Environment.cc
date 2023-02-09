@@ -210,11 +210,11 @@ void EnvironmentController( BOOLEAN fCheckForLights )
 					// Thunder showers.. make darker
 					if ( guiEnvWeather & ( WEATHER_FORECAST_THUNDERSHOWERS ) )
 					{
-						ubLightAdjustFromWeather = (UINT8)(__min( gubEnvLightValue+2, NORMAL_LIGHTLEVEL_NIGHT ));
+						ubLightAdjustFromWeather = (UINT8)(std::min( gubEnvLightValue+2, NORMAL_LIGHTLEVEL_NIGHT ));
 					}
 					else
 					{
-						ubLightAdjustFromWeather = (UINT8)(__min( gubEnvLightValue+1, NORMAL_LIGHTLEVEL_NIGHT ));
+						ubLightAdjustFromWeather = (UINT8)(std::min( gubEnvLightValue+1, NORMAL_LIGHTLEVEL_NIGHT ));
 					}
 				}
 #endif
@@ -330,9 +330,8 @@ void BuildDayAmbientSounds( )
 void ForecastDayEvents( )
 {
 	UINT32 uiOldDay;
-	UINT32 uiStartTime, uiEndTime;
-	UINT8  ubStormIntensity;
-//	UINT32 cnt;
+	//UINT32 uiStartTime, uiEndTime;
+	//UINT8  ubStormIntensity;
 
 	// Get current day and see if different
 	if ( ( uiOldDay = GetWorldDay() ) != guiEnvDay )
@@ -349,39 +348,39 @@ void ForecastDayEvents( )
 		// Build weather....
 
 		// ATE: Don't forecast if start of game...
-		if ( guiEnvDay > 1 )
-		{
+		//if ( guiEnvDay > 1 )
+		//{
 			// Should it rain...?
-			if ( Random( 100 ) < 20 )
-			{
+			//if ( Random( 100 ) < 20 )
+			//{
 				// Add rain!
 				// Between 6:00 and 10:00
-				uiStartTime = (UINT32)( 360 + Random( 1080 ) );
+				//uiStartTime = (UINT32)( 360 + Random( 1080 ) );
 				// Between 5 - 15 miniutes
-				uiEndTime		= uiStartTime + ( 5 + Random( 10 ) );
+				//uiEndTime		= uiStartTime + ( 5 + Random( 10 ) );
 
-				ubStormIntensity = 0;
+				//ubStormIntensity = 0;
 
 				// Randomze for a storm!
-				if ( Random( 10 ) < 5 )
-				{
-					ubStormIntensity = 1;
-				}
+				//if ( Random( 10 ) < 5 )
+				//{
+					//ubStormIntensity = 1;
+				//}
 
 				// ATE: Disable RAIN!
 				//AddSameDayRangedStrategicEvent( EVENT_RAINSTORM, uiStartTime, uiEndTime - uiStartTime, ubStormIntensity );
 
 				//AddSameDayStrategicEvent( EVENT_BEGINRAINSTORM, uiStartTime, ubStormIntensity );
 				//AddSameDayStrategicEvent( EVENT_ENDRAINSTORM, uiEndTime, 0 );
-			}
-		}
+			//}
+		//}
 	}
 
 }
 
 UINT8 GetTimeOfDayAmbientLightLevel()
 {
-	if ( SectorTemperature( GetWorldMinutesInDay(), gWorldSectorX, gWorldSectorY, gbWorldSectorZ ) == HOT )
+	if (SectorTemperature(GetWorldMinutesInDay(), gWorldSector) == HOT)
 	{
 		return( HOT_DAY_LIGHTLEVEL );
 	}
@@ -397,7 +396,7 @@ void EnvBeginRainStorm( UINT8 ubIntensity )
 	if( !gfBasement && !gfCaves )
 	{
 		gfDoLighting = TRUE;
-		SLOGD(DEBUG_TAG_RENDERWORLD, "Starting Rain...."  );
+		SLOGD("Starting Rain...."  );
 
 		if ( ubIntensity == 1 )
 		{
@@ -415,7 +414,7 @@ void EnvBeginRainStorm( UINT8 ubIntensity )
 void EnvEndRainStorm( )
 {
 	gfDoLighting = TRUE;
-	SLOGD(DEBUG_TAG_RENDERWORLD, "Ending Rain...."  );
+	SLOGD("Ending Rain...."  );
 
 	guiEnvWeather	&= (~WEATHER_FORECAST_THUNDERSHOWERS );
 	guiEnvWeather	&= (~WEATHER_FORECAST_SHOWERS );
@@ -501,14 +500,14 @@ void UpdateTemperature( UINT8 ubTemperatureCode )
 	gfDoLighting = TRUE;
 }
 
-INT8 SectorTemperature( UINT32 uiTime, INT16 sSectorX, INT16 sSectorY, INT8 bSectorZ )
+INT8 SectorTemperature(UINT32 uiTime, const SGPSector& sector)
 {
-	if (bSectorZ > 0)
+	if (sector.z > 0)
 	{
 		// cool underground
 		return( 0 );
 	}
-	else if ( IsSectorDesert( sSectorX, sSectorY ) ) // is desert
+	else if (IsSectorDesert(sector))
 	{
 		return( gubDesertTemperature );
 	}

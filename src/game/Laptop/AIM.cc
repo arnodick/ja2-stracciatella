@@ -1,6 +1,7 @@
 #include "Cursors.h"
 #include "Directories.h"
 #include "Font.h"
+#include "GameRes.h"
 #include "Laptop.h"
 #include "AIM.h"
 #include "VObject.h"
@@ -10,7 +11,6 @@
 #include "Game_Clock.h"
 #include "Text.h"
 #include "LaptopSave.h"
-#include "Multi_Language_Graphic_Utils.h"
 #include "Video.h"
 #include "VSurface.h"
 #include "Button_System.h"
@@ -18,6 +18,9 @@
 
 #include "ContentManager.h"
 #include "GameInstance.h"
+
+#include <string_theory/string>
+
 
 UINT8			AimMercArray[ MAX_NUMBER_MERCS ];
 
@@ -191,11 +194,11 @@ void GameInitAIM()
 }
 
 
-static void SelectBannerRegionCallBack(MOUSE_REGION* pRegion, INT32 iReason);
-static void SelectHistoryRegionCallBack(MOUSE_REGION* pRegion, INT32 iReason);
-static void SelectLinksRegionCallBack(MOUSE_REGION* pRegion, INT32 iReason);
-static void SelectMemberCardRegionCallBack(MOUSE_REGION* pRegion, INT32 iReason);
-static void SelectPoliciesRegionCallBack(MOUSE_REGION* pRegion, INT32 iReason);
+static void SelectBannerRegionCallBack(MOUSE_REGION* pRegion, UINT32 iReason);
+static void SelectHistoryRegionCallBack(MOUSE_REGION* pRegion, UINT32 iReason);
+static void SelectLinksRegionCallBack(MOUSE_REGION* pRegion, UINT32 iReason);
+static void SelectMemberCardRegionCallBack(MOUSE_REGION* pRegion, UINT32 iReason);
+static void SelectPoliciesRegionCallBack(MOUSE_REGION* pRegion, UINT32 iReason);
 
 
 void EnterAIM()
@@ -214,34 +217,26 @@ void EnterAIM()
 	// load the Links graphic and add it
 	guiLinks = AddVideoObjectFromFile(LAPTOPDIR "/links.sti");
 
-	const char* ImageFile;
-
 	// load the History graphic and add it
-	ImageFile = GetMLGFilename(MLG_HISTORY);
-	guiHistory = AddVideoObjectFromFile(ImageFile);
+	guiHistory = AddVideoObjectFromFile(MLG_HISTORY);
 
 	// load the Wanring graphic and add it
-	ImageFile = GetMLGFilename(MLG_WARNING);
-	guiWarning = AddVideoObjectFromFile(ImageFile);
+	guiWarning = AddVideoObjectFromFile(MLG_WARNING);
 
 	// load the flower advertisment and add it
 	guiFlowerAdvertisement = AddVideoObjectFromFile(LAPTOPDIR "/flowerad_16.sti");
 
 	// load the your ad advertisment and add it
-	ImageFile = GetMLGFilename(MLG_YOURAD13);
-	guiAdForAdsImages = AddVideoObjectFromFile(ImageFile);
+	guiAdForAdsImages = AddVideoObjectFromFile(MLG_YOURAD13);
 
 	// load the insurance advertisment and add it
-	ImageFile = GetMLGFilename(MLG_INSURANCEAD10);
-	guiInsuranceAdImages = AddVideoObjectFromFile(ImageFile);
+	guiInsuranceAdImages = AddVideoObjectFromFile(MLG_INSURANCEAD10);
 
 	// load the funeral advertisment and add it
-	ImageFile = GetMLGFilename(MLG_FUNERALAD9);
-	guiFuneralAdImages = AddVideoObjectFromFile(ImageFile);
+	guiFuneralAdImages = AddVideoObjectFromFile(MLG_FUNERALAD9);
 
-	// load the funeral advertisment and add it
-	ImageFile = GetMLGFilename(MLG_BOBBYRAYAD21);
-	guiBobbyRAdImages = AddVideoObjectFromFile(ImageFile);
+	// load Bobby Ray's advertisement and add it
+	guiBobbyRAdImages = AddVideoObjectFromFile(MLG_BOBBYRAYAD21);
 
 
 	//** Mouse Regions **
@@ -357,9 +352,9 @@ void RenderAIM()
 }
 
 
-static void SelectMemberCardRegionCallBack(MOUSE_REGION* pRegion, INT32 iReason)
+static void SelectMemberCardRegionCallBack(MOUSE_REGION* pRegion, UINT32 iReason)
 {
-	if (iReason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (iReason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		if(!fFirstTimeIn)
 			guiCurrentLaptopMode = LAPTOP_MODE_AIM_MEMBERS_SORTED_FILES;
@@ -367,34 +362,34 @@ static void SelectMemberCardRegionCallBack(MOUSE_REGION* pRegion, INT32 iReason)
 }
 
 
-static void SelectPoliciesRegionCallBack(MOUSE_REGION* pRegion, INT32 iReason)
+static void SelectPoliciesRegionCallBack(MOUSE_REGION* pRegion, UINT32 iReason)
 {
-	if (iReason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (iReason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		guiCurrentLaptopMode = LAPTOP_MODE_AIM_POLICIES;
 	}
 }
 
 
-static void SelectHistoryRegionCallBack(MOUSE_REGION* pRegion, INT32 iReason)
+static void SelectHistoryRegionCallBack(MOUSE_REGION* pRegion, UINT32 iReason)
 {
-	if(iReason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if(iReason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		guiCurrentLaptopMode = LAPTOP_MODE_AIM_HISTORY;
 	}
 }
 
 
-static void SelectLinksRegionCallBack(MOUSE_REGION* pRegion, INT32 iReason)
+static void SelectLinksRegionCallBack(MOUSE_REGION* pRegion, UINT32 iReason)
 {
-	if (iReason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (iReason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		guiCurrentLaptopMode = LAPTOP_MODE_AIM_LINKS;
 	}
 }
 
 
-static void SelectAimLogoRegionCallBack(MOUSE_REGION* pRegion, INT32 iReason);
+static void SelectAimLogoRegionCallBack(MOUSE_REGION* pRegion, UINT32 iReason);
 
 
 void InitAimDefaults()
@@ -403,8 +398,7 @@ void InitAimDefaults()
 	guiRustBackGround = AddVideoObjectFromFile(LAPTOPDIR "/rustbackground.sti");
 
 	// load the Aim Symbol graphic and add it
-	const char* const ImageFile = GetMLGFilename(MLG_AIMSYMBOL);
-	guiAimSymbol = AddVideoObjectFromFile(ImageFile);
+	guiAimSymbol = AddVideoObjectFromFile(MLG_AIMSYMBOL);
 
 	//Mouse region for the Links
 	MSYS_DefineRegion(&gSelectedAimLogo, AIM_SYMBOL_X, AIM_SYMBOL_Y,
@@ -442,25 +436,24 @@ void DrawAimDefaults()
 }
 
 
-static void SelectAimLogoRegionCallBack(MOUSE_REGION* pRegion, INT32 iReason)
+static void SelectAimLogoRegionCallBack(MOUSE_REGION* pRegion, UINT32 iReason)
 {
-	if (iReason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (iReason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		guiCurrentLaptopMode = LAPTOP_MODE_AIM;
 	}
 }
 
 
-static void LoadAIMText(wchar_t buf[], UINT32 entry)
+static ST::string LoadAIMText(UINT32 entry)
 {
-	GCM->loadEncryptedString(AIMHISTORYFILE, buf, AIM_HISTORY_LINE_SIZE * entry, AIM_HISTORY_LINE_SIZE);
+	return GCM->loadEncryptedString(AIMHISTORYFILE, AIM_HISTORY_LINE_SIZE * entry, AIM_HISTORY_LINE_SIZE);
 }
 
 
 void DisplayAimSlogan()
 {
-	wchar_t	sSlogan[AIM_HISTORY_LINE_SIZE];
-	LoadAIMText(sSlogan, 0);
+	ST::string sSlogan = LoadAIMText(0);
 	//Display Aim Text under the logo
 	DisplayWrappedString(AIM_LOGO_TEXT_X, AIM_LOGO_TEXT_Y, AIM_LOGO_TEXT_WIDTH, 2, AIM_LOGO_FONT, AIM_FONT_MCOLOR_WHITE, sSlogan, FONT_MCOLOR_BLACK, CENTER_JUSTIFIED);
 }
@@ -468,22 +461,22 @@ void DisplayAimSlogan()
 
 void DisplayAimCopyright()
 {
-	wchar_t	sSlogan[AIM_HISTORY_LINE_SIZE];
+	ST::string sSlogan;
 
 	//Load and Display the copyright notice
 
-	LoadAIMText(sSlogan, AIM_COPYRIGHT_1);
+	sSlogan = LoadAIMText(AIM_COPYRIGHT_1);
 	DrawTextToScreen(sSlogan, AIM_COPYRIGHT_X, AIM_COPYRIGHT_Y, AIM_COPYRIGHT_WIDTH, AIM_COPYRIGHT_FONT, FONT_MCOLOR_DKWHITE, FONT_MCOLOR_BLACK, CENTER_JUSTIFIED);
 
-	LoadAIMText(sSlogan, AIM_COPYRIGHT_2);
+	sSlogan = LoadAIMText(AIM_COPYRIGHT_2);
 	DrawTextToScreen(sSlogan, AIM_COPYRIGHT_X, AIM_COPYRIGHT_Y + AIM_COPYRIGHT_GAP, AIM_COPYRIGHT_WIDTH, AIM_COPYRIGHT_FONT, FONT_MCOLOR_DKWHITE, FONT_MCOLOR_BLACK, CENTER_JUSTIFIED);
 
-	LoadAIMText(sSlogan, AIM_COPYRIGHT_3);
+	sSlogan = LoadAIMText(AIM_COPYRIGHT_3);
 	DrawTextToScreen(sSlogan, AIM_COPYRIGHT_X, AIM_COPYRIGHT_Y + AIM_COPYRIGHT_GAP * 2, AIM_COPYRIGHT_WIDTH, AIM_COPYRIGHT_FONT, FONT_MCOLOR_DKWHITE, FONT_MCOLOR_BLACK, CENTER_JUSTIFIED);
 }
 
 
-static void BtnAimBottomButtonsCallback(GUI_BUTTON* btn, INT32 reason);
+static void BtnAimBottomButtonsCallback(GUI_BUTTON* btn, UINT32 reason);
 
 
 void InitAimMenuBar()
@@ -493,7 +486,7 @@ void InitAimMenuBar()
 
 	UINT16             x    = BOTTOM_BUTTON_START_X;
 	UINT16     const   y    = BOTTOM_BUTTON_START_Y;
-	const StrPointer * text = AimBottomMenuText;
+	const ST::string* text = AimBottomMenuText;
 	LaptopMode const*  page = gCurrentAimPage;
 	FOR_EACHX(GUIButtonRef, i, guiBottomButtons, x += BOTTOM_BUTTON_START_WIDTH)
 	{
@@ -515,9 +508,9 @@ void ExitAimMenuBar()
 static void ResetAimButtons(GUIButtonRef* Buttons, UINT16 uNumberOfButtons);
 
 
-static void BtnAimBottomButtonsCallback(GUI_BUTTON *btn, INT32 reason)
+static void BtnAimBottomButtonsCallback(GUI_BUTTON *btn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		ResetAimButtons(guiBottomButtons, NUM_AIM_BOTTOMBUTTONS);
 		guiCurrentLaptopMode = static_cast<LaptopMode>(btn->GetUserData());
@@ -736,8 +729,7 @@ static BOOLEAN DrawWarningBox(BOOLEAN fInit, BOOLEAN fRedraw)
 		BltVideoObject(FRAME_BUFFER, guiWarning, 0, WARNING_X, WARNING_Y);
 
 		//Display Aim Warning Text
-		wchar_t sText[AIM_HISTORY_LINE_SIZE];
-		LoadAIMText(sText, AIM_WARNING_1);
+		ST::string sText = LoadAIMText(AIM_WARNING_1);
 		DisplayWrappedString(AIM_WARNING_TEXT_X, AIM_WARNING_TEXT_Y, AIM_WARNING_TEXT_WIDTH, 2, AIM_WARNING_FONT, FONT_RED, sText, FONT_MCOLOR_BLACK, CENTER_JUSTIFIED);
 
 		InvalidateRegion(AIM_AD_TOP_LEFT_X,AIM_AD_TOP_LEFT_Y, AIM_AD_BOTTOM_RIGHT_X	,AIM_AD_BOTTOM_RIGHT_Y);
@@ -758,9 +750,9 @@ static BOOLEAN DrawWarningBox(BOOLEAN fInit, BOOLEAN fRedraw)
 }
 
 
-static void SelectBannerRegionCallBack(MOUSE_REGION* pRegion, INT32 iReason)
+static void SelectBannerRegionCallBack(MOUSE_REGION* pRegion, UINT32 iReason)
 {
-	if (iReason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (iReason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		if( gubCurrentAdvertisment == AIM_AD_FLOWER_SHOP )
 			GoToWebPage( FLORIST_BOOKMARK );

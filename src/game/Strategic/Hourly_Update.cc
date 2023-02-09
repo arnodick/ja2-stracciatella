@@ -209,21 +209,25 @@ static void HourlyLarryUpdate(void)
 
 		// check to see if we're in a bar sector, if we are, we have access to alcohol
 		// which may be better than anything we've got...
+		static const SGPSector bars[] = {
+			{13, MAP_ROW_D},
+			{13, MAP_ROW_C},
+			{5, MAP_ROW_C},
+			{5, MAP_ROW_D},
+			{6, MAP_ROW_C},
+			{2, MAP_ROW_H}
+		};
 		if ( usTemptation < BAR_TEMPTATION && GetCurrentBalance() >= GCM->getItem(ALCOHOL)->getPrice() )
 		{
-			if ( pSoldier->bSectorZ == 0 &&
-						( ( pSoldier->sSectorX == 13 && pSoldier->sSectorY == MAP_ROW_D) ||
-							( pSoldier->sSectorX == 13 && pSoldier->sSectorY == MAP_ROW_C) ||
-							( pSoldier->sSectorX == 5 && pSoldier->sSectorY == MAP_ROW_C) ||
-							( pSoldier->sSectorX == 6 && pSoldier->sSectorY == MAP_ROW_C) ||
-							( pSoldier->sSectorX == 5 && pSoldier->sSectorY == MAP_ROW_D) ||
-							( pSoldier->sSectorX == 2 && pSoldier->sSectorY == MAP_ROW_H)
-						)
-				)
+			for (const auto& bar : bars)
 			{
-				// in a bar!
-				fBar = TRUE;
-				usTemptation = BAR_TEMPTATION;
+				if (pSoldier->sSector == bar)
+				{
+					// in a bar!
+					fBar = TRUE;
+					usTemptation = BAR_TEMPTATION;
+					break;
+				}
 			}
 		}
 
@@ -261,10 +265,10 @@ static void HourlyLarryUpdate(void)
 			{
 				// NB store all drunkenness info in LARRY_NORMAL profile (to use same values)
 				// so long as he keeps consuming, keep number above level at which he cracked
-				gMercProfiles[ LARRY_NORMAL ].bNPCData = __max( gMercProfiles[ LARRY_NORMAL ].bNPCData, LARRY_FALLS_OFF_WAGON );
+				gMercProfiles[ LARRY_NORMAL ].bNPCData = std::max(int(gMercProfiles[LARRY_NORMAL].bNPCData), LARRY_FALLS_OFF_WAGON);
 				gMercProfiles[ LARRY_NORMAL ].bNPCData += (INT8) Random( usTemptation );
 				// allow value to keep going up to 24 (about 2 days since we subtract Random( 2 ) when he has no access )
-				gMercProfiles[ LARRY_NORMAL ].bNPCData = __min( gMercProfiles[ LARRY_NORMAL ].bNPCData, 24 );
+				gMercProfiles[ LARRY_NORMAL ].bNPCData = std::min(int(gMercProfiles[LARRY_NORMAL].bNPCData), 24);
 				if ( fBar )
 				{
 					// take $ from player's account
@@ -314,7 +318,7 @@ static void HourlyCheckIfSlayAloneSoHeCanLeave(void)
 		return;
 	}
 	if (pSoldier->bLife == 0) return;
-	if( PlayerMercsInSector( (UINT8)pSoldier->sSectorX, (UINT8)pSoldier->sSectorY, pSoldier->bSectorZ ) == 1 )
+	if (PlayerMercsInSector(pSoldier->sSector) == 1)
 	{
 		if( Chance( 15 ) )
 		{

@@ -40,7 +40,7 @@ extern void RemoveObjFrom( OBJECTTYPE * pObj, UINT8 ubRemoveIndex );
 extern BOOLEAN PlaceObjectAtObjectIndex( OBJECTTYPE * pSourceObj, OBJECTTYPE * pTargetObj, UINT8 ubIndex );
 extern void GetObjFrom( OBJECTTYPE * pObj, UINT8 ubGetIndex, OBJECTTYPE * pDest );
 
-bool AttachObject(SOLDIERTYPE*, OBJECTTYPE* pTargetObj, OBJECTTYPE* pAttachment);
+bool AttachObject(SOLDIERTYPE* const s, OBJECTTYPE* const pTargetObj, OBJECTTYPE* const pAttachment, UINT8 const ubIndexInStack = 0);
 extern BOOLEAN RemoveAttachment( OBJECTTYPE * pObj, INT8 bAttachPos, OBJECTTYPE * pNewObj );
 
 UINT8	CalculateObjectWeight(const OBJECTTYPE* pObject);
@@ -88,10 +88,7 @@ void CreateKeyObject(OBJECTTYPE*, UINT8 ubNumberOfKeys, UINT8 ubKeyIdValue);
 BOOLEAN DeleteKeyObject( OBJECTTYPE * pObj );
 void    AllocateObject(OBJECTTYPE** pObj);
 
-// removes a key from a *KEYRING* slot
-BOOLEAN RemoveKeyFromSlot( SOLDIERTYPE * pSoldier, INT8 bKeyRingPosition, OBJECTTYPE * pObj );
-
-// take several
+// remove one or more keys from a *KEYRING* slot
 BOOLEAN RemoveKeysFromSlot( SOLDIERTYPE * pSoldier, INT8 bKeyRingPosition, UINT8 ubNumberOfKeys ,OBJECTTYPE * pObj );
 
 // add the keys to an inventory slot
@@ -173,8 +170,5 @@ void StackObjs(OBJECTTYPE* pSourceObj, OBJECTTYPE* pTargetObj, UINT8 ubNumberToC
 bool ItemIsCool(OBJECTTYPE const&);
 
 bool HasObjectImprint(OBJECTTYPE const&);
-
-// Fill the vector with all hardcoded item models.
-void createAllHardcodedItemModels(std::vector<const ItemModel*> &items);
 
 #endif

@@ -77,11 +77,15 @@
 #include "Video.h"
 #include "VObject_Blitters.h"
 #include "UILayout.h"
-#include "slog/slog.h"
+#include "Logger.h"
 
 
 #include "ContentManager.h"
 #include "GameInstance.h"
+
+#include <string_theory/format>
+#include <string_theory/string>
+
 
 static BOOLEAN gfCorruptMap        = FALSE;
 static BOOLEAN gfCorruptSchedules  = FALSE;
@@ -190,8 +194,6 @@ void EditScreenInit(void)
 	gusEditorTaskbarHiColor = Get16BPPColor( FROMRGB( 122, 124, 121 ) );
 	gusEditorTaskbarLoColor = Get16BPPColor( FROMRGB(  22,  55,  73 ) );
 
-	InitClipboard();
-
 	InitializeRoadMacros();
 
 	InitArmyGunTypes();
@@ -203,7 +205,6 @@ void EditScreenShutdown(void)
 {
 	GameShutdownEditorMercsInfo();
 	RemoveAllFromUndoList();
-	KillClipboard();
 }
 
 
@@ -212,7 +213,7 @@ static void EditModeInit(void)
 {
 	UINT32 x;
 
-	SLOGI(DEBUG_TAG_EDITOR, "Entering editor mode...");
+	SLOGI("Entering editor mode...");
 
 	gfRealGunNut = gGameOptions.fGunNut;
 	gGameOptions.fGunNut = TRUE;
@@ -346,7 +347,7 @@ static void EditModeInit(void)
 	}
 	else
 	{
-		SLOGD(DEBUG_TAG_EDITOR, "Creating summary window...");
+		SLOGD("Creating summary window...");
 		CreateSummaryWindow();
 		gfNeedToInitGame = TRUE;
 	}
@@ -361,7 +362,7 @@ static void EditModeInit(void)
 
 	gfIntendOnEnteringEditor = FALSE;
 
-	SLOGD(DEBUG_TAG_EDITOR, "Finished entering editor mode...");
+	SLOGD("Finished entering editor mode...");
 }
 
 
@@ -377,7 +378,7 @@ static BOOLEAN EditModeShutdown(void)
 	if( gfConfirmExitFirst )
 	{
 		gfConfirmExitPending = TRUE;
-		CreateMessageBox( L"Exit editor?" );
+		CreateMessageBox( "Exit editor?" );
 		return FALSE;
 	}
 
@@ -495,7 +496,7 @@ static void SetBackgroundTexture(void)
 		RemoveAllLandsOfTypeRange( cnt, FIRSTTEXTURE, DEEPWATERTEXTURE );
 
 		// Add level
-		usIndex = (UINT16)(rand( ) % 10 );
+		usIndex = (UINT16)Random(10);
 
 		// Adjust for type
 		usIndex += gTileTypeStartIndex[ gCurrentBackground ];
@@ -513,7 +514,7 @@ static void SetBackgroundTexture(void)
 static BOOLEAN DoWindowSelection(void)
 {
 	RenderSelectionWindow( );
-	RenderButtonsFastHelp( );
+	RenderFastHelp( );
 	if ( fAllDone )
 	{
 		switch ( iDrawMode )
@@ -551,7 +552,7 @@ static BOOLEAN DoWindowSelection(void)
 //in the world.
 static void RemoveTempMouseCursorObject(void)
 {
-	if ( iCurBankMapIndex < 0x8000 )
+	if ( iCurBankMapIndex < GRIDSIZE )
 	{
 		ForceRemoveStructFromTail( iCurBankMapIndex );
 		gCursorNode = NULL;
@@ -638,11 +639,11 @@ static BOOLEAN DrawTempMouseCursorObject(void)
 			break;
 	}
 
-	const GridNo pos = GetMouseMapPos();
+	const GridNo pos = guiCurrentCursorGridNo;
 	if (pos == NOWHERE) return FALSE;
 
 	iCurBankMapIndex = pos;
-	if (iCurBankMapIndex >= 0x8000) return FALSE;
+	if (iCurBankMapIndex >= GRIDSIZE) return FALSE;
 
 	//Hook into the smart methods to override the selection window methods.
 	switch (iDrawMode)
@@ -694,7 +695,6 @@ static BOOLEAN DrawTempMouseCursorObject(void)
 //Displays the current drawing object in the small, lower left window of the editor's toolbar.
 void ShowCurrentDrawingMode( void )
 {
-	SGPRect			ClipRect, NewRect;
 	INT32				iShowMode;
 	UINT16			usUseIndex;
 	UINT16			usObjIndex;
@@ -706,13 +706,13 @@ void ShowCurrentDrawingMode( void )
 	INT32 const h =  58;
 
 	// Set up a clipping rectangle for the display window.
+	SGPRect NewRect;
 	NewRect.iLeft   = x;
 	NewRect.iTop    = y;
 	NewRect.iRight  = x + w;
 	NewRect.iBottom = y + h;
 
-	GetClippingRect(&ClipRect);
-	SetClippingRect(&NewRect);
+	SGPRect const ClipRect = SetClippingRect(NewRect);
 
 	// Clear it out
 	ColorFillVideoSurfaceArea(FRAME_BUFFER, x, y, x + w, y + h, 0);
@@ -865,9 +865,8 @@ void ShowCurrentDrawingMode( void )
 			break;
 		case DRAW_MODE_SMART_WALLS:
 		{
-			const GridNo pos = GetMouseMapPos();
-			if (pos == NOWHERE ||
-					!CalcWallInfoUsingSmartMethod(pos, &usObjIndex, &usUseIndex))
+			if (guiCurrentCursorGridNo == NOWHERE ||
+					!CalcWallInfoUsingSmartMethod(guiCurrentCursorGridNo, &usObjIndex, &usUseIndex))
 			{
 				CalcSmartWallDefault(&usObjIndex, &usUseIndex);
 			}
@@ -876,9 +875,8 @@ void ShowCurrentDrawingMode( void )
 
 		case DRAW_MODE_SMART_DOORS:
 		{
-			const GridNo pos = GetMouseMapPos();
-			if (pos == NOWHERE ||
-					!CalcDoorInfoUsingSmartMethod(pos, &usObjIndex, &usUseIndex))
+			if (guiCurrentCursorGridNo == NOWHERE ||
+					!CalcDoorInfoUsingSmartMethod(guiCurrentCursorGridNo, &usObjIndex, &usUseIndex))
 			{
 				CalcSmartDoorDefault(&usObjIndex, &usUseIndex);
 			}
@@ -887,9 +885,8 @@ void ShowCurrentDrawingMode( void )
 
 		case DRAW_MODE_SMART_WINDOWS:
 		{
-			const GridNo pos = GetMouseMapPos();
-			if (pos == NOWHERE ||
-					!CalcWindowInfoUsingSmartMethod(pos, &usObjIndex, &usUseIndex))
+			if (guiCurrentCursorGridNo == NOWHERE ||
+					!CalcWindowInfoUsingSmartMethod(guiCurrentCursorGridNo, &usObjIndex, &usUseIndex))
 			{
 				CalcSmartWindowDefault(&usObjIndex, &usUseIndex);
 			}
@@ -898,9 +895,8 @@ void ShowCurrentDrawingMode( void )
 
 		case DRAW_MODE_SMART_BROKEN_WALLS:
 		{
-			const GridNo pos = GetMouseMapPos();
-			if (pos == NOWHERE ||
-					!CalcBrokenWallInfoUsingSmartMethod(pos, &usObjIndex, &usUseIndex))
+			if (guiCurrentCursorGridNo == NOWHERE ||
+					!CalcBrokenWallInfoUsingSmartMethod(guiCurrentCursorGridNo, &usObjIndex, &usUseIndex))
 			{
 				CalcSmartBrokenWallDefault(&usObjIndex, &usUseIndex);
 			}
@@ -934,7 +930,7 @@ void ShowCurrentDrawingMode( void )
 	}
 
 	InvalidateRegion(x, y, x + w, y + h);
-	SetClippingRect(&ClipRect);
+	SetClippingRect(ClipRect);
 }
 
 
@@ -1206,7 +1202,7 @@ static void RemoveGotoGridNoUI(void);
 static void HandleKeyboardShortcuts(void)
 {
 	static BOOLEAN fShowTrees = TRUE;
-	while( DequeueEvent( &EditorInputEvent ) )
+	while( DequeueSpecificEvent(&EditorInputEvent, KEYBOARD_EVENTS) )
 	{
 		if( !HandleSummaryInput( &EditorInputEvent ) && !HandleTextInput( &EditorInputEvent ) && EditorInputEvent.usEvent == KEY_DOWN )
 		{
@@ -1215,7 +1211,7 @@ static void HandleKeyboardShortcuts(void)
 				switch( EditorInputEvent.usParam )
 				{
 					case SDLK_ESCAPE:
-						SetInputFieldStringWith16BitString( 0, L"" );
+						SetInputFieldString( 0, ST::null );
 						RemoveGotoGridNoUI();
 						break;
 
@@ -1224,7 +1220,7 @@ static void HandleKeyboardShortcuts(void)
 					case 'x':
 						if( EditorInputEvent.usKeyState & ALT_DOWN )
 						{
-							SetInputFieldStringWith16BitString( 0, L"" );
+							SetInputFieldString( 0, ST::null );
 							RemoveGotoGridNoUI();
 							iCurrentAction = ACTION_QUIT_GAME;
 						}
@@ -1409,7 +1405,7 @@ static void HandleKeyboardShortcuts(void)
 
 				case SDLK_F4:
 					MusicPlay( GCM->getMusicForMode(giMusicMode) );
-					SLOGD(DEBUG_TAG_EDITOR, "Testing music %s", GCM->getMusicForMode(giMusicMode));
+					SLOGD("Testing music {}", GCM->getMusicForMode(giMusicMode));
 					giMusicMode = (MusicMode)(giMusicMode + 1);
 					if( giMusicMode >= MAX_MUSIC_MODES )
 						giMusicMode = MUSIC_MAIN_MENU;
@@ -1441,7 +1437,7 @@ static void HandleKeyboardShortcuts(void)
 								RemoveAllRoofsOfTypeRange( i, FIRSTTEXTURE, LASTITEM );
 								RemoveAllOnRoofsOfTypeRange( i, FIRSTTEXTURE, LASTITEM );
 								RemoveAllShadowsOfTypeRange( i, FIRSTROOF, LASTSLANTROOF );
-								usRoofIndex = 9 + ( rand() % 3 );
+								usRoofIndex = 9 + Random(3);
 								UINT16 usTileIndex = GetTileIndexFromTypeSubIndex(usRoofType, usRoofIndex);
 								AddRoofToHead( i, usTileIndex );
 							}
@@ -1455,17 +1451,17 @@ static void HandleKeyboardShortcuts(void)
 				case SDLK_F9: break;
 
 				case SDLK_F10:
-					CreateMessageBox( L"Are you sure you wish to remove all lights?" );
+					CreateMessageBox( "Are you sure you wish to remove all lights?" );
 					gfRemoveLightsPending = TRUE;
 					break;
 
 				case SDLK_F11:
-					CreateMessageBox( L"Are you sure you wish to reverse the schedules?" );
+					CreateMessageBox( "Are you sure you wish to reverse the schedules?" );
 					gfScheduleReversalPending = TRUE;
 					break;
 
 				case SDLK_F12:
-					CreateMessageBox( L"Are you sure you wish to clear all of the schedules?" );
+					CreateMessageBox( "Are you sure you wish to clear all of the schedules?" );
 					gfScheduleClearPending = TRUE;
 					break;
 
@@ -1694,12 +1690,12 @@ static void HandleKeyboardShortcuts(void)
 					{
 						if (fShowTrees)
 						{
-							ScreenMsg(FONT_MCOLOR_LTYELLOW, MSG_INTERFACE, L"Removing Treetops");
+							ScreenMsg(FONT_MCOLOR_LTYELLOW, MSG_INTERFACE, "Removing Treetops");
 							WorldHideTrees();
 						}
 						else
 						{
-							ScreenMsg(FONT_MCOLOR_LTYELLOW, MSG_INTERFACE, L"Showing Treetops");
+							ScreenMsg(FONT_MCOLOR_LTYELLOW, MSG_INTERFACE, "Showing Treetops");
 							WorldShowTrees();
 						}
 						fShowTrees = !fShowTrees;
@@ -1762,6 +1758,7 @@ static void HandleKeyboardShortcuts(void)
 					if( gusPreserveSelectionWidth > 8 )
 						gusPreserveSelectionWidth = 1;
 					gfRenderTaskbar = TRUE;
+					break;
 				default:
 					iCurrentAction = ACTION_NULL;
 					break;
@@ -1789,8 +1786,7 @@ static ScreenID PerformSelectedAction(void)
 
 		case ACTION_SET_WAYPOINT:
 		{
-			const GridNo pos = GetMouseMapPos();
-			AddMercWaypoint(pos);
+			AddMercWaypoint(guiCurrentCursorGridNo);
 			break;
 		}
 
@@ -1805,18 +1801,15 @@ static ScreenID PerformSelectedAction(void)
 			break;
 
 		case ACTION_QUICK_ERASE:
-			if (gViewportRegion.uiFlags & MSYS_MOUSE_IN_AREA)
+			if (guiCurrentCursorGridNo != NOWHERE)
 			{
-				const UINT32 pos = GetMouseMapPos();
-				if (pos != NOWHERE && pos < 0x8000)
-				{
-					QuickEraseMapTile(pos);
-				}
+				QuickEraseMapTile(guiCurrentCursorGridNo);
 			}
 			break;
 
 		case ACTION_QUIT_GAME:
 			requestGameExit();
+			break;
 		case ACTION_EXIT_EDITOR:
 			if( EditModeShutdown( ) )
 			{
@@ -1860,16 +1853,16 @@ static ScreenID PerformSelectedAction(void)
 		case ACTION_NEW_MAP:
 			fNewMap = TRUE;
 			if( gfPendingBasement )
-				CreateMessageBox( L"Delete current map and start a new basement level?" );
+				CreateMessageBox( "Delete current map and start a new basement level?" );
 			else if( gfPendingCaves )
-				CreateMessageBox( L"Delete current map and start a new cave level?" );
+				CreateMessageBox( "Delete current map and start a new cave level?" );
 			else
-				CreateMessageBox( L"Delete current map and start a new outdoor level?" );
+				CreateMessageBox( "Delete current map and start a new outdoor level?" );
 			break;
 
 		case ACTION_SET_NEW_BACKGROUND:
 			if (!fBeenWarned)
-				CreateMessageBox( L" Wipe out ground textures? " );
+				CreateMessageBox( " Wipe out ground textures? " );
 			else
 			{
 				gCurrentBackground = TerrainBackgroundTile;
@@ -2057,15 +2050,19 @@ static ScreenID PerformSelectedAction(void)
 
 		case ACTION_COPY_MERC_PLACEMENT:
 		{
-			const GridNo pos = GetMouseMapPos();
-			CopyMercPlacement(pos);
+			if (guiCurrentCursorGridNo != NOWHERE)
+			{
+				CopyMercPlacement(guiCurrentCursorGridNo);
+			}
 			break;
 		}
 
 		case ACTION_PASTE_MERC_PLACEMENT:
 		{
-			const GridNo pos = GetMouseMapPos();
-			PasteMercPlacement(pos);
+			if (guiCurrentCursorGridNo != NOWHERE)
+			{
+				PasteMercPlacement(guiCurrentCursorGridNo);
+			}
 			break;
 		}
 
@@ -2130,15 +2127,19 @@ static ScreenID PerformSelectedAction(void)
 
 		case ACTION_WALL_PASTE1:	// Doors		//** Changes needed
 		{
-			const GridNo pos = GetMouseMapPos();
-			AddWallToStructLayer(pos, FIRSTWALL18, TRUE);
+			if (guiCurrentCursorGridNo != NOWHERE)
+			{
+				AddWallToStructLayer(guiCurrentCursorGridNo, FIRSTWALL18, TRUE);
+			}
 			break;
 		}
 
 		case ACTION_WALL_PASTE2:	// Windows	//** Changes Needed
 		{
-			const GridNo pos = GetMouseMapPos();
-			AddWallToStructLayer(pos, FIRSTWALL19, TRUE);
+			if (guiCurrentCursorGridNo != NOWHERE)
+			{
+				AddWallToStructLayer(guiCurrentCursorGridNo, FIRSTWALL19, TRUE);
+			}
 			break;
 		}
 
@@ -2286,73 +2287,73 @@ static ScreenID WaitForHelpScreenResponse(void)
 
 	SetFont( gp12PointFont1 );
 
-	gprintf( 55,  55, L"HOME" );
-	gprintf( 205, 55, L"Toggle fake editor lighting ON/OFF" );
+	GPrint( 55,  55, "HOME" );
+	GPrint( 205, 55, "Toggle fake editor lighting ON/OFF" );
 
-	gprintf( 55,  67, L"INSERT" );
-	gprintf( 205, 67, L"Toggle fill mode ON/OFF" );
+	GPrint( 55,  67, "INSERT" );
+	GPrint( 205, 67, "Toggle fill mode ON/OFF" );
 
-	gprintf( 55,  79, L"BKSPC" );
-	gprintf( 205, 79, L"Undo last change" );
+	GPrint( 55,  79, "BKSPC" );
+	GPrint( 205, 79, "Undo last change" );
 
-	gprintf( 55,  91, L"DEL" );
-	gprintf( 205, 91, L"Quick erase object under mouse cursor" );
+	GPrint( 55,  91, "DEL" );
+	GPrint( 205, 91, "Quick erase object under mouse cursor" );
 
-	gprintf( 55,  103, L"ESC" );
-	gprintf( 205, 103, L"Exit editor" );
+	GPrint( 55,  103, "ESC" );
+	GPrint( 205, 103, "Exit editor" );
 
-	gprintf( 55,  115, L"PGUP/PGDN" );
-	gprintf( 205, 115, L"Change object to be pasted" );
+	GPrint( 55,  115, "PGUP/PGDN" );
+	GPrint( 205, 115, "Change object to be pasted" );
 
-	gprintf( 55,  127, L"F1" );
-	gprintf( 205, 127, L"This help screen" );
+	GPrint( 55,  127, "F1" );
+	GPrint( 205, 127, "This help screen" );
 
-	gprintf( 55,  139, L"F10" );
-	gprintf( 205, 139, L"Save current map" );
+	GPrint( 55,  139, "F10" );
+	GPrint( 205, 139, "Save current map" );
 
-	gprintf( 55,  151, L"F11" );
-	gprintf( 205, 151, L"Load map as current" );
+	GPrint( 55,  151, "F11" );
+	GPrint( 205, 151, "Load map as current" );
 
-	gprintf( 55,  163, L"+/-" );
-	gprintf( 205, 163, L"Change shadow darkness by .01" );
+	GPrint( 55,  163, "+/-" );
+	GPrint( 205, 163, "Change shadow darkness by .01" );
 
-	gprintf( 55,  175, L"SHFT +/-" );
-	gprintf( 205, 175, L"Change shadow darkness by .05" );
+	GPrint( 55,  175, "SHFT +/-" );
+	GPrint( 205, 175, "Change shadow darkness by .05" );
 
-	gprintf( 55,  187, L"0 - 9" );
-	gprintf( 205, 187, L"Change map/tileset filename" );
+	GPrint( 55,  187, "0 - 9" );
+	GPrint( 205, 187, "Change map/tileset filename" );
 
-	gprintf( 55,  199, L"b" );
-	gprintf( 205, 199, L"Change brush size" );
+	GPrint( 55,  199, "b" );
+	GPrint( 205, 199, "Change brush size" );
 
-	gprintf( 55,  211, L"d" );
-	gprintf( 205, 211, L"Draw debris" );
+	GPrint( 55,  211, "d" );
+	GPrint( 205, 211, "Draw debris" );
 
-	gprintf( 55,  223, L"o" );
-	gprintf( 205, 223, L"Draw obstacle" );
+	GPrint( 55,  223, "o" );
+	GPrint( 205, 223, "Draw obstacle" );
 
-	gprintf( 55,  235, L"r" );
-	gprintf( 205, 235, L"Draw rocks" );
+	GPrint( 55,  235, "r" );
+	GPrint( 205, 235, "Draw rocks" );
 
-	gprintf( 55,  247, L"t" );
-	gprintf( 205, 247, L"Toggle trees display ON/OFF" );
+	GPrint( 55,  247, "t" );
+	GPrint( 205, 247, "Toggle trees display ON/OFF" );
 
-	gprintf( 55,  259, L"g" );
-	gprintf( 205, 259, L"Draw ground textures" );
+	GPrint( 55,  259, "g" );
+	GPrint( 205, 259, "Draw ground textures" );
 
-	gprintf( 55,  271, L"w" );
-	gprintf( 205, 271, L"Draw building walls" );
+	GPrint( 55,  271, "w" );
+	GPrint( 205, 271, "Draw building walls" );
 
-	gprintf( 55,  283, L"e" );
-	gprintf( 205, 283, L"Toggle erase mode ON/OFF" );
+	GPrint( 55,  283, "e" );
+	GPrint( 205, 283, "Toggle erase mode ON/OFF" );
 
-	gprintf( 55,  295, L"h" );
-	gprintf( 205, 295, L"Toggle roofs ON/OFF" );
+	GPrint( 55,  295, "h" );
+	GPrint( 205, 295, "Toggle roofs ON/OFF" );
 
 
 	fLeaveScreen = FALSE;
 
-	while (DequeueEvent(&DummyEvent))
+	while (DequeueSpecificEvent(&DummyEvent, KEYBOARD_EVENTS))
 	{
 		if ( DummyEvent.usEvent == KEY_DOWN )
 		{
@@ -2369,7 +2370,7 @@ static ScreenID WaitForHelpScreenResponse(void)
 	}
 
 
-	if ( (_LeftButtonDown) || (_RightButtonDown) || fLeaveScreen )
+	if ( (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) || (IsMouseButtonDown(MOUSE_BUTTON_RIGHT)) || fLeaveScreen )
 	{
 		fHelpScreen = FALSE;
 
@@ -2391,7 +2392,7 @@ static ScreenID WaitForSelectionWindowResponse(void)
 {
 	InputAtom DummyEvent;
 
-	while (DequeueEvent(&DummyEvent))
+	while (DequeueSpecificEvent(&DummyEvent, KEYBOARD_EVENTS))
 	{
 		if ( DummyEvent.usEvent == KEY_DOWN )
 		{
@@ -2403,6 +2404,7 @@ static ScreenID WaitForSelectionWindowResponse(void)
 
 				case SDLK_ESCAPE:
 					RestoreSelectionList();
+					// fallthrough
 				case SDLK_RETURN:
 					fAllDone = TRUE;
 					break;
@@ -2442,8 +2444,7 @@ static ScreenID WaitForSelectionWindowResponse(void)
 BOOLEAN PlaceLight(INT16 const radius, GridNo const pos)
 try
 {
-	STRING512 filename;
-	sprintf(filename, "L-R%02d.LHT", radius);
+	ST::string filename = ST::format("L-R{02d}.LHT", radius);
 
 	// Attempt to create light
 	LIGHT_SPRITE* l = LightSpriteCreate(filename);
@@ -2459,7 +2460,7 @@ try
 		if (!l)
 		{
 			// Can't create sprite
-			SLOGW(DEBUG_TAG_EDITOR, "PlaceLight: Can't create light sprite of radius %d", radius);
+			SLOGW("PlaceLight: Can't create light sprite of radius {}", radius);
 			return FALSE;
 		}
 	}
@@ -2645,7 +2646,7 @@ static void MapOptimize(void)
 				{
 					fChangedHead = TRUE;
 					temp = head->pNext;
-					MemFree( head );
+					delete head;
 					head = temp;
 					if ( head )
 						head->pPrev = NULL;
@@ -2657,7 +2658,7 @@ static void MapOptimize(void)
 				{
 					fChangedTail = TRUE;
 					temp = end->pPrev;
-					MemFree( end );
+					delete end;
 					end = temp;
 					if ( end )
 						end->pNext = NULL;
@@ -2749,7 +2750,7 @@ static void DrawObjectsBasedOnSelectionRegion(void);
 
 static void HandleMouseClicksInGameScreen()
 {
-	GridNo const map_idx = GetMouseMapPos();
+	GridNo const map_idx = guiCurrentCursorGridNo;
 	if (map_idx == NOWHERE) return;
 
 	// If in taskbar modes which don't process clicks in the world
@@ -2761,7 +2762,7 @@ static void HandleMouseClicksInGameScreen()
 
 	BOOLEAN const prev_state = gfRenderWorld;
 
-	if (_LeftButtonDown)
+	if (IsMouseButtonDown(MOUSE_BUTTON_LEFT))
 	{
 		gfRenderWorld = TRUE;
 		// Are we trying to erase something?
@@ -2916,7 +2917,7 @@ static void HandleMouseClicksInGameScreen()
 				break;
 		}
 	}
-	else if (_RightButtonDown)
+	else if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT))
 	{
 		gfRenderWorld = TRUE;
 		switch (iDrawMode)
@@ -3004,11 +3005,13 @@ static BOOLEAN DoIRenderASpecialMouseCursor(void)
 			case DRAW_MODE_OSTRUCTS2:
 				if(CheckForFences())
 					fDontUseRandom = TRUE;
+				// fallthrough
 			case DRAW_MODE_DEBRIS:							// These only show if you first hit PGUP/PGDOWN keys
 			case DRAW_MODE_OSTRUCTS:
 			case DRAW_MODE_OSTRUCTS1:
 				if(!fDontUseRandom)
 					break;
+				// fallthrough
 			case DRAW_MODE_BANKS:
 			case DRAW_MODE_ROADS:
 			case DRAW_MODE_WALLS:
@@ -3056,49 +3059,49 @@ static void HideEntryPoints()
 	if (m.sWestGridNo  != -1) RemoveAllTopmostsOfTypeRange(m.sWestGridNo,  FIRSTPOINTERS, FIRSTPOINTERS);
 }
 
-void TaskOptionsCallback(GUI_BUTTON *btn,INT32 reason)
+void TaskOptionsCallback(GUI_BUTTON *btn,UINT32 reason)
 {
-	if(reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if(reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		iTaskMode = TASK_OPTIONS;
 	}
 }
 
-void TaskTerrainCallback(GUI_BUTTON *btn,INT32 reason)
+void TaskTerrainCallback(GUI_BUTTON *btn,UINT32 reason)
 {
-	if(reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if(reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		iTaskMode = TASK_TERRAIN;
 	}
 }
 
-void TaskBuildingCallback(GUI_BUTTON *btn,INT32 reason)
+void TaskBuildingCallback(GUI_BUTTON *btn,UINT32 reason)
 {
-	if(reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if(reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		iTaskMode = TASK_BUILDINGS;
 	}
 }
 
-void TaskItemsCallback(GUI_BUTTON *btn,INT32 reason)
+void TaskItemsCallback(GUI_BUTTON *btn,UINT32 reason)
 {
-	if(reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if(reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		iTaskMode = TASK_ITEMS;
 	}
 }
 
-void TaskMercsCallback(GUI_BUTTON *btn,INT32 reason)
+void TaskMercsCallback(GUI_BUTTON *btn,UINT32 reason)
 {
-	if(reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if(reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		iTaskMode = TASK_MERCS;
 	}
 }
 
-void TaskMapInfoCallback(GUI_BUTTON *btn,INT32 reason)
+void TaskMapInfoCallback(GUI_BUTTON *btn,UINT32 reason)
 {
-	if(reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if(reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		iTaskMode = TASK_MAPINFO;
 	}
@@ -3131,9 +3134,8 @@ void ProcessAreaSelection( BOOLEAN fWithLeftButton )
 				gubMaxRoomNumber++;
 				if( iCurrentTaskbar == TASK_BUILDINGS && TextInputMode() )
 				{
-					wchar_t str[4];
-					swprintf(str, lengthof(str), L"%d", gubCurrRoomNumber);
-					SetInputFieldStringWith16BitString( 1, str );
+					ST::string str = ST::format("{}", gubCurrRoomNumber);
+					SetInputFieldString( 1, str );
 					SetActiveField( 0 );
 				}
 			}
@@ -3189,6 +3191,8 @@ static void DrawObjectsBasedOnSelectionRegion(void)
 			if( fSkipTest || PerformDensityTest() )
 			{
 				iMapIndex = MAPROWCOLTOPOS( y, x );
+				if (iMapIndex < 0 || iMapIndex >= WORLD_MAX) continue;
+
 				switch( iDrawMode )
 				{
 					case DRAW_MODE_EXITGRID:
@@ -3218,7 +3222,7 @@ ScreenID EditScreenHandle(void)
 
 	if( gfWorldLoaded && gMapInformation.ubMapVersion <= 7 && !gfCorruptMap )
 	{
-		SLOGE(DEBUG_TAG_EDITOR, "Map data has just been corrupted. Don't save, don't quit, get Kris!  If he's not here, save the map using a temp filename and document everything you just did, especially your last action!" );
+		SLOGE("Map data has just been corrupted. Don't save, don't quit, get Kris!  If he's not here, save the map using a temp filename and document everything you just did, especially your last action!");
 		gfCorruptMap = TRUE;
 	}
 	if( gfWorldLoaded && gubScheduleID > 40 && !gfCorruptSchedules )
@@ -3226,7 +3230,7 @@ ScreenID EditScreenHandle(void)
 		OptimizeSchedules();
 		if( gubScheduleID > 32 )
 		{
-			SLOGE(DEBUG_TAG_EDITOR, "Schedule data has just been corrupted. Don't save, don't quit, get Kris!  If he's not here, save the map using a temp filename and document everything you just did, especially your last action!" );
+			SLOGE("Schedule data has just been corrupted. Don't save, don't quit, get Kris!  If he's not here, save the map using a temp filename and document everything you just did, especially your last action!");
 			gfCorruptSchedules = TRUE;
 		}
 	}
@@ -3267,6 +3271,12 @@ ScreenID EditScreenHandle(void)
 	if ( fSelectionWindow )
 		return( WaitForSelectionWindowResponse( ) );
 
+	if (gfSummaryWindowSaveRequested) {
+		gfSummaryWindowSaveRequested = FALSE;
+		iCurrentAction = ACTION_SAVE_MAP;
+		return LOADSAVE_SCREEN;
+	}
+
 	// If editing mercs, handle that stuff
 	ProcessMercEditing();
 
@@ -3283,13 +3293,13 @@ ScreenID EditScreenHandle(void)
 
 	HandleMouseClicksInGameScreen();
 
-	if( !gfFirstPlacement && !gfLeftButtonState )
+	if( !gfFirstPlacement && !IsMouseButtonDown(MOUSE_BUTTON_LEFT) )
 		gfFirstPlacement = TRUE;
 
 	//If we are copying or moving a building, we process, then delete the building layout immediately
 	//after releasing the mouse button.  If released in the world, then the building would have been
 	//processed in above function, HandleMouseClicksInGameScreen().
-	if( !_LeftButtonDown && gpBuildingLayoutList )
+	if( !IsMouseButtonDown(MOUSE_BUTTON_LEFT) && gpBuildingLayoutList )
 		DeleteBuildingLayout();
 
 	fShowingCursor = DoIRenderASpecialMouseCursor();
@@ -3359,13 +3369,13 @@ static void CreateGotoGridNoUI(void)
 	//Disable the rest of the editor
 	DisableEditorTaskbar();
 	//Create the background panel.
-	guiGotoGridNoUIButtonID = CreateLabel(L"Enter gridno:", FONT10ARIAL, FONT_YELLOW, FONT_BLACK, 290, 155, 60, 50, MSYS_PRIORITY_NORMAL);
+	guiGotoGridNoUIButtonID = CreateLabel("Enter gridno:", FONT10ARIAL, FONT_YELLOW, FONT_BLACK, 290, 155, 60, 50, MSYS_PRIORITY_NORMAL);
 	guiGotoGridNoUIButtonID->SpecifyTextOffsets(5, 5, FALSE);
 	//Create a blanket region so nobody can use
 	MSYS_DefineRegion(&GotoGridNoUIRegion, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, MSYS_PRIORITY_NORMAL + 1, 0, MSYS_NO_CALLBACK, MSYS_NO_CALLBACK);
 	//Init a text input field.
 	InitTextInputModeWithScheme( DEFAULT_SCHEME );
-	AddTextInputField( 300, 180, 40, 18, MSYS_PRIORITY_HIGH, L"", 6, INPUTTYPE_NUMERICSTRICT );
+	AddTextInputField( 300, 180, 40, 18, MSYS_PRIORITY_HIGH, ST::null, 6, INPUTTYPE_NUMERICSTRICT );
 }
 
 
@@ -3400,7 +3410,5 @@ static void UpdateLastActionBeforeLeaving(void)
 
 static void ReloadMap(void)
 {
-	wchar_t szFilename[30];
-	swprintf(szFilename, lengthof(szFilename), L"%hs", g_filename);
-	ExternalLoadMap( szFilename );
+	ExternalLoadMap( gFileForIO );
 }

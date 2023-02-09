@@ -1,7 +1,12 @@
 #ifndef __STRATEGIC_AI_H
 #define __STRATEGIC_AI_H
 
-#include "Strategic_Movement.h"
+#include "Types.h"
+struct GROUP;
+
+#define SAVED_ARMY_COMPOSITIONS		60
+#define SAVED_GARRISON_GROUPS		100
+#define SAVED_PATROL_GROUPS		50
 
 void InitStrategicAI(void);
 void KillStrategicAI(void);
@@ -19,7 +24,7 @@ enum
 };
 
 
-void ExecuteStrategicAIAction( UINT16 usActionCode, INT16 sSectorX, INT16 sSectorY );
+void ExecuteStrategicAIAction(UINT16 usActionCode, const SGPSector* sMap);
 
 void CheckEnemyControlledSector( UINT8 ubSectorID );
 void EvaluateQueenSituation(void);
@@ -34,15 +39,15 @@ void RecalculateGroupWeight(GROUP const&);
 
 BOOLEAN OkayForEnemyToMoveThroughSector( UINT8 ubSectorID );
 
-void StrategicHandleQueenLosingControlOfSector( INT16 sSectorX, INT16 sSectorY, INT16 sSectorZ );
+void StrategicHandleQueenLosingControlOfSector(const SGPSector& sSector);
 
 void WakeUpQueen(void);
 
 void StrategicHandleMineThatRanOut( UINT8 ubSectorID );
 
-INT16 FindPatrolGroupIndexForGroupID( UINT8 ubGroupID );
-INT16 FindPatrolGroupIndexForGroupIDPending( UINT8 ubGroupID );
-INT16 FindGarrisonIndexForGroupIDPending( UINT8 ubGroupID );
+size_t FindPatrolGroupIndexForGroupID( UINT8 ubGroupID );
+size_t FindPatrolGroupIndexForGroupIDPending( UINT8 ubGroupID );
+size_t FindGarrisonIndexForGroupIDPending( UINT8 ubGroupID );
 
 GROUP* FindPendingGroupInSector( UINT8 ubSectorID );
 
@@ -102,6 +107,14 @@ struct ARMY_COMPOSITION
 	INT8 bDesiredPopulation;
 	INT8 bStartPopulation;
 	INT8 bPadding[10]; // XXX HACK000B
+
+	bool empty()
+	{
+		return iReadability == 0 && bPriority == 0
+			&& bElitePercentage == 0 && bTroopPercentage == 0 && bAdminPercentage == 0
+			&& bDesiredPopulation == 0 && bStartPopulation == 0;
+	}
+
 };
 
 //Defines the patrol groups -- movement groups.

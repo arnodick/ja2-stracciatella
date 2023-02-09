@@ -1,10 +1,8 @@
 #include "GameVersion.h"
 
-#ifndef GAME_VERSION
-	#define GAME_VERSION "XXXXX"
-#endif
-
-#define FULL_VERSION "Stracciatella " GAME_VERSION
+#define STRINGIFY(x) #x
+#define TOSTRING(x) STRINGIFY(x)
+#define FULL_VERSION "Stracciatella " TOSTRING(GAME_VERSION)
 
 //
 // Keeps track of the game version
@@ -22,7 +20,7 @@ char const g_version_number[16] = "Build 04.12.02";
 // Keeps track of the saved game version.  Increment the saved game version whenever
 // you will invalidate the saved game file
 
-#define SAVE_GAME_VERSION 100
+#define SAVE_GAME_VERSION 102
 
 const UINT32 guiSavedGameVersion = SAVE_GAME_VERSION;
 
@@ -32,7 +30,7 @@ const UINT32 guiSavedGameVersion = SAVE_GAME_VERSION;
 
 TEST(GameVersion, asserts)
 {
-	EXPECT_EQ(lengthof(g_version_number), 16);
+	EXPECT_EQ(lengthof(g_version_number), 16u);
 }
 
 #endif

@@ -63,7 +63,8 @@ extern INT32 iHelicopterVehicleId;
 
 static inline VEHICLETYPE& GetHelicopter(void)
 {
-	Assert(0 <= iHelicopterVehicleId && iHelicopterVehicleId < ubNumberOfVehicles);
+	Assert(pVehicleList.size() <= INT32_MAX);
+	Assert(0 <= iHelicopterVehicleId && iHelicopterVehicleId < static_cast<INT32>(pVehicleList.size()));
 	VEHICLETYPE& v = pVehicleList[iHelicopterVehicleId];
 	Assert(v.fValid);
 	return v;
@@ -127,13 +128,16 @@ BOOLEAN IsHelicopterPilotAvailable( void );
 void TakeOffHelicopter( void );
 
 // test whether or not a sector contains a fuel site
-bool IsRefuelSiteInSector(INT16 sector);
+bool IsRefuelSiteInSector(INT16 const sector);
+
+// test whether or not the sector can refuel the heli
+bool IsRefuelAvailableInSector(INT16 const sector);
 
 // update which refueling sites are controlled by player & therefore available
 void UpdateRefuelSiteAvailability( void );
 
 // setup helicopter for player
-void SetUpHelicopterForPlayer( INT16 sX, INT16 sY );
+void SetUpHelicopterForPlayer(const SGPSector& sMap);
 
 // the intended path of the helicopter
 INT32 DistanceOfIntendedHelicopterPath( void );
@@ -148,7 +152,7 @@ void HandleHeliHoverTooLong( void );
 void DropOffEveryOneInHelicopter( void );
 
 // handle heli entering this sector
-BOOLEAN HandleHeliEnteringSector( INT16 sX, INT16 sY );
+BOOLEAN HandleHeliEnteringSector(const SGPSector& sMap);
 
 // set up helic, if it doesn't have a mvt group
 void SetUpHelicopterForMovement( void );
@@ -169,7 +173,7 @@ BOOLEAN CanHelicopterTakeOff( void );
 
 void InitializeHelicopter( void );
 
-bool IsSkyriderFlyingInSector(INT16 x, INT16 y);
+bool IsSkyriderFlyingInSector(const SGPSector& sMap);
 
 bool IsGroupTheHelicopterGroup(GROUP const&);
 

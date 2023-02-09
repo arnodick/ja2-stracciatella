@@ -1,7 +1,6 @@
 file(GLOB LOCAL_JA2_HEADERS ${CMAKE_CURRENT_SOURCE_DIR}/*.h)
 
 set(LOCAL_JA2_SOURCES
-    ${CMAKE_CURRENT_SOURCE_DIR}/Air_Raid.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/Animation_Cache.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/Animation_Control.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/Animation_Data.cc
@@ -71,6 +70,7 @@ set(LOCAL_JA2_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/Tactical_Save.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/Tactical_Turns.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/TeamTurns.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/Touch_UI.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/Turn_Based_Input.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/UI_Cursors.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/Vehicles.cc

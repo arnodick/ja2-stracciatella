@@ -1,38 +1,38 @@
 #include "AI.h"
 #include "AIInternals.h"
 #include "Animation_Control.h"
-#include "Font_Control.h"
-#include "Isometric_Utils.h"
-#include "Points.h"
-#include "Overhead.h"
-#include "OppList.h"
-#include "Items.h"
-#include "Structure.h"
-#include "Timer_Control.h"
-#include "Weapons.h"
-#include "NPC.h"
-#include "Soldier_Functions.h"
-#include "WorldMan.h"
-#include "Scheduling.h"
-#include "Message.h"
-#include "Structure_Wrap.h"
-#include "Keys.h"
-#include "PathAI.h"
-#include "Render_Fun.h"
 #include "Boxing.h"
-#include "Soldier_Profile.h"
-#include "Soldier_Macros.h"
-#include "LOS.h"
-#include "StrategicMap.h"
-#include "Quests.h"
-#include "Map_Screen_Interface_Map.h"
-#include "Soldier_Ani.h"
-#include "Rotting_Corpses.h"
-
 #include "ContentManager.h"
 #include "GameInstance.h"
+#include "GamePolicy.h"
+#include "Isometric_Utils.h"
+#include "Items.h"
+#include "Keys.h"
+#include "LOS.h"
+#include "Logger.h"
+#include "Map_Screen_Interface_Map.h"
+#include "Message.h"
+#include "NPC.h"
+#include "OppList.h"
+#include "Overhead.h"
+#include "PathAI.h"
+#include "Points.h"
+#include "Quests.h"
+#include "Render_Fun.h"
+#include "Rotting_Corpses.h"
+#include "Scheduling.h"
+#include "Soldier_Ani.h"
+#include "Soldier_Functions.h"
+#include "Soldier_Macros.h"
+#include "Soldier_Profile.h"
+#include "StrategicMap.h"
+#include "Structure.h"
+#include "Structure_Wrap.h"
+#include "Timer_Control.h"
 #include "WeaponModels.h"
-#include "policy/GamePolicy.h"
+#include "Weapons.h"
+#include "WorldMan.h"
+#include <string_theory/format>
 
 extern BOOLEAN gfUseAlternateQueenPosition;
 
@@ -46,7 +46,7 @@ static UINT32 guiRedSeekCounter = 0, guiRedHelpCounter = 0; guiRedHideCounter = 
 #endif
 
 #define CENTER_OF_RING 11237
-
+static const SGPSector meduna(3, MAP_ROW_P);
 
 static void DoneScheduleAction(SOLDIERTYPE* pSoldier)
 {
@@ -177,7 +177,7 @@ static INT8 DecideActionSchedule(SOLDIERTYPE* pSoldier)
 							}
 							else
 							{
-								SLOGW(DEBUG_TAG_AI, "Schedule involved locked door at %d but there's no lock there!", usGridNo1 );
+								SLOGW("Schedule involved locked door at {} but there's no lock there!", usGridNo1);
 								fDoUseDoor = FALSE;
 							}
 						}
@@ -297,7 +297,7 @@ static INT8 DecideActionSchedule(SOLDIERTYPE* pSoldier)
 									else
 									{
 										// WTF?  Warning time!
-										SLOGW(DEBUG_TAG_AI, "Schedule involved locked door at %d but there's no lock there!", usGridNo1 );
+										SLOGW("Schedule involved locked door at {} but there's no lock there!", usGridNo1);
 										fDoUseDoor = FALSE;
 									}
 								}
@@ -392,7 +392,7 @@ static INT8 DecideActionSchedule(SOLDIERTYPE* pSoldier)
 
 					if (pSoldier->usActionData == NOWHERE)
 					{
-						SLOGD(DEBUG_TAG_AI, "Civilian could not find path to map edge!" );
+						SLOGD("Civilian could not find path to map edge!" );
 						DoneScheduleAction( pSoldier );
 						return( AI_ACTION_NONE );
 					}
@@ -641,7 +641,7 @@ static INT8 DecideActionNamedNPC(SOLDIERTYPE* pSoldier)
 
 static INT8 DecideActionGreen(SOLDIERTYPE* pSoldier)
 {
-	INT32 iChance, iSneaky = 10;
+	INT32 iChance = 10;
 	INT8  bInWater,bInGas;
 
 	const BOOLEAN fCivilian =
@@ -905,13 +905,13 @@ static INT8 DecideActionGreen(SOLDIERTYPE* pSoldier)
 		// modify chance of patrol (and whether it's a sneaky one) by attitude
 		switch (pSoldier->bAttitude)
 		{
-			case DEFENSIVE:      iChance += -10;                 break;
-			case BRAVESOLO:      iChance +=   5;                 break;
-			case BRAVEAID:                                       break;
-			case CUNNINGSOLO:    iChance +=   5;  iSneaky += 10; break;
-			case CUNNINGAID:                      iSneaky +=  5; break;
-			case AGGRESSIVE:     iChance +=  10;  iSneaky += -5; break;
-			case ATTACKSLAYONLY: iChance +=  10;  iSneaky += -5; break;
+			case DEFENSIVE:      iChance += -10;  break;
+			case BRAVESOLO:      iChance +=   5;  break;
+			case BRAVEAID:                        break;
+			case CUNNINGSOLO:    iChance +=   5;  break;
+			case CUNNINGAID:                      break;
+			case AGGRESSIVE:     iChance +=  10;  break;
+			case ATTACKSLAYONLY: iChance +=  10;  break;
 		}
 
 		// reduce chance for any injury, less likely to wander around when hurt
@@ -1078,7 +1078,7 @@ static INT8 DecideActionYellow(SOLDIERTYPE* pSoldier)
 	INT32 iDummy;
 	INT16 sNoiseGridNo;
 	INT32 iNoiseValue;
-	INT32 iChance, iSneaky;
+	INT32 iChance;
 	INT16 sClosestFriend;
 	const BOOLEAN fCivilian =
 		IsOnCivTeam(pSoldier) &&
@@ -1251,7 +1251,6 @@ static INT8 DecideActionYellow(SOLDIERTYPE* pSoldier)
 		{
 			// remember that noise value is negative, and closer to 0 => more important!
 			iChance = 95 + (iNoiseValue / 3);
-			iSneaky = 30;
 
 			// increase
 
@@ -1271,13 +1270,13 @@ static INT8 DecideActionYellow(SOLDIERTYPE* pSoldier)
 			// modify chance of patrol (and whether it's a sneaky one) by attitude
 			switch (pSoldier->bAttitude)
 			{
-				case DEFENSIVE:      iChance += -10;  iSneaky +=  15;  break;
-				case BRAVESOLO:      iChance +=  10;                   break;
-				case BRAVEAID:       iChance +=   5;                   break;
-				case CUNNINGSOLO:    iChance +=   5;  iSneaky +=  30;  break;
-				case CUNNINGAID:                      iSneaky +=  30;  break;
-				case AGGRESSIVE:     iChance +=  20;  iSneaky += -10;  break;
-				case ATTACKSLAYONLY:	iChance +=  20;  iSneaky += -10;  break;
+				case DEFENSIVE:      iChance += -10;     break;
+				case BRAVESOLO:      iChance +=  10;     break;
+				case BRAVEAID:       iChance +=   5;     break;
+				case CUNNINGSOLO:    iChance +=   5;     break;
+				case CUNNINGAID:                         break;
+				case AGGRESSIVE:     iChance +=  20;     break;
+				case ATTACKSLAYONLY:	iChance +=  20;  break;
 			}
 
 
@@ -1314,7 +1313,6 @@ static INT8 DecideActionYellow(SOLDIERTYPE* pSoldier)
 		{
 			// there a chance enemy soldier choose to go "help" his friend
 			iChance = 50 - SpacesAway(pSoldier->sGridNo,sClosestFriend);
-			iSneaky = 10;
 
 			// set base chance according to orders
 			switch (pSoldier->bOrders)
@@ -1332,13 +1330,13 @@ static INT8 DecideActionYellow(SOLDIERTYPE* pSoldier)
 			// modify chance of patrol (and whether it's a sneaky one) by attitude
 			switch (pSoldier->bAttitude)
 			{
-				case DEFENSIVE:      iChance += -10;  iSneaky +=  15;        break;
-				case BRAVESOLO:                                              break;
-				case BRAVEAID:       iChance +=  20;  iSneaky += -10;        break;
-				case CUNNINGSOLO:                     iSneaky +=  30;        break;
-				case CUNNINGAID:     iChance +=  20;  iSneaky +=  20;        break;
-				case AGGRESSIVE:     iChance += -20;  iSneaky += -20;        break;
-				case ATTACKSLAYONLY: iChance += -20;  iSneaky += -20;        break;
+				case DEFENSIVE:      iChance += -10;  break;
+				case BRAVESOLO:                       break;
+				case BRAVEAID:       iChance +=  20;  break;
+				case CUNNINGSOLO:                     break;
+				case CUNNINGAID:     iChance +=  20;  break;
+				case AGGRESSIVE:     iChance += -20;  break;
+				case ATTACKSLAYONLY: iChance += -20;  break;
 			}
 
 			// reduce chance if breath is down, less likely to wander around when tired
@@ -1370,7 +1368,6 @@ static INT8 DecideActionYellow(SOLDIERTYPE* pSoldier)
 		{
 			// remember that noise value is negative, and closer to 0 => more important!
 			iChance = 25;
-			iSneaky = 30;
 
 			// set base chance according to orders
 			switch (pSoldier->bOrders)
@@ -1388,13 +1385,13 @@ static INT8 DecideActionYellow(SOLDIERTYPE* pSoldier)
 			// modify chance (and whether it's sneaky) by attitude
 			switch (pSoldier->bAttitude)
 			{
-				case DEFENSIVE:      iChance +=  10;  iSneaky +=  15;  break;
-				case BRAVESOLO:      iChance += -15;  iSneaky += -20;  break;
-				case BRAVEAID:       iChance += -20;  iSneaky += -20;  break;
-				case CUNNINGSOLO:    iChance +=  20;  iSneaky +=  30;  break;
-				case CUNNINGAID:     iChance +=  15;  iSneaky +=  30;  break;
-				case AGGRESSIVE:     iChance += -10;  iSneaky += -10;  break;
-				case ATTACKSLAYONLY: iChance += -10;  iSneaky += -10;  break;
+				case DEFENSIVE:      iChance +=  10; break;
+				case BRAVESOLO:      iChance += -15; break;
+				case BRAVEAID:       iChance += -20; break;
+				case CUNNINGSOLO:    iChance +=  20; break;
+				case CUNNINGAID:     iChance +=  15; break;
+				case AGGRESSIVE:     iChance += -10; break;
+				case ATTACKSLAYONLY: iChance += -10; break;
 			}
 
 
@@ -1507,7 +1504,7 @@ INT8 DecideActionRed(SOLDIERTYPE *pSoldier, UINT8 ubUnconsciousOK)
 	{
 		if ( (pSoldier->ubProfile == QUEEN || pSoldier->ubProfile == JOE) && ubCanMove )
 		{
-			if ( gWorldSectorX == 3 && gWorldSectorY == MAP_ROW_P && gbWorldSectorZ == 0 && !gfUseAlternateQueenPosition )
+			if (gWorldSector == meduna && !gfUseAlternateQueenPosition)
 			{
 				bActionReturned = HeadForTheStairCase( pSoldier );
 				if ( bActionReturned != AI_ACTION_NONE )
@@ -1530,7 +1527,7 @@ INT8 DecideActionRed(SOLDIERTYPE *pSoldier, UINT8 ubUnconsciousOK)
 	// WHEN LEFT IN GAS, WEAR GAS MASK IF AVAILABLE AND NOT WORN
 	////////////////////////////////////////////////////////////////////////////
 
-	if ( !bInGas && (gWorldSectorX == TIXA_SECTOR_X && gWorldSectorY == TIXA_SECTOR_Y) )
+	if (!bInGas && (gWorldSector.x == TIXA_SECTOR_X && gWorldSector.y == TIXA_SECTOR_Y))
 	{
 		// only chance if we happen to be caught with our gas mask off
 		if ( PreRandom( 10 ) == 0 && WearGasMaskIfAvailable( pSoldier ) )
@@ -1755,7 +1752,8 @@ INT8 DecideActionRed(SOLDIERTYPE *pSoldier, UINT8 ubUnconsciousOK)
 			// sight range), and there's at least one other team-mate around, and
 			// spotters haven't already been called for, then DO SO!
 
-			if ( ( CalcMaxTossRange( pSoldier, pSoldier->inv[BestThrow.bWeaponIn].usItem, TRUE ) > MaxDistanceVisible() ) &&
+			if ( BestThrow.bWeaponIn != NO_SLOT &&
+				( CalcMaxTossRange( pSoldier, pSoldier->inv[BestThrow.bWeaponIn].usItem, TRUE ) > MaxDistanceVisible() ) &&
 				(gTacticalStatus.Team[pSoldier->bTeam].bMenInSector > 1) &&
 				(gTacticalStatus.ubSpottersCalledForBy == NOBODY))
 			{
@@ -1983,12 +1981,14 @@ INT8 DecideActionRed(SOLDIERTYPE *pSoldier, UINT8 ubUnconsciousOK)
 						if (pSoldier->usActionData != NOWHERE)
 						{
 							// Check for a trap
-							if ( !ArmySeesOpponents() )
+							if (gamepolicy(avoid_ambushes) && !ArmySeesOpponents())
 							{
-								if ( GetNearestRottingCorpseAIWarning( pSoldier->usActionData ) > 0 )
+								UINT8 ubWarnLevel = GetNearestRottingCorpseAIWarning(pSoldier->usActionData);
+								if (ubWarnLevel > 0)
 								{
 									// abort! abort!
 									pSoldier->usActionData = NOWHERE;
+									SLOGD("TacticalAI: soldier #{} avoiding ambush trap on seeing corpses (warning level {})", pSoldier->ubID, ubWarnLevel);
 								}
 							}
 						}
@@ -2204,6 +2204,7 @@ INT8 DecideActionRed(SOLDIERTYPE *pSoldier, UINT8 ubUnconsciousOK)
 				{
 					if (!gfTurnBasedAI || GetAPsToChangeStance( pSoldier, ANIM_CROUCH ) <= pSoldier->bActionPoints)
 					{
+						pSoldier->usActionData = ANIM_CROUCH;
 						return(AI_ACTION_CHANGE_STANCE);
 					}
 				}
@@ -2366,7 +2367,7 @@ INT8 DecideActionRed(SOLDIERTYPE *pSoldier, UINT8 ubUnconsciousOK)
 		if ( pSoldier->bBleeding > MIN_BLEEDING_THRESHOLD )
 		{
 			// reduce bleeding by 1 point per AP (in RT, APs will get recalculated so it's okay)
-			pSoldier->bBleeding = __max( 0, pSoldier->bBleeding - pSoldier->bActionPoints );
+			pSoldier->bBleeding = std::max(0, pSoldier->bBleeding - pSoldier->bActionPoints);
 			return( AI_ACTION_NONE ); // will end-turn/wait depending on whether we're in TB or realtime
 		}
 
@@ -2389,6 +2390,7 @@ INT8 DecideActionRed(SOLDIERTYPE *pSoldier, UINT8 ubUnconsciousOK)
 		{
 			if (!gfTurnBasedAI || GetAPsToChangeStance( pSoldier, ANIM_CROUCH ) <= pSoldier->bActionPoints)
 			{
+				pSoldier->usActionData = ANIM_CROUCH;
 				return(AI_ACTION_CHANGE_STANCE);
 			}
 		}
@@ -2479,7 +2481,7 @@ static INT8 DecideActionBlack(SOLDIERTYPE* pSoldier)
 
 		bPanicTrigger = ClosestPanicTrigger( pSoldier );
 		// if it's an alarm trigger and team is alerted, ignore it
-		if ( !(gTacticalStatus.bPanicTriggerIsAlarm[ bPanicTrigger ] && gTacticalStatus.Team[pSoldier->bTeam].bAwareOfOpposition) && PythSpacesAway( pSoldier->sGridNo, gTacticalStatus.sPanicTriggerGridNo[ bPanicTrigger ] ) < 10)
+		if ( bPanicTrigger != -1 && !(gTacticalStatus.bPanicTriggerIsAlarm[ bPanicTrigger ] && gTacticalStatus.Team[pSoldier->bTeam].bAwareOfOpposition) && PythSpacesAway( pSoldier->sGridNo, gTacticalStatus.sPanicTriggerGridNo[ bPanicTrigger ] ) < 10)
 		{
 			PossiblyMakeThisEnemyChosenOne( pSoldier );
 		}
@@ -2501,7 +2503,7 @@ static INT8 DecideActionBlack(SOLDIERTYPE* pSoldier)
 		// if they see enemies, the Queen will keep going to the staircase, but Joe will fight
 		if ( (pSoldier->ubProfile == QUEEN) && ubCanMove )
 		{
-			if ( gWorldSectorX == 3 && gWorldSectorY == MAP_ROW_P && gbWorldSectorZ == 0 && !gfUseAlternateQueenPosition )
+			if (gWorldSector == meduna && !gfUseAlternateQueenPosition)
 			{
 				bActionReturned = HeadForTheStairCase( pSoldier );
 				if ( bActionReturned != AI_ACTION_NONE )
@@ -2548,7 +2550,7 @@ static INT8 DecideActionBlack(SOLDIERTYPE* pSoldier)
 		// WHEN LEFT IN GAS, WEAR GAS MASK IF AVAILABLE AND NOT WORN
 		////////////////////////////////////////////////////////////////////////////
 
-		if ( !bInGas && (gWorldSectorX == TIXA_SECTOR_X && gWorldSectorY == TIXA_SECTOR_Y) )
+		if (!bInGas && (gWorldSector.x == TIXA_SECTOR_X && gWorldSector.y == TIXA_SECTOR_Y))
 		{
 			// only chance if we happen to be caught with our gas mask off
 			if ( PreRandom( 10 ) == 0 && WearGasMaskIfAvailable( pSoldier ) )
@@ -3025,7 +3027,7 @@ static INT8 DecideActionBlack(SOLDIERTYPE* pSoldier)
 
 			default:
 				// set to empty
-				memset( &BestAttack, 0, sizeof( BestAttack ) );
+				BestAttack = ATTACKTYPE{};
 				break;
 		}
 	}
@@ -3041,7 +3043,7 @@ static INT8 DecideActionBlack(SOLDIERTYPE* pSoldier)
 			if ( ( (pSoldier->bTeam == MILITIA_TEAM) && (PreRandom( 20 ) > BestAttack.ubChanceToReallyHit) )
 				|| ( (pSoldier->bTeam != MILITIA_TEAM) && (PreRandom( 40 ) > BestAttack.ubChanceToReallyHit) ) )
 			{
-				SLOGD(DEBUG_TAG_AI, "AI %d allowing cover check, chance to hit is only %d, at range %d", BestAttack.ubChanceToReallyHit, PythSpacesAway( pSoldier->sGridNo, BestAttack.sTarget ) );
+				SLOGD("AI {} allowing cover check, chance to hit is only {}, at range {}", pSoldier->ubID, BestAttack.ubChanceToReallyHit, PythSpacesAway(pSoldier->sGridNo, BestAttack.sTarget));
 				// maybe taking cover would be better!
 				fAllowCoverCheck = TRUE;
 				if ( PreRandom( 10 ) > BestAttack.ubChanceToReallyHit )
@@ -3132,8 +3134,8 @@ static INT8 DecideActionBlack(SOLDIERTYPE* pSoldier)
 			case AGGRESSIVE:		iOffense += 20; break;
 			case ATTACKSLAYONLY:iOffense += 30; break;
 		}
-		SLOGD(DEBUG_TAG_AI, "%s - CHOICE: iOffense = %d, iDefense = %d\n",
-			pSoldier->name,iOffense,iDefense);
+		SLOGD("{} - CHOICE: iOffense = {}, iDefense = {}\n",
+			pSoldier->name, iOffense,iDefense);
 
 		// if his defensive instincts win out, forget all about the attack
 		if (iDefense > iOffense)
@@ -3334,10 +3336,9 @@ static INT8 DecideActionBlack(SOLDIERTYPE* pSoldier)
 			pSoldier->usActionData = BestAttack.sTarget;
 			pSoldier->bTargetLevel = BestAttack.bTargetLevel;
 
-			SLOGD(DEBUG_TAG_AI, "%d(%s) %s %d(%s)",
-				pSoldier->ubID, pSoldier->name,
+			SLOGD("{}({}) {} {}({})", pSoldier->ubID, pSoldier->name,
 				ubBestAttackAction == AI_ACTION_FIRE_GUN ? "SHOOTS" : (ubBestAttackAction == AI_ACTION_TOSS_PROJECTILE ? "TOSSES AT" : "STABS"),
-				BestAttack.opponent->ubID, BestAttack.opponent->name );
+				BestAttack.opponent->ubID, BestAttack.opponent->name);
 			return(ubBestAttackAction);
 		}
 
@@ -3382,7 +3383,7 @@ static INT8 DecideActionBlack(SOLDIERTYPE* pSoldier)
 
 	if (sBestCover != NOWHERE)
 	{
-		SLOGD(DEBUG_TAG_AI, "%s - taking cover at gridno %d (%d%% better)",
+		SLOGD("{} - taking cover at gridno {} ({}% better)",
 			pSoldier->name, sBestCover, iCoverPercentBetter);
 		pSoldier->usActionData = sBestCover;
 		return(AI_ACTION_TAKE_COVER);
@@ -3684,7 +3685,7 @@ INT8 DecideAction(SOLDIERTYPE *pSoldier)
 				break;
 		}
 	}
-	SLOGD(DEBUG_TAG_AI, "DecideAction: selected action %d, actionData %d\n\n",
+	SLOGD("DecideAction: selected action {}, actionData {}\n\n",
 		bAction, pSoldier->usActionData);
 	return(bAction);
 }

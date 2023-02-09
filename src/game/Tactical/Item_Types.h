@@ -53,7 +53,7 @@ enum DetonatorType
 #define PANIC_FREQUENCY_3		125
 
 #define OBJECT_UNDROPPABLE		0x01
-#define OBJECT_MODIFIED		0x02
+// 0x02 was the unused OBJECT_MODIFIED
 #define OBJECT_AI_UNUSABLE		0x04
 #define OBJECT_ARMED_BOMB		0x08
 #define OBJECT_KNOWN_TO_BE_TRAPPED	0x10
@@ -74,7 +74,6 @@ struct OBJECTTYPE
 			UINT8  ubGunShotsLeft; // duh, amount of ammo left
 			UINT16 usGunAmmoItem; // the item # for the item table
 			INT8   bGunAmmoStatus; // only for "attached ammo" - grenades, mortar shells
-			UINT8  ubGunUnused[MAX_OBJECTS_PER_SLOT - 6]; // XXX HACK000B
 		};
 		struct
 		{
@@ -86,9 +85,9 @@ struct OBJECTTYPE
 		};
 		struct
 		{
-			INT8   bMoneyStatus;
+			INT8   bMoneyStatus; // same address as bStatus[0]
 			UINT32 uiMoneyAmount;
-			UINT8  ubMoneyUnused[MAX_OBJECTS_PER_SLOT - 5]; // XXX HACK000B
+			INT8   padding[4];   // this is required to increase the size of the union to 12 bytes
 		};
 		struct
 		{
@@ -115,13 +114,11 @@ struct OBJECTTYPE
 		{
 			INT8  bKeyStatus[ 6 ];
 			UINT8 ubKeyID;
-			UINT8 ubKeyUnused[1]; // XXX HACK000B
 		};
 		struct
 		{
 			UINT8 ubOwnerProfile;
 			UINT8 ubOwnerCivGroup;
-			UINT8 ubOwnershipUnused[6]; // XXX HACK000B
 		};
 	};
 	// attached objects
@@ -135,6 +132,9 @@ struct OBJECTTYPE
 	UINT8  ubWeight;
 	UINT8  fUsed; // flags for whether the item is used or not
 };
+// An OBJECTTYPE is included in WORLDITEM and these are loaded with a single read(), so the layout must match vanilla's.
+static_assert(sizeof(OBJECTTYPE) == 36 && (offsetof(OBJECTTYPE, usAttachItem) - offsetof(OBJECTTYPE, ubNumberOfObjects) == 14)
+	&& offsetof(OBJECTTYPE, uiMoneyAmount) == 8);
 
 
 // SUBTYPES
@@ -208,23 +208,9 @@ struct OBJECTTYPE
 
 // item flag combinations
 
-#define IF_STANDARD_GUN		ITEM_DAMAGEABLE | ITEM_WATER_DAMAGES | ITEM_REPAIRABLE | ITEM_SHOW_STATUS | ITEM_METAL | ITEM_SINKS
-#define IF_TWOHANDED_GUN		IF_STANDARD_GUN | ITEM_TWO_HANDED
-#define IF_STANDARD_BLADE		ITEM_DAMAGEABLE | ITEM_WATER_DAMAGES | ITEM_REPAIRABLE | ITEM_SHOW_STATUS | ITEM_METAL | ITEM_SINKS
-#define IF_STANDARD_ARMOUR		ITEM_DAMAGEABLE | ITEM_REPAIRABLE | ITEM_SHOW_STATUS | ITEM_SINKS
-#define IF_STANDARD_KIT		ITEM_DAMAGEABLE | ITEM_SHOW_STATUS | ITEM_SINKS
-#define IF_STANDARD_CLIP		ITEM_SINKS | ITEM_METAL
-
 #define EXPLOSIVE_GUN( x )		( x == ROCKET_LAUNCHER || x == TANK_CANNON )
 
-#define FIRST_WEAPON 1
-#define LAST_WEAPON 70
-#define FIRST_AMMO 71
-#define LAST_AMMO 130
-#define MAX_AMMO (LAST_AMMO - FIRST_AMMO + 1)
-#define FIRST_EXPLOSIVE 131
-#define FIRST_ARMOUR 161
-#define FIRST_KEY 271
+#define MAX_WEAPONS 70
 
 #define NOTHING NONE
 enum ITEMDEFINE
@@ -232,7 +218,7 @@ enum ITEMDEFINE
 	NONE = 0,
 
 	// weapons
-	GLOCK_17 = FIRST_WEAPON,
+	GLOCK_17,
 	GLOCK_18,
 	__ITEM_3, // BERETTA_92F,
 	__ITEM_4, // BERETTA_93R,
@@ -270,7 +256,7 @@ enum ITEMDEFINE
 	__ITEM_33, // CAWS,
 	MINIMI,
 	__ITEM_35, // RPK74,
-	HK21E,
+	__ITEM_36, // HK21E,
 	COMBAT_KNIFE,
 	THROWING_KNIFE,
 	ROCK,
@@ -308,9 +294,8 @@ enum ITEMDEFINE
 	__ITEM_68, // NOTHING,
 	__ITEM_69, // NOTHING,
 	__ITEM_70, // NOTHING,
-	MAX_WEAPONS = ( FIRST_AMMO - 1 ),
 
-	CLIP9_15 = FIRST_AMMO,
+	CLIP9_15,
 	CLIP9_30,
 	__ITEM_73, // CLIP9_15_AP,
 	__ITEM_74, // CLIP9_30_AP,
@@ -377,7 +362,7 @@ enum ITEMDEFINE
 	__ITEM_130, // NOTHING
 
 	// explosives
-	STUN_GRENADE = FIRST_EXPLOSIVE,
+	STUN_GRENADE,
 	TEARGAS_GRENADE,
 	MUSTARD_GRENADE,
 	MINI_GRENADE,
@@ -402,7 +387,7 @@ enum ITEMDEFINE
 	SMOKE_GRENADE,
 	TANK_SHELL,
 	STRUCTURE_IGNITE,
-	CREATURE_COCKTAIL,
+	__ITEM_154, // CREATURE_COCKTAIL,
 	STRUCTURE_EXPLOSION,
 	GREAT_BIG_EXPLOSION,
 	BIG_TEAR_GAS,
@@ -461,7 +446,7 @@ enum ITEMDEFINE
 	TOOLKIT,
 	LOCKSMITHKIT,
 	CAMOUFLAGEKIT,
-	BOOBYTRAPKIT,
+	__ITEM_206, // BOOBYTRAPKIT,
 	SILENCER,
 	SNIPERSCOPE,
 	BIPOD,
@@ -532,7 +517,7 @@ enum ITEMDEFINE
 	CIGARS,
 	__ITEM_270, // NOTHING
 
-	KEY_1 = FIRST_KEY,
+	KEY_1,
 	__ITEM_272, // KEY_2,
 	__ITEM_273, // KEY_3,
 	__ITEM_274, // KEY_4,
@@ -567,7 +552,7 @@ enum ITEMDEFINE
 
 	__ITEM_301, // KEY_31,
 	KEY_32,
-	SILVER_PLATTER,
+	__ITEM_302, // SILVER_PLATTER,
 	DUCT_TAPE,
 	ALUMINUM_ROD,
 	SPRING,
@@ -622,17 +607,5 @@ enum ITEMDEFINE
 
 	MAXITEMS
 };
-
-#define FIRST_HELMET			STEEL_HELMET
-#define LAST_HELMET			SPECTRA_HELMET_Y
-
-#define FIRST_VEST			FLAK_JACKET
-#define LAST_VEST			KEVLAR2_VEST_Y
-
-#define FIRST_LEGGINGS			KEVLAR_LEGGINGS
-#define LAST_LEGGINGS			SPECTRA_LEGGINGS_Y
-
-#define FIRST_HEAD_ITEM		EXTENDEDEAR
-#define LAST_HEAD_ITEM			SUNGOGGLES
 
 #endif

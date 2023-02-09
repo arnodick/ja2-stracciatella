@@ -44,6 +44,8 @@
 #include "Civ_Quotes.h"
 #include "UILayout.h"
 
+#include <string_theory/format>
+
 
 static SGPRect gOldClippingRect;
 static SGPRect gOldDirtyClippingRect;
@@ -76,8 +78,15 @@ void HandleTacticalPanelSwitch()
 	g_switch_panel = false;
 
 	SOLDIERTYPE* const s = g_new_panel_soldier;
-	SetCurrentInterfacePanel(s ? SM_PANEL : TEAM_PANEL);
-	SetCurrentTacticalPanelCurrentMerc(s);
+	if (s)
+	{
+		SetCurrentInterfacePanel(SM_PANEL);
+		SetCurrentTacticalPanelCurrentMerc(s);
+	}
+	else
+	{
+		SetCurrentInterfacePanel(TEAM_PANEL);
+	}
 
 	if (guiCurrentScreen != SHOPKEEPER_SCREEN) // XXX necessary?
 	{
@@ -428,7 +437,7 @@ void RenderTopmostTacticalInterface()
 		}
 
 		SetFontAttributes(TINYFONT1, FONT_MCOLOR_WHITE);
-		GDirtyPrintF(x, y, L"-%d", s.sDamage);
+		GDirtyPrint(x, y, ST::format("-{}", s.sDamage));
 	}
 
 	// FOR THE MOST PART, DISABLE INTERFACE STUFF WHEN IT'S ENEMY'S TURN
@@ -446,7 +455,7 @@ void RenderTopmostTacticalInterface()
 	}
 
 	// CHECK IF OUR CURSOR IS OVER AN INV POOL
-	GridNo       const usMapPos = GetMouseMapPos();
+	GridNo       const usMapPos = guiCurrentCursorGridNo;
 	SOLDIERTYPE* const sel      = GetSelectedMan();
 	if (usMapPos != NOWHERE && gfUIOverItemPoolGridNo != NOWHERE && sel)
 	{
@@ -532,13 +541,13 @@ static void StartViewportOverlays(void)
 	gOldDirtyClippingRect = ClippingRect;
 
 	// Set bottom clipping value for blitter clipping rect
-	ClippingRect.iLeft   = INTERFACE_START_X;
+	ClippingRect.iLeft   = gsVIEWPORT_START_X;
 	ClippingRect.iTop    = gsVIEWPORT_WINDOW_START_Y;
 	ClippingRect.iRight  = SCREEN_WIDTH;
 	ClippingRect.iBottom = gsVIEWPORT_WINDOW_END_Y;
 
 	// Set values for dirty rect clipping rect
-	gDirtyClipRect.iLeft   = INTERFACE_START_X;
+	gDirtyClipRect.iLeft   = gsVIEWPORT_START_X;
 	gDirtyClipRect.iTop    = gsVIEWPORT_WINDOW_START_Y;
 	gDirtyClipRect.iRight  = SCREEN_WIDTH;
 	gDirtyClipRect.iBottom = gsVIEWPORT_WINDOW_END_Y;
@@ -575,8 +584,8 @@ void EraseInterfaceMenus( BOOLEAN fIgnoreUIUnLock )
 	PopDownOpenDoorMenu( );
 	DeleteTalkingMenu( );
 
-	// Stop Rubberbanding every time a menu is erased/opened
-	gRubberBandActive = FALSE;
+	// Cancel Rubberbanding every time a menu is erased/opened
+	EndRubberBanding(true);
 	ResetMultiSelection();
 }
 
@@ -593,8 +602,6 @@ void ResetInterfaceAndUI( )
 	EraseInterfaceMenus( FALSE );
 
 	EraseRenderArrows( );
-
-	EndRubberBanding( );
 
 	//ResetMultiSelection( );
 

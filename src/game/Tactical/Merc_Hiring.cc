@@ -41,18 +41,34 @@
 #include "Auto_Resolve.h"
 #include "Map_Screen_Interface_Bottom.h"
 #include "Quests.h"
-#include "slog/slog.h"
+#include "Logger.h"
+#include "GamePolicy.h"
+#include "GameInstance.h"
+#include "ContentManager.h"
+#include "Observable.h"
+
+#include <string_theory/string>
+
 
 #define MIN_FLIGHT_PREP_TIME 6
 
 extern BOOLEAN gfTacticalDoHeliRun;
 extern BOOLEAN gfFirstHeliRun;
+SGPSector g_merc_arrive_sector;
 
-// ATE: Globals that dictate where the mercs will land once being hired
-// Default to start sector
-// Saved in general saved game structure
-INT16 g_merc_arrive_sector = START_SECTOR;
+Observable<SOLDIERTYPE*> OnMercHired{};
 
+
+void CreateSpecialItem(SOLDIERTYPE* const s, UINT16 item)
+{
+	OBJECTTYPE o;
+	CreateItem(item, 100, &o);
+	BOOLEAN fReturn = AutoPlaceObject(s, &o, FALSE);
+	if (!fReturn) {
+		// no space, so overwrite an existing item (can happen when importing IMPs)
+		s->inv[SMALLPOCK8POS] = o;
+	}
+}
 
 INT8 HireMerc(MERC_HIRE_STRUCT& h)
 {
@@ -77,23 +93,19 @@ INT8 HireMerc(MERC_HIRE_STRUCT& h)
 	// they will be updated again just before arrival...
 	if (h.fUseLandingZoneForArrival)
 	{
-		h.sSectorX = SECTORX(g_merc_arrive_sector);
-		h.sSectorY = SECTORY(g_merc_arrive_sector);
-		h.bSectorZ = 0;
+		h.sSector = g_merc_arrive_sector;
 	}
 
 	SOLDIERCREATE_STRUCT MercCreateStruct;
-	memset(&MercCreateStruct, 0, sizeof(MercCreateStruct));
+	MercCreateStruct = SOLDIERCREATE_STRUCT{};
 	MercCreateStruct.ubProfile             = pid;
-	MercCreateStruct.sSectorX              = h.sSectorX;
-	MercCreateStruct.sSectorY              = h.sSectorY;
-	MercCreateStruct.bSectorZ              = h.bSectorZ;
+	MercCreateStruct.sSector               = h.sSector;
 	MercCreateStruct.bTeam                 = OUR_TEAM;
 	MercCreateStruct.fCopyProfileItemsOver = h.fCopyProfileItemsOver;
 	SOLDIERTYPE* const s = TacticalCreateSoldier(MercCreateStruct);
 	if (s == NULL)
 	{
-		SLOGW(DEBUG_TAG_MERCHIRE, "TacticalCreateSoldier in HireMerc():  Failed to Add Merc");
+		SLOGW("TacticalCreateSoldier in HireMerc():  Failed to Add Merc");
 		return MERC_HIRE_FAILED;
 	}
 
@@ -103,14 +115,7 @@ INT8 HireMerc(MERC_HIRE_STRUCT& h)
 		if (s->ubID == 0)
 		{
 			// OK, give this item to our merc!
-			OBJECTTYPE o;
-			memset(&o, 0, sizeof(o));
-			o.usItem            = LETTER;
-			o.ubNumberOfObjects = 1;
-			o.bStatus[0]        = 100;
-			const BOOLEAN fReturn = AutoPlaceObject(s, &o, FALSE);
-			(void)fReturn;
-			Assert(fReturn);
+			CreateSpecialItem(s, LETTER);
 		}
 
 		// Set insertion for first time in chopper
@@ -167,7 +172,7 @@ INT8 HireMerc(MERC_HIRE_STRUCT& h)
 	}
 
 	// Set the type of merc
-	if (pid < BIFF)
+	if (h.bWhatKindOfMerc == MERC_TYPE__AIM_MERC)
 	{
 		s->ubWhatKindOfMercAmI = MERC_TYPE__AIM_MERC;
 
@@ -194,7 +199,7 @@ INT8 HireMerc(MERC_HIRE_STRUCT& h)
 		// remember the medical deposit we PAID.  The one in his profile can increase when he levels!
 		s->usMedicalDeposit = p.sMedicalDepositAmount;
 	}
-	else if (pid <= BUBBA)
+	else if (h.bWhatKindOfMerc == MERC_TYPE__MERC)
 	{
 		s->ubWhatKindOfMercAmI = MERC_TYPE__MERC;
 
@@ -203,9 +208,9 @@ INT8 HireMerc(MERC_HIRE_STRUCT& h)
 		// Set starting conditions for the merc
 		s->iStartContractTime = GetWorldDay();
 
-		AddHistoryToPlayersLog(HISTORY_HIRED_MERC_FROM_MERC, pid, GetWorldTotalMin(), -1, -1);
+		AddHistoryToPlayersLog(HISTORY_HIRED_MERC_FROM_MERC, pid, GetWorldTotalMin(), SGPSector(-1, -1));
 	}
-	else if (pid < MIGUEL)
+	else if (h.bWhatKindOfMerc == MERC_TYPE__PLAYER_CHARACTER)
 	{
 		s->ubWhatKindOfMercAmI = MERC_TYPE__PLAYER_CHARACTER;
 	}
@@ -216,6 +221,8 @@ INT8 HireMerc(MERC_HIRE_STRUCT& h)
 
 	// remove the merc from the Personnel screens departed list (if they have never been hired before, its ok to call it)
 	RemoveNewlyHiredMercFromPersonnelDepartedList(s->ubProfile);
+
+	OnMercHired(s);
 
 	gfAtLeastOneMercWasHired = TRUE;
 	return MERC_HIRE_OK;
@@ -228,17 +235,16 @@ static void CheckForValidArrivalSector(void);
 void MercArrivesCallback(SOLDIERTYPE& s)
 {
 	UINT32 uiTimeOfPost;
+	static const SGPSector start(gamepolicy(start_sector));
 
-	if (!DidGameJustStart() && g_merc_arrive_sector == START_SECTOR)
+	if (!DidGameJustStart() && g_merc_arrive_sector == start)
 	{
 		// Mercs arriving in start sector. This sector has been deemed as the always
 		// safe sector. Seeing we don't support entry into a hostile sector (except
 		// for the beginning), we will nuke any enemies in this sector first.
-		if (gWorldSectorX != SECTORX(START_SECTOR) ||
-			gWorldSectorY != SECTORY(START_SECTOR) ||
-			gbWorldSectorZ != 0)
+		if (gWorldSector != start)
 		{
-			EliminateAllEnemies(SECTORX(g_merc_arrive_sector), SECTORY(g_merc_arrive_sector));
+			EliminateAllEnemies(g_merc_arrive_sector);
 		}
 	}
 
@@ -256,19 +262,17 @@ void MercArrivesCallback(SOLDIERTYPE& s)
 	// ATE: Make sure we use global.....
 	if (s.fUseLandingZoneForArrival)
 	{
-		s.sSectorX = SECTORX(g_merc_arrive_sector);
-		s.sSectorY = SECTORY(g_merc_arrive_sector);
-		s.bSectorZ = 0;
+		s.sSector = g_merc_arrive_sector;
 	}
 
 	// Add merc to sector ( if it's the current one )
-	if (gWorldSectorX == s.sSectorX && gWorldSectorY == s.sSectorY && s.bSectorZ == gbWorldSectorZ)
+	if (gWorldSector == s.sSector)
 	{
 		// OK, If this sector is currently loaded, and guy does not have CHOPPER insertion code....
 		// ( which means we are at beginning of game if so )
 		// Setup chopper....
 		if (s.ubStrategicInsertionCode != INSERTION_CODE_CHOPPER &&
-				SECTOR(s.sSectorX, s.sSectorY) == START_SECTOR)
+				s.sSector.AsByte() == gamepolicy(start_sector))
 		{
 			gfTacticalDoHeliRun = TRUE;
 
@@ -276,7 +280,7 @@ void MercArrivesCallback(SOLDIERTYPE& s)
 			if ( guiCurrentScreen == MAP_SCREEN )
 			{
 				// ATE: Make sure the current one is selected!
-				ChangeSelectedMapSector( gWorldSectorX, gWorldSectorY, 0 );
+				ChangeSelectedMapSector(gWorldSector);
 
 				RequestTriggerExitFromMapscreen( MAP_EXIT_TO_TACTICAL );
 			}
@@ -284,7 +288,7 @@ void MercArrivesCallback(SOLDIERTYPE& s)
 			s.ubStrategicInsertionCode = INSERTION_CODE_CHOPPER;
 		}
 
-		UpdateMercInSector(s, s.sSectorX, s.sSectorY, s.bSectorZ);
+		UpdateMercInSector(s, s.sSector);
 	}
 	else
 	{
@@ -295,7 +299,7 @@ void MercArrivesCallback(SOLDIERTYPE& s)
 
 	if (s.ubStrategicInsertionCode != INSERTION_CODE_CHOPPER)
 	{
-		ScreenMsg(FONT_MCOLOR_WHITE, MSG_INTERFACE, TacticalStr[MERC_HAS_ARRIVED_STR], s.name);
+		ScreenMsg(FONT_MCOLOR_WHITE, MSG_INTERFACE, st_format_printf(TacticalStr[MERC_HAS_ARRIVED_STR], s.name));
 
 		// ATE: He's going to say something, now that they've arrived...
 		if (!gTacticalStatus.bMercArrivingQuoteBeingUsed && !gfFirstHeliRun)
@@ -348,9 +352,9 @@ void MercArrivesCallback(SOLDIERTYPE& s)
 	fTeamPanelDirty = TRUE;
 
 	// if the currently selected sector has no one in it, select this one instead
-	if ( !CanGoToTacticalInSector( sSelMapX, sSelMapY, ( UINT8 )iCurrentMapSectorZ ) )
+	if (!CanGoToTacticalInSector(SGPSector(sSelMap.x, sSelMap.y, iCurrentMapSectorZ)))
 	{
-		ChangeSelectedMapSector(s.sSectorX, s.sSectorY, 0);
+		ChangeSelectedMapSector(s.sSector);
 	}
 }
 
@@ -448,27 +452,18 @@ void UpdateAnyInTransitMercsWithGlobalArrivalSector( )
 	{
 		if (s->bAssignment == IN_TRANSIT && s->fUseLandingZoneForArrival)
 		{
-			s->sSectorX = SECTORX(g_merc_arrive_sector);
-			s->sSectorY = SECTORY(g_merc_arrive_sector);
-			s->bSectorZ = 0;
+			s->sSector = g_merc_arrive_sector;
 		}
 	}
 }
 
 
+// Return the line of the length from origin to dest, truncated to the nearest integer
 static INT16 StrategicPythSpacesAway(INT16 sOrigin, INT16 sDest)
 {
-	INT16 sRows,sCols,sResult;
+	SGPSector delta = SGPSector::FromStrategicIndex(sOrigin) - SGPSector::FromStrategicIndex(sDest);
 
-	sRows = ABS((sOrigin / MAP_WORLD_X) - (sDest / MAP_WORLD_X));
-	sCols = ABS((sOrigin % MAP_WORLD_X) - (sDest % MAP_WORLD_X));
-
-
-	// apply Pythagoras's theorem for right-handed triangle:
-	// dist^2 = rows^2 + cols^2, so use the square root to get the distance
-	sResult = (INT16)sqrt((double)((sRows * sRows) + (sCols * sCols)));
-
-	return(sResult);
+	return static_cast<INT16>(std::hypot(delta.x, delta.y));
 }
 
 
@@ -486,11 +481,10 @@ static void CheckForValidArrivalSector(void)
 	INT16   sSectorGridNo, sSectorGridNo2;
 	INT32   uiRange, uiLowestRange = 999999;
 	BOOLEAN fFound = FALSE;
-	wchar_t sString[ 1024 ];
-	wchar_t zShortTownIDString1[ 50 ];
-	wchar_t zShortTownIDString2[ 50 ];
+	ST::string sString;
+	ST::string zShortTownIDString1;
 
-	sSectorGridNo = SECTOR_INFO_TO_STRATEGIC_INDEX(g_merc_arrive_sector);
+	sSectorGridNo = g_merc_arrive_sector.AsStrategicIndex();
 
 	// Check if valid...
 	if ( !StrategicMap[ sSectorGridNo ].fEnemyControlled )
@@ -498,8 +492,7 @@ static void CheckForValidArrivalSector(void)
 		return;
 	}
 
-	GetShortSectorString(SECTORX(g_merc_arrive_sector), SECTORY(g_merc_arrive_sector), zShortTownIDString1, lengthof(zShortTownIDString1));
-
+	zShortTownIDString1 = g_merc_arrive_sector.AsShortString();
 
 	// If here - we need to do a search!
 	sTop    = ubRadius;
@@ -507,8 +500,7 @@ static void CheckForValidArrivalSector(void)
 	sLeft   = - ubRadius;
 	sRight  = ubRadius;
 
-	INT16 sGoodX = 0; // XXX HACK000E
-	INT16 sGoodY = 0; // XXX HACK000E
+	SGPSector sGood; // XXX HACK000E
 	for( cnt1 = sBottom; cnt1 <= sTop; cnt1++ )
 	{
 		leftmost = ( ( sSectorGridNo + ( MAP_WORLD_X * cnt1 ) )/ MAP_WORLD_X ) * MAP_WORLD_X;
@@ -525,8 +517,8 @@ static void CheckForValidArrivalSector(void)
 
 					if ( uiRange < uiLowestRange )
 					{
-						sGoodY = cnt1;
-						sGoodX = cnt2;
+						sGood.y = cnt1;
+						sGood.x = cnt2;
 						uiLowestRange = uiRange;
 						fFound = TRUE;
 					}
@@ -537,13 +529,10 @@ static void CheckForValidArrivalSector(void)
 
 	if ( fFound )
 	{
-		g_merc_arrive_sector = SECTOR(SECTORX(g_merc_arrive_sector) + sGoodX, SECTORY(g_merc_arrive_sector) + sGoodY);
-
+		g_merc_arrive_sector += sGood;
 		UpdateAnyInTransitMercsWithGlobalArrivalSector( );
 
-		GetShortSectorString(SECTORX(g_merc_arrive_sector), SECTORY(g_merc_arrive_sector), zShortTownIDString2, lengthof(zShortTownIDString2));
-
-		swprintf(sString, lengthof(sString), str_arrival_rerouted, zShortTownIDString2, zShortTownIDString1);
+		sString = st_format_printf(str_arrival_rerouted, g_merc_arrive_sector.AsShortString(), zShortTownIDString1);
 
 		DoScreenIndependantMessageBox(  sString, MSG_BOX_FLAG_OK, NULL );
 

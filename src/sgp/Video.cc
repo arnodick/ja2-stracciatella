@@ -1,14 +1,13 @@
-#include <algorithm>
-#include <ctime>
-#include <stdexcept>
-
+#include "ContentManager.h"
+#include "Cursor_Control.h"
 #include "Debug.h"
 #include "Fade_Screen.h"
 #include "FileMan.h"
+#include "GameInstance.h"
 #include "HImage.h"
 #include "Input.h"
 #include "Local.h"
-#include "MemMan.h"
+#include "Logger.h"
 #include "RenderWorld.h"
 #include "Render_Dirty.h"
 #include "Timer.h"
@@ -17,18 +16,12 @@
 #include "VObject_Blitters.h"
 #include "VSurface.h"
 #include "Video.h"
-#include <errno.h>
-#include <fcntl.h>
-#include <stdarg.h>
 #include "UILayout.h"
-#include "PlatformIO.h"
 #include "Font.h"
 #include "Icon.h"
-
-#include "ContentManager.h"
-#include "GameInstance.h"
-
-#include "slog/slog.h"
+#include <algorithm>
+#include <ctime>
+#include <stdexcept>
 
 #define BUFFER_READY      0x00
 #define BUFFER_DIRTY      0x02
@@ -40,21 +33,13 @@
 
 #define VIDEO_OFF         0x00
 #define VIDEO_ON          0x01
-#define VIDEO_SUSPENDED   0x04
-
-#define MAX_NUM_FRAMES    25
 
 #define RED_MASK 0xF800
 #define GREEN_MASK 0x07E0
 #define BLUE_MASK 0x001F
 #define ALPHA_MASK 0
 
-
-static BOOLEAN gfVideoCapture = FALSE;
-static UINT32  guiFramePeriod = 1000 / 15;
-static UINT32  guiLastFrame;
-static UINT16* gpFrameData[MAX_NUM_FRAMES];
-static INT32   giNumFrames = 0;
+#define OVERSAMPLING_SCALE 4
 
 
 // Globals for mouse cursor
@@ -62,12 +47,13 @@ static UINT16 gusMouseCursorWidth;
 static UINT16 gusMouseCursorHeight;
 static INT16  gsMouseCursorXOffset;
 static INT16  gsMouseCursorYOffset;
+INT16 gsMouseSizeYModifier = 0; // This can increase the size of gusMouseCursorHeight so image data (ie, text) outside the normal height of the mouse cursor can be copied onto screen buffer
 
 static SDL_Rect MouseBackground = { 0, 0, 0, 0 };
 
 // Refresh thread based variables
 static UINT32 guiFrameBufferState;  // BUFFER_READY, BUFFER_DIRTY
-static UINT32 guiVideoManagerState; // VIDEO_ON, VIDEO_OFF, VIDEO_SUSPENDED
+static UINT32 guiVideoManagerState; // VIDEO_ON, VIDEO_OFF
 
 // Dirty rectangle management variables
 static SDL_Rect DirtyRegions[MAX_DIRTY_REGIONS];
@@ -77,10 +63,6 @@ static BOOLEAN  gfForceFullScreenRefresh;
 
 static SDL_Rect DirtyRegionsEx[MAX_DIRTY_REGIONS];
 static UINT32   guiDirtyRegionExCount;
-
-// Screen output stuff
-static BOOLEAN gfPrintFrameBuffer;
-static UINT32  guiPrintFrameBufferIndex;
 
 
 static SDL_Surface* MouseCursor;
@@ -94,8 +76,21 @@ static SDL_Texture* ScaledScreenTexture;
 static Uint32       g_window_flags = 0;
 static VideoScaleQuality ScaleQuality = VideoScaleQuality::LINEAR;
 
-static void RecreateBackBuffer();
 static void DeletePrimaryVideoSurfaces(void);
+
+// returns if desktop resolution larger game resolution
+BOOLEAN IsDesktopLargeEnough()
+{
+	SDL_DisplayMode dm;
+	if (SDL_GetDesktopDisplayMode(0, &dm) == 0)
+	{
+		if (dm.w < SCREEN_WIDTH || dm.h < SCREEN_HEIGHT)
+		{
+			return false;
+		}
+	}
+	return true;
+}
 
 void VideoSetFullScreen(const BOOLEAN enable)
 {
@@ -119,11 +114,17 @@ void VideoToggleFullScreen(void)
 	{
 		SDL_SetWindowFullscreen(g_game_window, SDL_WINDOW_FULLSCREEN_DESKTOP);
 	}
+	SDL_RenderClear(GameRenderer);
 }
 
 void VideoSetBrightness(float brightness)
 {
-	SDL_SetWindowBrightness(g_game_window, brightness);
+	if (brightness >= 0)
+	{
+		// Do not set the brightness unless explicitly requested
+		// On Windows, setting the brightness resets color profile and some other disply options.
+		SDL_SetWindowBrightness(g_game_window, brightness);
+	}
 }
 
 
@@ -132,7 +133,7 @@ static void GetRGBDistribution();
 
 void InitializeVideoManager(const VideoScaleQuality quality)
 {
-	SLOGD(DEBUG_TAG_VIDEO, "Initializing the video manager");
+	SLOGD("Initializing the video manager");
 	SDL_SetHint(SDL_HINT_RENDER_DRIVER, "opengl");
 
 	ScaleQuality = quality;
@@ -147,15 +148,14 @@ void InitializeVideoManager(const VideoScaleQuality quality)
 	GameRenderer = SDL_CreateRenderer(g_game_window, -1, 0);
 	SDL_RenderSetLogicalSize(GameRenderer, SCREEN_WIDTH, SCREEN_HEIGHT);
 
-	SDL_Surface* windowIcon = SDL_CreateRGBSurfaceFrom(
+	SurfaceUniquePtr windowIcon(SDL_CreateRGBSurfaceWithFormatFrom(
 			(void*)gWindowIconData.pixel_data,
 			gWindowIconData.width,
 			gWindowIconData.height,
-			gWindowIconData.bytes_per_pixel*8,
+			0,
 			gWindowIconData.bytes_per_pixel*gWindowIconData.width,
-			0x000000FF, 0x0000FF00, 0x00FF0000, 0xFF000000);
-	SDL_SetWindowIcon(g_game_window, windowIcon);
-	SDL_FreeSurface(windowIcon);
+			SDL_PIXELFORMAT_ABGR8888));
+	SDL_SetWindowIcon(g_game_window, windowIcon.get());
 
 
 	ClippingRect.set(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
@@ -172,22 +172,46 @@ void InitializeVideoManager(const VideoScaleQuality quality)
 	);
 
 	if (ScreenBuffer == NULL) {
-		SLOGE(DEBUG_TAG_VIDEO, "SDL_CreateRGBSurface for ScreenBuffer failed: %s\n", SDL_GetError());
+		SLOGE("SDL_CreateRGBSurface for ScreenBuffer failed: {}\n", SDL_GetError());
 	}
 
 
-	if (ScaleQuality == VideoScaleQuality::PERFECT) {
+	if (ScaleQuality == VideoScaleQuality::PERFECT)
+	{
 		SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "nearest");
 #if SDL_VERSION_ATLEAST(2,0,5)
+		if (!IsDesktopLargeEnough())
+		{
+			// Pixel-perfect mode cannot handle scaling down, and will
+			// result in a empty black screen if the window size is
+			// smaller than logical render resolution.
+			throw std::runtime_error("Game resolution must not be larger than desktop size. "
+				"Please reduce game resolution or choose another scaling mode.");
+		}
+		SDL_SetWindowMinimumSize(g_game_window, SCREEN_WIDTH, SCREEN_HEIGHT);
 		SDL_RenderSetIntegerScale(GameRenderer, SDL_TRUE);
 #else
+		SLOGW("Pixel-perfect scaling is not available");
 		ScaleQuality = VideoScaleQuality::NEAR_PERFECT;
 #endif
 	}
-	else if (ScaleQuality == VideoScaleQuality::NEAR_PERFECT) {
+	else if (ScaleQuality == VideoScaleQuality::NEAR_PERFECT)
+	{
+		SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "linear");
+		ScaledScreenTexture = SDL_CreateTexture(GameRenderer,
+			SDL_PIXELFORMAT_RGB565,
+			SDL_TEXTUREACCESS_TARGET,
+			SCREEN_WIDTH * OVERSAMPLING_SCALE, SCREEN_HEIGHT * OVERSAMPLING_SCALE);
+
+		if (ScaledScreenTexture == NULL)
+		{
+			SLOGE("SDL_CreateTexture for ScaledScreenTexture failed: {}\n", SDL_GetError());
+		}
+
 		SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "nearest");
 	}
-	else {
+	else
+	{
 		SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "linear");
 	}
 
@@ -197,21 +221,7 @@ void InitializeVideoManager(const VideoScaleQuality quality)
 					SCREEN_WIDTH, SCREEN_HEIGHT);
 
 	if (ScreenTexture == NULL) {
-		SLOGE(DEBUG_TAG_VIDEO, "SDL_CreateTexture for ScreenTexture failed: %s\n", SDL_GetError());
-	}
-
-	if (ScaleQuality == VideoScaleQuality::NEAR_PERFECT) {
-		int scale = 4;
-
-		SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "linear");
-		ScaledScreenTexture = SDL_CreateTexture(GameRenderer,
-			SDL_PIXELFORMAT_RGB565,
-			SDL_TEXTUREACCESS_TARGET,
-			SCREEN_WIDTH * scale, SCREEN_HEIGHT * scale);
-
-		if (ScaledScreenTexture == NULL) {
-			SLOGE(DEBUG_TAG_VIDEO, "SDL_CreateTexture for ScaledScreenTexture failed: %s\n", SDL_GetError());
-		}
+		SLOGE("SDL_CreateTexture for ScreenTexture failed: {}\n", SDL_GetError());
 	}
 
 	FrameBuffer = SDL_CreateRGBSurface(
@@ -221,7 +231,7 @@ void InitializeVideoManager(const VideoScaleQuality quality)
 
 	if (FrameBuffer == NULL)
 	{
-		SLOGE(DEBUG_TAG_VIDEO, "SDL_CreateRGBSurface for FrameBuffer failed: %s\n", SDL_GetError());
+		SLOGE("SDL_CreateRGBSurface for FrameBuffer failed: {}\n", SDL_GetError());
 	}
 
 	MouseCursor = SDL_CreateRGBSurface(
@@ -232,7 +242,7 @@ void InitializeVideoManager(const VideoScaleQuality quality)
 
 	if (MouseCursor == NULL)
 	{
-		SLOGE(DEBUG_TAG_VIDEO, "SDL_CreateRGBSurface for MouseCursor failed: %s\n", SDL_GetError());
+		SLOGE("SDL_CreateRGBSurface for MouseCursor failed: {}\n", SDL_GetError());
 	}
 
 	SDL_ShowCursor(SDL_DISABLE);
@@ -242,8 +252,6 @@ void InitializeVideoManager(const VideoScaleQuality quality)
 	guiVideoManagerState     = VIDEO_ON;
 	guiDirtyRegionCount      = 0;
 	gfForceFullScreenRefresh = TRUE;
-	gfPrintFrameBuffer       = FALSE;
-	guiPrintFrameBufferIndex = 0;
 
 	// This function must be called to setup RGB information
 	GetRGBDistribution();
@@ -252,23 +260,41 @@ void InitializeVideoManager(const VideoScaleQuality quality)
 
 void ShutdownVideoManager(void)
 {
-	SLOGD(DEBUG_TAG_VIDEO, "Shutting down the video manager");
+	SLOGD("Shutting down the video manager");
 	/* Toggle the state of the video manager to indicate to the refresh thread
 	 * that it needs to shut itself down */
 
-	SDL_QuitSubSystem(SDL_INIT_VIDEO);
-
 	guiVideoManagerState = VIDEO_OFF;
+
+	// ScreenBuffer SDL surface freed by its SGPVSurface wrapper.
+	ScreenBuffer = nullptr;
+
+	if (ScreenTexture != NULL) {
+		SDL_DestroyTexture(ScreenTexture);
+		ScreenTexture = NULL;
+	}
+
+	if (ScaledScreenTexture != NULL) {
+		SDL_DestroyTexture(ScaledScreenTexture);
+		ScaledScreenTexture = NULL;
+	}
+
+	if (GameRenderer != NULL) {
+		SDL_DestroyRenderer(GameRenderer);
+		GameRenderer = NULL;
+	}
+
+	if (g_game_window != NULL) {
+		SDL_DestroyWindow(g_game_window);
+		g_game_window = NULL;
+	}
+
+	SDL_QuitSubSystem(SDL_INIT_VIDEO);
 
 	// ATE: Release mouse cursor!
 	FreeMouseCursor();
 }
 
-
-void SuspendVideoManager(void)
-{
-	guiVideoManagerState = VIDEO_SUSPENDED;
-}
 
 void InvalidateRegion(INT32 iLeft, INT32 iTop, INT32 iRight, INT32 iBottom)
 {
@@ -379,7 +405,7 @@ void InvalidateScreen(void)
 static void ScrollJA2Background(INT16 sScrollXIncrement, INT16 sScrollYIncrement)
 {
 	SDL_Surface* Frame  = FrameBuffer;
-	SDL_Surface* Source = SDL_CreateRGBSurface(0, ScreenBuffer->w, ScreenBuffer->h, PIXEL_DEPTH, RED_MASK, GREEN_MASK, BLUE_MASK, ALPHA_MASK);
+	SurfaceUniquePtr Source(SDL_CreateRGBSurfaceWithFormat(0, ScreenBuffer->w, ScreenBuffer->h, 0, ScreenBuffer->format->format));
 	SDL_Surface* Dest   = ScreenBuffer; // Back
 	SDL_Rect     SrcRect;
 	SDL_Rect     DstRect;
@@ -389,7 +415,7 @@ static void ScrollJA2Background(INT16 sScrollXIncrement, INT16 sScrollYIncrement
 	const UINT16 usWidth  = SCREEN_WIDTH;
 	const UINT16 usHeight = gsVIEWPORT_WINDOW_END_Y - gsVIEWPORT_WINDOW_START_Y;
 
-	SDL_BlitSurface(ScreenBuffer, NULL, Source, NULL);
+	SDL_BlitSurface(ScreenBuffer, NULL, Source.get(), NULL);
 
 	if (sScrollXIncrement < 0)
 	{
@@ -449,7 +475,7 @@ static void ScrollJA2Background(INT16 sScrollXIncrement, INT16 sScrollYIncrement
 		DstRect.y = gsVIEWPORT_WINDOW_START_Y;
 	}
 
-	SDL_BlitSurface(Source, &SrcRect, Dest, &DstRect);
+	SDL_BlitSurface(Source.get(), &SrcRect, Dest, &DstRect);
 
 #ifdef SCROLL_TEST
 	SDL_FillRect(Dest, NULL, 0);
@@ -463,7 +489,7 @@ static void ScrollJA2Background(INT16 sScrollXIncrement, INT16 sScrollYIncrement
 		UINT h = StripRegions[i].h;
 		for (UINT j = y; j < y + h; ++j)
 		{
-			memset(gpZBuffer + j * SCREEN_WIDTH + x, 0, w * sizeof(*gpZBuffer));
+			std::fill_n(gpZBuffer + j * SCREEN_WIDTH + x, w, 0);
 		}
 
 		RenderStaticWorldRect(x, y, x + w, y + h, TRUE);
@@ -488,105 +514,9 @@ static void ScrollJA2Background(INT16 sScrollXIncrement, INT16 sScrollYIncrement
 	r.h = gsVIEWPORT_WINDOW_END_Y - gsVIEWPORT_WINDOW_START_Y;
 	SDL_RenderCopy(GameRenderer, screenTexture, &r, &r);
 
-	SDL_FreeSurface(Source);
 	SDL_DestroyTexture(screenTexture);
 }
 
-
-static void WriteTGAHeader(FILE* const f)
-{
-	/*
-	 *  0 byte ID length
-	 *  1 byte colour map type
-	 *  2 byte targa type
-	 *  3 word colour map origin
-	 *  5 word colour map length
-	 *  7 byte colour map entry size
-	 *  8 word origin x
-	 * 10 word origin y
-	 * 12 word image width
-	 * 14 word image height
-	 * 16 byte bits per pixel
-	 * 17 byte image descriptor
-	 */
-	static const BYTE data[] =
-	{
-		0,
-		0,
-		2,
-		0, 0,
-		0, 0,
-		0,
-		0, 0,
-		0, 0,
-		(UINT8) (SCREEN_WIDTH  % 256), (UINT8) (SCREEN_WIDTH  / 256),
-		(UINT8) (SCREEN_HEIGHT % 256), (UINT8) (SCREEN_HEIGHT / 256),
-		PIXEL_DEPTH,
-		0
-	};
-	fwrite(data, sizeof(data), 1, f);
-}
-
-
-/* Create a file for a screenshot, which is guaranteed not to exist yet. */
-static FILE* CreateScreenshotFile(void)
-{
-	const std::string exec_dir = GCM->getScreenshotFolder();
-	do
-	{
-		char filename[2048];
-		sprintf(filename, "%s/SCREEN%03d.TGA", exec_dir.c_str(), guiPrintFrameBufferIndex++);
-#ifndef _WIN32
-#	define O_BINARY 0
-#endif
-		int const fd = open3(filename, O_WRONLY | O_CREAT | O_EXCL | O_BINARY, 0644);
-		if (fd >= 0)
-		{
-			FILE* const f = fdopen(fd, "wb");
-			if (f == NULL) close(fd);
-			return f;
-		}
-	}
-	while (errno == EEXIST);
-	return NULL;
-}
-
-
-static void TakeScreenshot()
-{
-	FILE* const f = CreateScreenshotFile();
-	if (!f) return;
-
-	WriteTGAHeader(f);
-
-	// If not 5/5/5, create buffer
-	UINT16* buf = 0;
-	if (gusRedMask != 0x7C00 || gusGreenMask != 0x03E0 || gusBlueMask != 0x001F)
-	{
-		buf = MALLOCN(UINT16, SCREEN_WIDTH);
-	}
-
-	UINT16 const* src = static_cast<UINT16 const*>(ScreenBuffer->pixels);
-	for (INT32 y = SCREEN_HEIGHT - 1; y >= 0; --y)
-	{
-		if (buf)
-		{ // ATE: Fix this such that it converts pixel format to 5/5/5
-			memcpy(buf, src + y * SCREEN_WIDTH, SCREEN_WIDTH * sizeof(*buf));
-			ConvertRGBDistribution565To555(buf, SCREEN_WIDTH);
-			fwrite(buf, sizeof(*buf), SCREEN_WIDTH, f);
-		}
-		else
-		{
-			fwrite(src + y * SCREEN_WIDTH, SCREEN_WIDTH * 2, 1, f);
-		}
-	}
-
-	if (buf) MemFree(buf);
-
-	fclose(f);
-}
-
-static void SnapshotSmall(void);
 
 void RefreshScreen(void)
 {
@@ -615,6 +545,11 @@ void RefreshScreen(void)
 
 	const BOOLEAN scrolling = (gsScrollXIncrement != 0 || gsScrollYIncrement != 0);
 
+	// This variable will hold the union of all modified regions.
+	struct rect : SDL_Rect {
+		void operator+=(SDL_Rect const& r) { SDL_UnionRect(this, &r, this); }
+	} ScreenTextureUpdateRect{ MouseBackground };
+
 	if (guiFrameBufferState == BUFFER_DIRTY)
 	{
 		if (gfFadeInitialized && gfFadeInVideo)
@@ -626,11 +561,13 @@ void RefreshScreen(void)
 			if (gfForceFullScreenRefresh)
 			{
 				SDL_BlitSurface(FrameBuffer, NULL, ScreenBuffer, NULL);
+				ScreenTextureUpdateRect = { 0, 0, ScreenBuffer->w, ScreenBuffer->h };
 			}
 			else
 			{
 				for (UINT32 i = 0; i < guiDirtyRegionCount; i++)
 				{
+					ScreenTextureUpdateRect += DirtyRegions[i];
 					SDL_BlitSurface(FrameBuffer, &DirtyRegions[i], ScreenBuffer, &DirtyRegions[i]);
 				}
 
@@ -645,6 +582,7 @@ void RefreshScreen(void)
 							continue;
 						}
 					}
+					ScreenTextureUpdateRect += *r;
 					SDL_BlitSurface(FrameBuffer, r, ScreenBuffer, r);
 				}
 			}
@@ -654,43 +592,34 @@ void RefreshScreen(void)
 			ScrollJA2Background(gsScrollXIncrement, gsScrollYIncrement);
 			gsScrollXIncrement = 0;
 			gsScrollYIncrement = 0;
+			ScreenTextureUpdateRect += SDL_Rect{
+				gsVIEWPORT_START_X, gsVIEWPORT_WINDOW_START_Y,
+				gsVIEWPORT_END_X - gsVIEWPORT_START_X,
+				gsVIEWPORT_WINDOW_END_Y - gsVIEWPORT_WINDOW_START_Y };
 		}
 		gfIgnoreScrollDueToCenterAdjust = FALSE;
 		guiFrameBufferState = BUFFER_READY;
 	}
 
-	if (gfVideoCapture)
-	{
-		UINT32 uiTime = GetClock();
-		if (uiTime < guiLastFrame || uiTime > guiLastFrame + guiFramePeriod)
-		{
-			SnapshotSmall();
-			guiLastFrame = uiTime;
-		}
-	}
-
-	if (gfPrintFrameBuffer)
-	{
-		TakeScreenshot();
-		gfPrintFrameBuffer = FALSE;
-	}
-
-	SGPPoint MousePos;
-	GetMousePos(&MousePos);
+	SGPPoint cursorPos;
+	GetCursorPos(cursorPos);
 	SDL_Rect src;
 	src.x = 0;
 	src.y = 0;
 	src.w = gusMouseCursorWidth;
-	src.h = gusMouseCursorHeight;
+	src.h = gusMouseCursorHeight + gsMouseSizeYModifier;
 	SDL_Rect dst;
-	dst.x = MousePos.iX - gsMouseCursorXOffset;
-	dst.y = MousePos.iY - gsMouseCursorYOffset;
+	dst.x = cursorPos.iX - gsMouseCursorXOffset;
+	dst.y = cursorPos.iY - gsMouseCursorYOffset;
 	SDL_BlitSurface(MouseCursor, &src, ScreenBuffer, &dst);
+	ScreenTextureUpdateRect += dst;
 	MouseBackground = dst;
 
-	SDL_UpdateTexture(ScreenTexture, NULL, ScreenBuffer->pixels, ScreenBuffer->pitch);
-
-	SDL_RenderClear(GameRenderer);
+	uint8_t const * SrcPixels = static_cast<uint8_t *>(ScreenBuffer->pixels)
+		+ ScreenTextureUpdateRect.y * ScreenBuffer->pitch
+		+ ScreenTextureUpdateRect.x * ScreenBuffer->format->BytesPerPixel;
+	SDL_UpdateTexture(ScreenTexture, &ScreenTextureUpdateRect,
+	                  SrcPixels, ScreenBuffer->pitch);
 
 	if (ScaleQuality == VideoScaleQuality::NEAR_PERFECT) {
 		SDL_SetRenderTarget(GameRenderer, ScaledScreenTexture);
@@ -732,14 +661,6 @@ static void GetRGBDistribution()
 }
 
 
-void GetPrimaryRGBDistributionMasks(UINT32* const  RedBitMask, UINT32* const GreenBitMask, UINT32* const BlueBitMask)
-{
-	*RedBitMask   = gusRedMask;
-	*GreenBitMask = gusGreenMask;
-	*BlueBitMask  = gusBlueMask;
-}
-
-
 void SetMouseCursorProperties(INT16 sOffsetX, INT16 sOffsetY, UINT16 usCursorHeight, UINT16 usCursorWidth)
 {
 	gsMouseCursorXOffset = sOffsetX;
@@ -754,110 +675,14 @@ void EndFrameBufferRender(void)
 	guiFrameBufferState = BUFFER_DIRTY;
 }
 
-
-void PrintScreen(void)
-{
-	gfPrintFrameBuffer = TRUE;
-}
-
-
-/*******************************************************************************
- * SnapshotSmall
- *
- * Grabs a screen from the primary surface, and stuffs it into a 16-bit
- * (RGB 5,5,5), uncompressed Targa file. Each time the routine is called, it
- * increments the file number by one. The files are create in the current
- * directory, usually the EXE directory. This routine produces 1/4 sized images.
- *
- ******************************************************************************/
-
-
-static void RefreshMovieCache(void);
-
-
-static void SnapshotSmall(void)
-{
-	// Get the write pointer
-	const UINT16* pVideo = (UINT16*)ScreenBuffer->pixels;
-
-	UINT16* pDest = gpFrameData[giNumFrames];
-
-	for (INT32 iCountY = SCREEN_HEIGHT - 1; iCountY >= 0; iCountY--)
-	{
-		for (INT32 iCountX = 0; iCountX < SCREEN_WIDTH; iCountX++)
-		{
-			pDest[iCountY * SCREEN_WIDTH + iCountX] = pVideo[iCountY * SCREEN_WIDTH + iCountX];
-		}
-	}
-
-	giNumFrames++;
-
-	if (giNumFrames == MAX_NUM_FRAMES) RefreshMovieCache();
-}
-
-static void RefreshMovieCache(void)
-{
-	static UINT32 uiPicNum = 0;
-
-	PauseTime(TRUE);
-
-	const std::string exec_dir = GCM->getVideoCaptureFolder();
-
-	for (INT32 cnt = 0; cnt < giNumFrames; cnt++)
-	{
-		CHAR8 cFilename[2048];
-		sprintf(cFilename, "%s/JA%5.5d.TGA", exec_dir.c_str(), uiPicNum++);
-
-		FILE* disk = fopen(cFilename, "wb");
-		if (disk == NULL) return;
-
-		WriteTGAHeader(disk);
-
-		UINT16* pDest = gpFrameData[cnt];
-
-		for (INT32 iCountY = SCREEN_HEIGHT - 1; iCountY >= 0; iCountY -= 1)
-		{
-			for (INT32 iCountX = 0; iCountX < SCREEN_WIDTH; iCountX ++)
-			{
-				fwrite(pDest + iCountY * SCREEN_WIDTH + iCountX, sizeof(UINT16), 1, disk);
-			}
-		}
-
-		fclose(disk);
-	}
-
-	PauseTime(FALSE);
-
-	giNumFrames = 0;
-}
-
-
-static void RecreateBackBuffer()
-{
-	// ScreenBuffer should not be automatically removed because it was created
-	// with SDL_SetVideoMode.  So, using SGPVSurface instead of SGPVSurfaceAuto
-	SGPVSurface* newBackbuffer = new SGPVSurface(ScreenBuffer);
-
-	if(g_back_buffer != NULL)
-	{
-		ReplaceFontBackBuffer(g_back_buffer, newBackbuffer);
-
-		delete g_back_buffer;
-		g_back_buffer = NULL;
-	}
-
-	g_back_buffer  = newBackbuffer;
-}
-
 static void SetPrimaryVideoSurfaces(void)
 {
 	// Delete surfaces if they exist
 	DeletePrimaryVideoSurfaces();
 
-	RecreateBackBuffer();
-
-	g_mouse_buffer = new SGPVSurfaceAuto(MouseCursor);
-	g_frame_buffer = new SGPVSurfaceAuto(FrameBuffer);
+	g_back_buffer  = new SGPVSurface(ScreenBuffer);
+	g_mouse_buffer = new SGPVSurface(MouseCursor);
+	g_frame_buffer = new SGPVSurface(FrameBuffer);
 }
 
 static void DeletePrimaryVideoSurfaces(void)
@@ -888,7 +713,7 @@ void InitializeVideoSurfaceManager(void)
 
 void ShutdownVideoSurfaceManager(void)
 {
-	SLOGD(DEBUG_TAG_VIDEO, "Shutting down the Video Surface manager");
+	SLOGD("Shutting down the Video Surface manager");
 
 	// Delete primary viedeo surfaces
 	DeletePrimaryVideoSurfaces();
@@ -896,5 +721,13 @@ void ShutdownVideoSurfaceManager(void)
 	while (gpVSurfaceHead)
 	{
 		delete gpVSurfaceHead;
+	}
+}
+
+
+void HandleWindowEvent(SDL_Event const& evt)
+{
+	if (evt.window.event == SDL_WINDOWEVENT_RESIZED) {
+		SDL_RenderClear(GameRenderer);
 	}
 }

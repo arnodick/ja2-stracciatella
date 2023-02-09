@@ -6,7 +6,6 @@
 #include "Input.h"
 #include "Line.h"
 #include "Local.h"
-#include "MemMan.h"
 #include "MouseSystem.h"
 #include "Render_Dirty.h"
 #include "Slider.h"
@@ -72,7 +71,7 @@ void InitSlider(void)
 
 void ShutDownSlider(void)
 {
-	AssertMsg(guiSliderBoxImage != NULL, "Trying to ShutDown the Slider System when it was never inited");
+	Assert(guiSliderBoxImage); // Trying to ShutDown the Slider System when it was never inited?
 
 	//Do a cehck to see if there are still active nodes
 	for (SLIDER* i = pSliderHead; i != NULL;)
@@ -91,17 +90,17 @@ void ShutDownSlider(void)
 
 
 static void CalculateNewSliderBoxPosition(SLIDER* pSlider);
-static void SelectedSliderButtonCallBack(MOUSE_REGION* r, INT32 iReason);
-static void SelectedSliderMovementCallBack(MOUSE_REGION* r, INT32 reason);
+static void SelectedSliderButtonCallBack(MOUSE_REGION* r, UINT32 iReason);
+static void SelectedSliderMovementCallBack(MOUSE_REGION* r, UINT32 reason);
 
 
 SLIDER* AddSlider(UINT8 ubStyle, UINT16 usCursor, UINT16 usPosX, UINT16 usPosY, UINT16 usWidth, UINT16 usNumberOfIncrements, INT8 sPriority, SLIDER_CHANGE_CALLBACK SliderChangeCallback)
 {
-	AssertMsg(guiSliderBoxImage != NULL, "Trying to Add a Slider Bar when the Slider System was never inited");
+	if (!guiSliderBoxImage) InitSlider();
 
 	if (ubStyle >= NUM_SLIDER_STYLES) throw std::logic_error("Invalid slider style");
 
-	SLIDER* const s = MALLOCZ(SLIDER);
+	SLIDER* const s = new SLIDER{};
 	// Assign the settings to the current slider
 	s->usPosX               = usPosX;
 	s->usPosY               = usPosY;
@@ -171,7 +170,7 @@ static void RenderSelectedSliderBar(SLIDER* s);
 void RenderAllSliderBars(void)
 {
 	// set the currently selectd slider bar
-	if (gfLeftButtonState && gpCurrentSlider != NULL)
+	if ((IsMouseButtonDown(MOUSE_BUTTON_LEFT) || IsMainFingerDown()) && gpCurrentSlider != NULL)
 	{
 		SLIDER* const s = gpCurrentSlider;
 		const UINT16 pos = gusMouseYPos < s->usPosY ? 0 : gusMouseYPos - s->usPosY;
@@ -269,16 +268,16 @@ void RemoveSliderBar(SLIDER* s)
 	if (s->pPrev) s->pPrev->pNext = s->pNext;
 
 	MSYS_RemoveRegion(&s->ScrollAreaMouseRegion);
-	MemFree(s);
+	delete s;
 }
 
 
-static void SelectedSliderMovementCallBack(MOUSE_REGION* r, INT32 reason)
+static void SelectedSliderMovementCallBack(MOUSE_REGION* r, UINT32 reason)
 {
 	//if we already have an anchored slider bar
 	if (gpCurrentSlider != NULL) return;
 
-	if (!gfLeftButtonState) return;
+	if (!IsMouseButtonDown(MOUSE_BUTTON_LEFT) && !IsMainFingerDown()) return;
 
 	SLIDER* s;
 	if (reason & MSYS_CALLBACK_REASON_LOST_MOUSE)
@@ -313,13 +312,13 @@ static void SetSliderPos(SLIDER* s, INT32 pos)
 }
 
 
-static void SelectedSliderButtonCallBack(MOUSE_REGION* r, INT32 iReason)
+static void SelectedSliderButtonCallBack(MOUSE_REGION* r, UINT32 iReason)
 {
 	//if we already have an anchored slider bar
 	if (gpCurrentSlider != NULL) return;
 
-	if (iReason & MSYS_CALLBACK_REASON_LBUTTON_DWN ||
-			iReason & MSYS_CALLBACK_REASON_LBUTTON_REPEAT)
+	if (iReason & MSYS_CALLBACK_REASON_POINTER_DWN ||
+			iReason & MSYS_CALLBACK_REASON_POINTER_REPEAT)
 	{
 		SLIDER* const s = r->GetUserPtr<SLIDER>();
 		const UINT16 pos = s->uiFlags & SLIDER_VERTICAL ? r->RelativeYPos : r->RelativeXPos;
@@ -330,7 +329,7 @@ static void SelectedSliderButtonCallBack(MOUSE_REGION* r, INT32 iReason)
 		SLIDER* const s = r->GetUserPtr<SLIDER>();
 		const INT32 step = (s->usNumberOfIncrements + WHEEL_MOVE_FRACTION - 1) / WHEEL_MOVE_FRACTION;
 		INT32 pos = s->usCurrentIncrement - step;
-		pos = MAX(0, pos);
+		pos = std::max(0, int(pos));
 		SetSliderPos(s, pos);
 	}
 	else if (iReason & MSYS_CALLBACK_REASON_WHEEL_DOWN)
@@ -338,7 +337,7 @@ static void SelectedSliderButtonCallBack(MOUSE_REGION* r, INT32 iReason)
 		SLIDER* const s = r->GetUserPtr<SLIDER>();
 		const INT32 step = (s->usNumberOfIncrements + WHEEL_MOVE_FRACTION - 1) / WHEEL_MOVE_FRACTION;
 		INT32 pos = s->usCurrentIncrement + step;
-		pos = MIN(pos, s->usNumberOfIncrements);
+		pos = std::min(pos, int(s->usNumberOfIncrements));
 		SetSliderPos(s, pos);
 	}
 }
@@ -407,7 +406,7 @@ static void CalculateNewSliderBoxPosition(SLIDER* s)
 	}
 
 	//if the box is past the edge, move it back
-	s->usCurrentSliderBoxPosition = MIN(pos, usMaxPos);
+	s->usCurrentSliderBoxPosition = std::min(pos, usMaxPos);
 }
 
 

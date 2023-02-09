@@ -2,6 +2,7 @@
 #include "Directories.h"
 #include "Font.h"
 #include "IMP_Attribute_Selection.h"
+#include "IMP_SkillTraits.h"
 #include "IMPVideoObjects.h"
 #include "Input.h"
 #include "MessageBoxScreen.h"
@@ -19,6 +20,9 @@
 #include "GameInstance.h"
 #include "ContentManager.h"
 #include "policy/GamePolicy.h"
+
+#include <string_theory/format>
+
 
 // width of the slider bar region
 #define BAR_WIDTH 423 - 197
@@ -192,7 +196,7 @@ void HandleIMPAttributeSelection(void)
 	if (fReviewStats) return;
 
 	// set the currently selectd slider bar
-	if (gfLeftButtonState && gpCurrentScrollBox != NULL)
+	if ((IsMouseButtonDown(MOUSE_BUTTON_LEFT) || IsMainFingerDown()) && gpCurrentScrollBox != NULL)
 	{
 		//if the user is holding down the mouse cursor to left of the start of the slider bars
 		if (gusMouseXPos < SKILL_SLIDE_START_X + LAPTOP_SCREEN_UL_X)
@@ -323,6 +327,7 @@ static void IncrementStat(INT32 iStatToIncrement)
 		case MEDICAL_SKILL:        val = &iCurrentMedical;     break;
 		case MECHANICAL_SKILL:     val = &iCurrentMechanical;  break;
 		case EXPLOSIVE_SKILL:      val = &iCurrentExplosives;  break;
+		default:                   SLOGA("unexpected stat {}", iStatToIncrement); return;
 	}
 
 	if (*val == 0)
@@ -364,6 +369,7 @@ static void DecrementStat(INT32 iStatToDecrement)
 		case MEDICAL_SKILL:        val = &iCurrentMedical;     may_be_zero = TRUE; break;
 		case MECHANICAL_SKILL:     val = &iCurrentMechanical;  may_be_zero = TRUE; break;
 		case EXPLOSIVE_SKILL:      val = &iCurrentExplosives;  may_be_zero = TRUE; break;
+		default:                   SLOGA("unexpected stat {}", iStatToDecrement); return;
 	}
 
 	if (*val > MIN_ATTRIBUTE_POINTS)
@@ -381,7 +387,7 @@ static void DecrementStat(INT32 iStatToDecrement)
 }
 
 
-static void BtnIMPAttributeFinishCallback(GUI_BUTTON* btn, INT32 reason);
+static void BtnIMPAttributeFinishCallback(GUI_BUTTON* btn, UINT32 reason);
 
 
 static void CreateIMPAttributeSelectionButtons(void)
@@ -408,9 +414,9 @@ static void DestroyIMPAttributeSelectionButtons(void)
 }
 
 
-static void BtnIMPAttributeFinishCallback(GUI_BUTTON* btn, INT32 reason)
+static void BtnIMPAttributeFinishCallback(GUI_BUTTON* btn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		//are we done diting, or just reviewing the stats?
 		if (fReviewStats)
@@ -437,7 +443,7 @@ void RenderAttributeBoxes(void)
 		INT32 val = GetCurrentAttributeValue(i);
 
 		// Compensate for zeroed skills: x pos is at least 0
-		INT16 sX = MAX(0, val - MIN_ATTRIBUTE_POINTS) * BASE_SKILL_PIXEL_UNIT_SIZE / (MAX_ATTRIBUTE_POINTS-MIN_ATTRIBUTE_POINTS);
+		INT16 sX = std::max(0, val - MIN_ATTRIBUTE_POINTS) * BASE_SKILL_PIXEL_UNIT_SIZE / (MAX_ATTRIBUTE_POINTS-MIN_ATTRIBUTE_POINTS);
 		INT16 sY = SKILL_SLIDE_START_Y + SKILL_SLIDE_HEIGHT * i;
 
 		sX += SKILL_SLIDE_START_X;
@@ -445,15 +451,15 @@ void RenderAttributeBoxes(void)
 
 		sX += LAPTOP_SCREEN_UL_X;
 		sY += LAPTOP_SCREEN_WEB_UL_Y;
-		mprintf(sX + 13, sY + 3, L"%d", val);
+		MPrint(sX + 13, sY + 3, ST::format("{}", val));
 	}
 
 	SetFontShadow(DEFAULT_SHADOW);
 }
 
 
-static void BtnIMPAttributeSliderLeftCallback(GUI_BUTTON* btn, INT32 reason);
-static void BtnIMPAttributeSliderRightCallback(GUI_BUTTON* btn, INT32 reason);
+static void BtnIMPAttributeSliderLeftCallback(GUI_BUTTON* btn, UINT32 reason);
+static void BtnIMPAttributeSliderRightCallback(GUI_BUTTON* btn, UINT32 reason);
 
 
 static void CreateAttributeSliderButtons(void)
@@ -496,10 +502,10 @@ static void DestroyAttributeSliderButtons(void)
 }
 
 
-static void BtnIMPAttributeSliderLeftCallback(GUI_BUTTON* btn, INT32 reason)
+static void BtnIMPAttributeSliderLeftCallback(GUI_BUTTON* btn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_DWN ||
-			reason & MSYS_CALLBACK_REASON_LBUTTON_REPEAT)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_DWN ||
+			reason & MSYS_CALLBACK_REASON_POINTER_REPEAT)
 	{
 		INT32 const iValue = btn->GetUserData();
 		DecrementStat(iValue);
@@ -509,10 +515,10 @@ static void BtnIMPAttributeSliderLeftCallback(GUI_BUTTON* btn, INT32 reason)
 }
 
 
-static void BtnIMPAttributeSliderRightCallback(GUI_BUTTON* btn, INT32 reason)
+static void BtnIMPAttributeSliderRightCallback(GUI_BUTTON* btn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_DWN ||
-			reason & MSYS_CALLBACK_REASON_LBUTTON_REPEAT)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_DWN ||
+			reason & MSYS_CALLBACK_REASON_POINTER_REPEAT)
 	{
 		INT32 const iValue = btn->GetUserData();
 		IncrementStat(iValue);
@@ -522,7 +528,7 @@ static void BtnIMPAttributeSliderRightCallback(GUI_BUTTON* btn, INT32 reason)
 }
 
 
-static void SliderRegionButtonCallback(MOUSE_REGION* pRegion, INT32 iReason);
+static void SliderRegionButtonCallback(MOUSE_REGION* pRegion, UINT32 iReason);
 
 
 static void CreateSlideRegionMouseRegions()
@@ -547,7 +553,7 @@ static void DestroySlideRegionMouseRegions()
 }
 
 
-static void SliderRegionButtonCallback(MOUSE_REGION* pRegion, INT32 iReason)
+static void SliderRegionButtonCallback(MOUSE_REGION* pRegion, UINT32 iReason)
 {
 	static INT16 sOldX      = -1; // Changed from relative (to skill bar) to absolute position.
 	static INT32 iAttribute = -1;
@@ -556,7 +562,7 @@ static void SliderRegionButtonCallback(MOUSE_REGION* pRegion, INT32 iReason)
 	if (gpCurrentScrollBox != pRegion && gpCurrentScrollBox != NULL)
 		return;
 
-	if (iReason & MSYS_CALLBACK_REASON_LBUTTON_REPEAT)
+	if (iReason & MSYS_CALLBACK_REASON_POINTER_REPEAT)
 	{
 		if (!fSlideIsActive) return;
 
@@ -618,7 +624,7 @@ static void SliderRegionButtonCallback(MOUSE_REGION* pRegion, INT32 iReason)
 			sOldX = sNewX;
 		}
 	}
-	else if (iReason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	else if (iReason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		if (fSlideIsActive)
 		{
@@ -669,7 +675,7 @@ static void SliderRegionButtonCallback(MOUSE_REGION* pRegion, INT32 iReason)
 		// update screen
 		fHasAnySlidingBarMoved = TRUE;
 	}
-	else if (iReason & MSYS_CALLBACK_REASON_LBUTTON_DWN)
+	else if (iReason & MSYS_CALLBACK_REASON_POINTER_DWN)
 	{
 		// get mouse positions
 		const INT16 sX = pRegion->MouseXPos;
@@ -737,6 +743,10 @@ void SetAttributes(void)
 
 	// reset bonus pts
 	iCurrentBonusPoints = BONUS_ATTRIBUTE_POINTS;
+	if (gamepolicy(imp_pick_skills_directly))
+	{
+		iCurrentBonusPoints += DoesPlayerHaveExtraAttibutePointsToDistributeBasedOnSkillSelection();
+	}
 }
 
 
@@ -748,7 +758,7 @@ void DrawBonusPointsRemaining(void)
 	if (fReviewStats) return;
 
 	SetFontAttributes(FONT12ARIAL, FONT_WHITE);
-	mprintf(LAPTOP_SCREEN_UL_X + 425, LAPTOP_SCREEN_WEB_UL_Y + 51, L"%d", iCurrentBonusPoints);
+	MPrint(LAPTOP_SCREEN_UL_X + 425, LAPTOP_SCREEN_WEB_UL_Y + 51, ST::format("{}", iCurrentBonusPoints));
 	InvalidateRegion(LAPTOP_SCREEN_UL_X + 425, LAPTOP_SCREEN_WEB_UL_Y + 51, LAPTOP_SCREEN_UL_X + 475, LAPTOP_SCREEN_WEB_UL_Y + 71);
 }
 

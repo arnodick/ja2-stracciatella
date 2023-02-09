@@ -12,7 +12,6 @@
 #include "Render_Fun.h"  //for access to gubWorldRoomInfo;
 #include "Cursor_Modes.h"
 #include "Exit_Grids.h"
-#include "MemMan.h"
 
 
 /*
@@ -108,7 +107,7 @@ static void DeleteTreeNode(MapIndexBinaryTree** node)
 		DeleteTreeNode( &((*node)->left) );
 	if( (*node)->right )
 		DeleteTreeNode( &((*node)->right) );
-	MemFree( *node );
+	delete *node;
 	*node = NULL;
 }
 
@@ -126,7 +125,7 @@ static BOOLEAN AddMapIndexToTree(UINT16 usMapIndex)
 	MapIndexBinaryTree *curr, *parent;
 	if( !top )
 	{
-		top = MALLOC(MapIndexBinaryTree);
+		top = new MapIndexBinaryTree{};
 		top->usMapIndex = usMapIndex;
 		top->left = NULL;
 		top->right = NULL;
@@ -148,7 +147,7 @@ static BOOLEAN AddMapIndexToTree(UINT16 usMapIndex)
 	//if we made it this far, then curr is null and parent is pointing
 	//directly above.
 	//Create the new node and fill in the information.
-	curr = MALLOC(MapIndexBinaryTree);
+	curr = new MapIndexBinaryTree{};
 	curr->usMapIndex = usMapIndex;
 	curr->left = NULL;
 	curr->right = NULL;
@@ -165,7 +164,7 @@ static undo_stack* DeleteStackNode(undo_stack* const del)
 {
 	undo_struct* const undo = del->pData;
 	undo_stack*  const succ = del->pNext;
-	MemFree(del);
+	delete del;
 
 	MAP_ELEMENT* const me = undo->pMapTile;
 	if (me != NULL) // light was saved -- mapelement, too?
@@ -187,14 +186,14 @@ static undo_stack* DeleteStackNode(undo_stack* const del)
 			{ /* Okay to delete the structure data -- otherwise, this would be merc
 				 * structure data that we DON'T want to delete, because the merc node that
 				 * hasn't been modified will still use this structure data! */
-				MemFree(s);
+				delete s;
 			}
 			s = next;
 		}
 		me->pStructureHead = NULL;
 
-		MemFree(me);
-		MemFree(undo);
+		delete me;
+		delete undo;
 	}
 
 	return succ;
@@ -461,7 +460,7 @@ namespace
 				LEVELNODE *temp;
 				temp = pLevelNode;
 				pLevelNode = pLevelNode->pNext;
-				MemFree( temp );
+				delete temp;
 			}
 		}
 		pStructure = pNewMapElement->pStructureHead;
@@ -470,7 +469,7 @@ namespace
 			STRUCTURE *temp;
 			temp = pStructure;
 			pStructure = pStructure->pNext;
-			MemFree( temp );
+			delete temp;
 		}
 	}
 }
@@ -478,7 +477,7 @@ namespace
 
 static MAP_ELEMENT* CopyMapElementFromWorld(INT32 const map_index)
 {
-	SGP::AutoObj<MAP_ELEMENT, DeleteMapElementContentsAfterCreationFail> new_me(MALLOCZ(MAP_ELEMENT));
+	SGP::AutoObj<MAP_ELEMENT, DeleteMapElementContentsAfterCreationFail> new_me(new MAP_ELEMENT{});
 
 	MAP_ELEMENT const* const old_me = &gpWorldLevelData[map_index];
 
@@ -487,7 +486,7 @@ static MAP_ELEMENT* CopyMapElementFromWorld(INT32 const map_index)
 	STRUCTURE** anchor = &new_me->pStructureHead;
 	for (STRUCTURE const* i = old_me->pStructureHead; i; i = i->pNext)
 	{
-		STRUCTURE* const s = MALLOC(STRUCTURE);
+		STRUCTURE* const s = new STRUCTURE{};
 		*s       = *i;
 		s->pPrev = tail;
 		s->pNext = 0;
@@ -506,7 +505,7 @@ static MAP_ELEMENT* CopyMapElementFromWorld(INT32 const map_index)
 		LEVELNODE** anchor = &new_me->pLevelNodes[x];
 		for (LEVELNODE const* i = old_me->pLevelNodes[x]; i; i = i->pNext)
 		{
-			LEVELNODE* const l = MALLOC(LEVELNODE);
+			LEVELNODE* const l = new LEVELNODE{};
 			*l       = *i;
 			if (x == 0) l->pPrevNode = tail; // Land layer only
 			l->pNext = 0;
@@ -587,8 +586,8 @@ void DetermineUndoState()
 	// Reset the undo command mode if we released the left button.
 	if( !fNewUndoCmd )
 	{
-		if( (!gfLeftButtonState  && !gfCurrentSelectionWithRightButton) ||
-			(!gfRightButtonState &&  gfCurrentSelectionWithRightButton) )
+		if( (!IsMouseButtonDown(MOUSE_BUTTON_LEFT)  && !gfCurrentSelectionWithRightButton) ||
+			(!IsMouseButtonDown(MOUSE_BUTTON_RIGHT) &&  gfCurrentSelectionWithRightButton) )
 		{
 			//Clear the mapindex binary tree list, and set up flag for new undo command.
 			fNewUndoCmd = TRUE;

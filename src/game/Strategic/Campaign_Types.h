@@ -4,26 +4,11 @@
 #include "Debug.h"
 #include "Types.h"
 
-static inline bool IS_VALID_SECTOR(UINT8 const x, UINT8 const y)
-{
-	return 1 <= x && x <= 16 && 1 <= y && y <= 16;
-}
-
-//Macro to convert sector coordinates (1-16,1-16) to 0-255
-static inline UINT8 SECTOR(UINT8 const x, UINT8 const y)
-{
-	Assert(IS_VALID_SECTOR(x, y));
-	return (y - 1) * 16 + x - 1;
-}
-
-#define SECTORX(SectorID) ((SectorID % 16) + 1)
-#define SECTORY(SectorID) ((SectorID / 16) + 1)
-
 //Sector enumerations
 //
 //NOTE: These use the 0-255 SectorInfo[] numbering system, and CAN'T be used as indexes into the StrategicMap[] array
-//Use SECTOR_INFO_TO_STRATEGIC_INDEX() macro to convert...
-enum
+//Use SGPSector::AsStrategicIndex() to convert
+enum SectorIndex
 {
 	SEC_A1,	SEC_A2,	SEC_A3, SEC_A4,	SEC_A5, SEC_A6,	SEC_A7,	SEC_A8,	SEC_A9, SEC_A10, SEC_A11, SEC_A12, SEC_A13, SEC_A14, SEC_A15, SEC_A16,
 	SEC_B1,	SEC_B2,	SEC_B3, SEC_B4,	SEC_B5, SEC_B6,	SEC_B7,	SEC_B8,	SEC_B9, SEC_B10, SEC_B11, SEC_B12, SEC_B13, SEC_B14, SEC_B15, SEC_B16,
@@ -60,7 +45,7 @@ enum SectorFlags
 	SF_USE_ALTERNATE_MAP                  = 0x00000040,
 	SF_PENDING_ALTERNATE_MAP              = 0x00000080,
 	SF_ALREADY_LOADED                     = 0x00000100,
-	SF_HAS_ENTERED_TACTICAL               = 0x00000200,
+	// 0x00000200 was the never read SF_HAS_ENTERED_TACTICAL
 	SF_SKYRIDER_NOTICED_ENEMIES_HERE      = 0x00000400,
 	SF_HAVE_USED_GUIDE_QUOTE              = 0x00000800,
 
@@ -80,7 +65,7 @@ enum SectorFlags
 
 
 // town militia experience categories
-enum
+enum MilitiaLevel
 {
 	GREEN_MILITIA = 0,
 	REGULAR_MILITIA,
@@ -103,11 +88,14 @@ enum
 
 
 //Vehicle types
-#define FOOT				0x01 //anywhere
-#define CAR					0x02 //roads
-#define TRUCK				0x04 //roads, plains, sparse
-#define TRACKED			0x08 //roads, plains, sand, sparse
-#define AIR					0x10 //can traverse all terrains at 100%
+enum VehicleMovementType
+{
+	FOOT = 0x01,		//anywhere
+	CAR = 0x02,		//roads
+	TRUCK = 0x04,		//roads, plains, sparse
+	TRACKED = 0x08,		//roads, plains, sand, sparse
+	AIR = 0x10		//can traverse all terrains at 100%
+};
 
 //Traversability ratings
 enum
@@ -211,7 +199,7 @@ struct SECTORINFO
 struct UNDERGROUND_SECTORINFO
 {
 	UINT32 uiFlags;
-	UINT8 ubSectorX, ubSectorY, ubSectorZ;
+	SGPSector ubSector;
 	UINT8 ubNumElites, ubNumTroops, ubNumAdmins, ubNumCreatures;
 	UINT32	uiTimeCurrentSectorWasLastLoaded;		//Specifies the last time the player was in the sector
 	UNDERGROUND_SECTORINFO* next;

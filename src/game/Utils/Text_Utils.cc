@@ -1,41 +1,9 @@
-#include "Directories.h"
 #include "Text.h"
-#include "Text_Utils.h"
-#include "FileMan.h"
 #include "GameSettings.h"
 
-#include "game/GameRes.h"
-#include "ContentManager.h"
-#include "GameInstance.h"
+#include <string_theory/string>
 
-#define ITEMSTRINGFILENAME BINARYDATADIR "/itemdesc.edt"
-
-
-void LoadItemInfo(UINT16 const ubIndex, wchar_t Info[])
-{
-	UINT32 Seek = (SIZE_SHORT_ITEM_NAME + SIZE_ITEM_NAME + SIZE_ITEM_INFO) * ubIndex;
-	GCM->loadEncryptedString(ITEMSTRINGFILENAME, Info, Seek + SIZE_ITEM_NAME + SIZE_SHORT_ITEM_NAME, SIZE_ITEM_INFO);
-}
-
-
-static void LoadAllItemNames(void)
-{
-	AutoSGPFile File(GCM->openGameResForReading(ITEMSTRINGFILENAME));
-	for (UINT32 i = 0; i < MAXITEMS; i++)
-	{
-		UINT32 Seek = (SIZE_SHORT_ITEM_NAME + SIZE_ITEM_NAME + SIZE_ITEM_INFO) * i;
-		GCM->loadEncryptedString(File, ShortItemNames[i], Seek, SIZE_SHORT_ITEM_NAME);
-		GCM->loadEncryptedString(File, ItemNames[i], Seek + SIZE_SHORT_ITEM_NAME, SIZE_ITEM_NAME);
-	}
-}
-
-
-void LoadAllExternalText( void )
-{
-	LoadAllItemNames();
-}
-
-const wchar_t* GetWeightUnitString( void )
+ST::string GetWeightUnitString( void )
 {
 	if ( gGameSettings.fOptions[ TOPTION_USE_METRIC_SYSTEM ] ) // metric
 	{

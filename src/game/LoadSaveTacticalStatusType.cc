@@ -2,6 +2,7 @@
 
 #include "Debug.h"
 #include "FileMan.h"
+#include "GameMode.h"
 #include "LoadSaveData.h"
 #include "LoadSaveTacticalStatusType.h"
 #include "Overhead.h"
@@ -11,10 +12,10 @@ void ExtractTacticalStatusTypeFromFile(HWFILE const f, bool stracLinuxFormat)
 {
 	UINT32 dataSize = stracLinuxFormat ? TACTICAL_STATUS_TYPE_SIZE_STRAC_LINUX : TACTICAL_STATUS_TYPE_SIZE;
 	std::vector<BYTE> data(dataSize);
-	FileRead(f, data.data(), dataSize);
+	f->read(data.data(), dataSize);
 
 	TacticalStatusType* const s = &gTacticalStatus;
-	const BYTE* d = data.data();
+	DataReader d{data.data()};
 	EXTR_U32(d, s->uiFlags)
 	FOR_EACH(TacticalTeamType, t, s->Team)
 	{
@@ -43,8 +44,8 @@ void ExtractTacticalStatusTypeFromFile(HWFILE const f, bool stracLinuxFormat)
 	EXTR_U32(d, s->uiTimeSinceDemoOn)
 	EXTR_SKIP(d, 7)
 	EXTR_BOOLA(d, s->fCivGroupHostile, lengthof(s->fCivGroupHostile))
-	EXTR_U8(d, s->ubLastBattleSectorX)
-	EXTR_U8(d, s->ubLastBattleSectorY)
+	EXTR_U8(d, s->ubLastBattleSector.x)
+	EXTR_U8(d, s->ubLastBattleSector.y)
 	EXTR_BOOL(d, s->fLastBattleWon)
 	EXTR_SKIP(d, 2)
 	EXTR_BOOL(d, s->fVirginSector)
@@ -132,14 +133,20 @@ void ExtractTacticalStatusTypeFromFile(HWFILE const f, bool stracLinuxFormat)
 	EXTR_U16(d, s->sCreatureTenseQuoteDelay)
 	EXTR_SKIP(d, 2)
 	EXTR_U32(d, s->uiCreatureTenseQuoteLastUpdate)
-	Assert(d == (data.data() + dataSize));
+	Assert(d.getConsumed() == dataSize);
+
+	if (!GameMode::getInstance()->debugging())
+	{
+		// Prevent restoring of debug UI modes
+		s->uiFlags &= ~(DEBUGCLIFFS | SHOW_Z_BUFFER);
+	}
 }
 
 
 void InjectTacticalStatusTypeIntoFile(HWFILE const f)
 {
 	BYTE data[316];
-	BYTE*                     d = data;
+	DataWriter d{data};
 	TacticalStatusType* const s = &gTacticalStatus;
 	INJ_U32(d, s->uiFlags)
 	FOR_EACH(TacticalTeamType const, t, s->Team)
@@ -169,8 +176,8 @@ void InjectTacticalStatusTypeIntoFile(HWFILE const f)
 	INJ_U32(d, s->uiTimeSinceDemoOn)
 	INJ_SKIP(d, 7)
 	INJ_BOOLA(d, s->fCivGroupHostile, lengthof(s->fCivGroupHostile))
-	INJ_U8(d, s->ubLastBattleSectorX)
-	INJ_U8(d, s->ubLastBattleSectorY)
+	INJ_U8(d, s->ubLastBattleSector.x)
+	INJ_U8(d, s->ubLastBattleSector.y)
 	INJ_BOOL(d, s->fLastBattleWon)
 	INJ_SKIP(d, 2)
 	INJ_BOOL(d, s->fVirginSector)
@@ -247,7 +254,7 @@ void InjectTacticalStatusTypeIntoFile(HWFILE const f)
 	INJ_U16(d, s->sCreatureTenseQuoteDelay)
 	INJ_SKIP(d, 2)
 	INJ_U32(d, s->uiCreatureTenseQuoteLastUpdate)
-	Assert(d == endof(data));
+	Assert(d.getConsumed() == lengthof(data));
 
-	FileWrite(f, data, sizeof(data));
+	f->write(data, sizeof(data));
 }

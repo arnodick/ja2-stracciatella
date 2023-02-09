@@ -1,17 +1,21 @@
+#include "Timer_Control.h"
+
+#include "ContentManager.h"
+#include "Debug.h"
+#include "GameInstance.h"
+#include "GamePolicy.h"
+#include "Handle_Items.h"
+#include "MapScreen.h"
+#include "Overhead.h"
+#include "Soldier_Control.h"
+#include "WorldDef.h"
+
 #include <SDL.h>
 #include <stdexcept>
 
-#include "Debug.h"
-#include "MapScreen.h"
-#include "Soldier_Control.h"
-#include "Timer_Control.h"
-#include "Overhead.h"
-#include "Handle_Items.h"
-#include "WorldDef.h"
 
-
-INT32	giClockTimer = -1;
-INT32	giTimerDiag  =  0;
+UINT32	guiClockTimer = UINT32_MAX;
+UINT32	guiTimerDiag  =  0;
 
 UINT32 guiBaseJA2Clock = 0;
 
@@ -45,9 +49,6 @@ const INT32 giTimerIntervals[NUMTIMERS] =
 // TIMER COUNTERS
 INT32 giTimerCounters[NUMTIMERS];
 
-INT32 giTimerAirRaidQuote       = 0;
-INT32 giTimerAirRaidDiveStarted = 0;
-INT32 giTimerAirRaidUpdate      = 0;
 INT32 giTimerCustomizable       = 0;
 INT32 giTimerTeamTurnUpdate     = 0;
 
@@ -58,16 +59,16 @@ static SDL_TimerID g_timer;
 
 
 extern UINT32 guiCompressionStringBaseTime;
-extern INT32  giFlashHighlightedItemBaseTime;
-extern INT32  giCompatibleItemBaseTime;
-extern INT32  giAnimateRouteBaseTime;
-extern INT32  giPotHeliPathBaseTime;
+extern UINT32 guiFlashHighlightedItemBaseTime;
+extern UINT32 guiCompatibleItemBaseTime;
+extern UINT32 guiAnimateRouteBaseTime;
+extern UINT32 guiPotHeliPathBaseTime;
 extern UINT32 guiSectorLocatorBaseTime;
-extern INT32  giCommonGlowBaseTime;
-extern INT32  giFlashAssignBaseTime;
-extern INT32  giFlashContractBaseTime;
+extern UINT32 guiCommonGlowBaseTime;
+extern UINT32 guiFlashAssignBaseTime;
+extern UINT32 guiFlashContractBaseTime;
 extern UINT32 guiFlashCursorBaseTime;
-extern INT32  giPotCharPathBaseTime;
+extern UINT32 guiPotCharPathBaseTime;
 
 
 static UINT32 TimeProc(UINT32 const interval, void*)
@@ -82,9 +83,6 @@ static UINT32 TimeProc(UINT32 const interval, void*)
 		}
 
 		// Update some specialized countdown timers...
-		UPDATETIMECOUNTER(giTimerAirRaidQuote);
-		UPDATETIMECOUNTER(giTimerAirRaidDiveStarted);
-		UPDATETIMECOUNTER(giTimerAirRaidUpdate);
 		UPDATETIMECOUNTER(giTimerTeamTurnUpdate);
 
 		if (gpCustomizableTimerCallback)
@@ -127,7 +125,6 @@ static UINT32 TimeProc(UINT32 const interval, void*)
 
 void InitializeJA2Clock(void)
 {
-#ifdef CALLBACKTIMER
 	SDL_InitSubSystem(SDL_INIT_TIMER);
 
 	// Init timer delays
@@ -136,17 +133,19 @@ void InitializeJA2Clock(void)
 		giTimerCounters[i] = giTimerIntervals[i];
 	}
 
-	g_timer = SDL_AddTimer(BASETIMESLICE, TimeProc, 0);
+	INT32 msPerTimeSlice = gamepolicy(ms_per_time_slice);
+	if (msPerTimeSlice <= 0)
+	{
+		throw std::runtime_error("ms_per_time_slice must be a positive integer");
+	}
+	g_timer = SDL_AddTimer(msPerTimeSlice, TimeProc, 0);
 	if (!g_timer) throw std::runtime_error("Could not create timer callback");
-#endif
 }
 
 
 void ShutdownJA2Clock(void)
 {
-#ifdef CALLBACKTIMER
 	SDL_RemoveTimer(g_timer);
-#endif
 }
 
 
@@ -186,16 +185,16 @@ void ResetJA2ClockGlobalTimers(void)
 {
 	UINT32 const now = GetJA2Clock();
 
-	guiCompressionStringBaseTime   = now;
-	giFlashHighlightedItemBaseTime = now;
-	giCompatibleItemBaseTime       = now;
-	giAnimateRouteBaseTime         = now;
-	giPotHeliPathBaseTime          = now;
-	guiSectorLocatorBaseTime       = now;
+	guiCompressionStringBaseTime    = now;
+	guiFlashHighlightedItemBaseTime = now;
+	guiCompatibleItemBaseTime       = now;
+	guiAnimateRouteBaseTime         = now;
+	guiPotHeliPathBaseTime          = now;
+	guiSectorLocatorBaseTime        = now;
 
-	giCommonGlowBaseTime           = now;
-	giFlashAssignBaseTime          = now;
-	giFlashContractBaseTime        = now;
-	guiFlashCursorBaseTime         = now;
-	giPotCharPathBaseTime          = now;
+	guiCommonGlowBaseTime           = now;
+	guiFlashAssignBaseTime          = now;
+	guiFlashContractBaseTime        = now;
+	guiFlashCursorBaseTime          = now;
+	guiPotCharPathBaseTime          = now;
 }

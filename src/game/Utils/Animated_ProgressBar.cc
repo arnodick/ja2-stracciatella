@@ -2,7 +2,6 @@
 #include "HImage.h"
 #include "Types.h"
 #include "Animated_ProgressBar.h"
-#include "MemMan.h"
 #include "Debug.h"
 #include "Font_Control.h"
 #include "VObject.h"
@@ -14,6 +13,8 @@
 #include "Timer_Control.h"
 #include "SysUtil.h"
 #include "UILayout.h"
+
+#include <string_theory/string>
 
 
 #define MAX_PROGRESSBARS 4
@@ -34,7 +35,7 @@ struct PROGRESSBAR
 	SGPBox           pos;
 	UINT16 usPanelLeft, usPanelTop, usPanelRight, usPanelBottom;
 	UINT16 usColor, usLtColor, usDkColor;
-	wchar_t *swzTitle;
+	ST::string title;
 	SGPFont usTitleFont;
 	UINT8 ubTitleFontForeColor, ubTitleFontShadowColor;
 	SGPFont usMsgFont;
@@ -62,7 +63,7 @@ void RemoveLoadingScreenProgressBar()
 
 void CreateProgressBar(const UINT8 ubProgressBarID, const UINT16 x, const UINT16 y, const UINT16 w, const UINT16 h)
 {
-	PROGRESSBAR* const pNew = MALLOCZ(PROGRESSBAR);
+	PROGRESSBAR* const pNew = new PROGRESSBAR{};
 
 	if( pBar[ ubProgressBarID ] )
 		RemoveProgressBar( ubProgressBarID );
@@ -78,8 +79,8 @@ void CreateProgressBar(const UINT8 ubProgressBarID, const UINT16 x, const UINT16
 	pNew->usMsgFont            = FONT12POINT1;
 	pNew->ubMsgFontForeColor   = FONT_BLACK;
 	pNew->ubMsgFontShadowColor = 0;
-	SetRelativeStartAndEndPercentage(ubProgressBarID, 0, 100, NULL);
-	pNew->swzTitle = NULL;
+	SetRelativeStartAndEndPercentage(ubProgressBarID, 0, 100, ST::null);
+	pNew->title = ST::null;
 
 	//Default the progress bar's color to be red
 	pNew->fill_colour = FROMRGB(150, 0, 0);
@@ -104,31 +105,22 @@ void DefineProgressBarPanel( UINT32 ubID, UINT8 r, UINT8 g, UINT8 b,
 	pCurr->usPanelBottom = usBottom;
 	pCurr->usColor = Get16BPPColor( FROMRGB( r, g, b ) );
 	//Calculate the slightly lighter and darker versions of the same rgb color
-	pCurr->usLtColor = Get16BPPColor( FROMRGB( (UINT8)MIN( 255, (UINT16)(r*1.33)),
-						(UINT8)MIN( 255, (UINT16)(g*1.33)),
-						(UINT8)MIN( 255, (UINT16)(b*1.33)) ));
+	pCurr->usLtColor = Get16BPPColor(FROMRGB((UINT8) std::min(255, (int) (r * 1.33)),
+						(UINT8) std::min(255, (int) (g * 1.33)),
+						(UINT8) std::min(255, (int) (b * 1.33))));
 	pCurr->usDkColor = Get16BPPColor( FROMRGB( (UINT8)(r*0.75), (UINT8)(g*0.75), (UINT8)(b*0.75) ) );
 }
 
 //Assigning a title for the panel will automatically position the text horizontally centered on the
 //panel and vertically centered from the top of the panel, to the top of the progress bar.
-void SetProgressBarTitle(UINT32 ubID, const wchar_t* pString, SGPFont const font, UINT8 ubForeColor, UINT8 ubShadowColor)
+void SetProgressBarTitle(UINT32 ubID, const ST::string& str, SGPFont font, UINT8 ubForeColor, UINT8 ubShadowColor)
 {
 	PROGRESSBAR *pCurr;
 	Assert( ubID < MAX_PROGRESSBARS );
 	pCurr = pBar[ ubID ];
 	if( !pCurr )
 		return;
-	if( pCurr->swzTitle )
-	{
-		MemFree( pCurr->swzTitle );
-		pCurr->swzTitle = NULL;
-	}
-	if( pString && wcslen( pString ) )
-	{
-		pCurr->swzTitle = MALLOCN(wchar_t, wcslen(pString) + 1);
-		wcscpy(pCurr->swzTitle, pString);
-	}
+	pCurr->title = str;
 	pCurr->usTitleFont = font;
 	pCurr->ubTitleFontForeColor = ubForeColor;
 	pCurr->ubTitleFontShadowColor = ubShadowColor;
@@ -155,9 +147,7 @@ void RemoveProgressBar( UINT8 ubID )
 	Assert( ubID < MAX_PROGRESSBARS );
 	if( pBar[ubID] )
 	{
-		if( pBar[ubID]->swzTitle )
-			MemFree( pBar[ubID]->swzTitle );
-		MemFree( pBar[ubID] );
+		delete pBar[ubID];
 		pBar[ubID] = NULL;
 		return;
 	}
@@ -173,7 +163,7 @@ void RemoveProgressBar( UINT8 ubID )
  * the 100% mark within UpdateProgressBar.  At that time, you would go onto the
  * next step, resetting the relative start and end percentage from 30 to
  * whatever, until your done. */
-void SetRelativeStartAndEndPercentage(UINT8 const id, UINT32 const uiRelStartPerc, UINT32 const uiRelEndPerc, wchar_t const* const str)
+void SetRelativeStartAndEndPercentage(UINT8 id, UINT32 uiRelStartPerc, UINT32 uiRelEndPerc, const ST::string& str)
 {
 	Assert(id < MAX_PROGRESSBARS);
 	PROGRESSBAR* const bar = pBar[id];
@@ -193,17 +183,16 @@ void SetRelativeStartAndEndPercentage(UINT8 const id, UINT32 const uiRelStartPer
 		ColorFillVideoSurfaceArea(FRAME_BUFFER, l + 1, t + 1, r,     b,     bar->usDkColor);
 		ColorFillVideoSurfaceArea(FRAME_BUFFER, l + 1, t + 1, r - 1, b - 1, bar->usColor);
 		InvalidateRegion(l, t, r, b);
-		wchar_t const* const title = bar->swzTitle;
-		if (title)
+		if (!bar->title.empty())
 		{ // Draw title
 			SGPFont  const font = bar->usTitleFont;
-			INT32 const x    = (r + l - StringPixLength(title, font)) / 2; // Center
+			INT32 const x    = (r + l - StringPixLength(bar->title, font)) / 2; // Center
 			SetFontAttributes(font, bar->ubTitleFontForeColor, bar->ubTitleFontShadowColor);
-			MPrint(x, t + 3, title);
+			MPrint(x, t + 3, bar->title);
 		}
 	}
 
-	if (bar->flags & PROGRESS_DISPLAY_TEXT && str)
+	if (bar->flags & PROGRESS_DISPLAY_TEXT && !str.empty())
 	{ // Draw message
 		INT32 const x    = bar->pos.x;
 		INT32 const y    = bar->pos.y + bar->pos.h;

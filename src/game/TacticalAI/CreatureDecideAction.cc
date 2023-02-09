@@ -88,7 +88,12 @@ void CreatureCall( SOLDIERTYPE * pCaller )
 			ubCallerType = CALLER_FEMALE;
 			break;
 	}
-	if (pCaller->bHunting) // which should only be set for females outside of the hive
+	if (pCaller->usActionData >= NUM_CREATURE_CALLS)
+	{
+		SLOGW("unexpected action data {}, defaulting call priority to 0", pCaller->usActionData);
+		bFullPriority = 0;
+	}
+	else if (pCaller->bHunting) // which should only be set for females outside of the hive
 	{
 		bFullPriority = gbHuntCallPriority[pCaller->usActionData];
 	}
@@ -147,7 +152,7 @@ void CreatureCall( SOLDIERTYPE * pCaller )
 
 static INT8 CreatureDecideActionGreen(SOLDIERTYPE* pSoldier)
 {
-	INT32 iChance, iSneaky = 10;
+	INT32 iChance = 10;
 	//INT8  bInWater;
 	INT8  bInGas;
 
@@ -257,12 +262,12 @@ static INT8 CreatureDecideActionGreen(SOLDIERTYPE* pSoldier)
 		// modify chance of patrol (and whether it's a sneaky one) by attitude
 		switch (pSoldier->bAttitude)
 		{
-			case DEFENSIVE:      iChance += -10;                 break;
-			case BRAVESOLO:      iChance +=   5;                 break;
-			case BRAVEAID:                                       break;
-			case CUNNINGSOLO:    iChance +=   5;  iSneaky += 10; break;
-			case CUNNINGAID:                      iSneaky +=  5; break;
-			case AGGRESSIVE:     iChance +=  10;  iSneaky += -5; break;
+			case DEFENSIVE:      iChance += -10;  break;
+			case BRAVESOLO:      iChance +=   5;  break;
+			case BRAVEAID:                        break;
+			case CUNNINGSOLO:    iChance +=   5;  break;
+			case CUNNINGAID:                      break;
+			case AGGRESSIVE:     iChance +=  10;  break;
 		}
 
 		// reduce chance for any injury, less likely to wander around when hurt
@@ -420,7 +425,7 @@ static INT8 CreatureDecideActionYellow(SOLDIERTYPE* pSoldier)
 	// monster AI - heard something
 	INT16 sNoiseGridNo;
 	INT32 iNoiseValue;
-	INT32 iChance, iSneaky;
+	INT32 iChance;
 	BOOLEAN fClimb;
 	BOOLEAN fReachable;
 	//INT16 sClosestFriend;
@@ -493,7 +498,6 @@ static INT8 CreatureDecideActionYellow(SOLDIERTYPE* pSoldier)
 
 		// remember that noise value is negative, and closer to 0 => more important!
 		iChance = 75 + iNoiseValue;
-		iSneaky = 30;
 
 		// set base chance according to orders
 		switch (pSoldier->bOrders)
@@ -511,12 +515,12 @@ static INT8 CreatureDecideActionYellow(SOLDIERTYPE* pSoldier)
 		// modify chance of patrol (and whether it's a sneaky one) by attitude
 		switch (pSoldier->bAttitude)
 		{
-			case DEFENSIVE:      iChance += -10;  iSneaky +=  15;  break;
-			case BRAVESOLO:      iChance +=  10;                   break;
-			case BRAVEAID:       iChance +=   5;                   break;
-			case CUNNINGSOLO:    iChance +=   5;  iSneaky +=  30;  break;
-			case CUNNINGAID:                      iSneaky +=  30;  break;
-			case AGGRESSIVE:     iChance +=  20;  iSneaky += -10;  break;
+			case DEFENSIVE:      iChance += -10;  break;
+			case BRAVESOLO:      iChance +=  10;  break;
+			case BRAVEAID:       iChance +=   5;  break;
+			case CUNNINGSOLO:    iChance +=   5;  break;
+			case CUNNINGAID:                      break;
+			case AGGRESSIVE:     iChance +=  20;  break;
 		}
 
 		// reduce chance if breath is down, less likely to wander around when tired
@@ -656,7 +660,7 @@ static INT8 CreatureDecideActionRed(SOLDIERTYPE* pSoldier, UINT8 ubUnconsciousOK
 			{
 				if ((INT16) PreRandom(100) < iChance)
 				{
-					SLOGD(DEBUG_TAG_AI, "%ls decides to call an alert!", pSoldier->name);
+					SLOGD("{} decides to call an alert!", pSoldier->name);
 					pSoldier->usActionData = CALL_1_PREY;
 					return(AI_ACTION_CREATURE_CALL);
 				}
@@ -988,7 +992,7 @@ static INT8 CreatureDecideActionBlack(SOLDIERTYPE* pSoldier)
 	BestShot.ubPossible  = FALSE;	// by default, assume Shooting isn't possible
 	BestStab.ubPossible  = FALSE;	// by default, assume Stabbing isn't possible
 
-	memset(&BestAttack, 0, sizeof(BestAttack)); // XXX HACK000E
+	BestAttack = ATTACKTYPE{};
 
 	bSpitIn = NO_SLOT;
 
@@ -1050,7 +1054,7 @@ static INT8 CreatureDecideActionBlack(SOLDIERTYPE* pSoldier)
 										// don't bother checking GRENADES/KNIVES, he can't have conscious targets
 										// then make decision as if at alert status RED, but make sure
 										// we don't try to SEEK OPPONENT the unconscious guy!
-										return(DecideActionRed(pSoldier,FALSE));
+										return CreatureDecideActionRed(pSoldier, FALSE);
 									}
 									// else kill the guy, he could be the last opponent alive in this sector
 								}
@@ -1216,7 +1220,7 @@ static INT8 CreatureDecideActionBlack(SOLDIERTYPE* pSoldier)
 			{
 				pSoldier->bAimShotLocation = AIM_SHOT_RANDOM;
 			}
-			SLOGD(DEBUG_TAG_AI, "%d(%s) %s %d(%s) at gridno %d (%d APs aim)\n",
+			SLOGD("{}({}) {} {}({}) at gridno {} ({} APs aim)\n",
 				pSoldier->ubID, pSoldier->name,
 				(ubBestAttackAction == AI_ACTION_FIRE_GUN)?"SHOOTS":((ubBestAttackAction == AI_ACTION_TOSS_PROJECTILE)?"TOSSES AT":"STABS"),
 				BestAttack.opponent, BestAttack.opponent->name,
@@ -1327,7 +1331,7 @@ INT8 CreatureDecideAction( SOLDIERTYPE *pSoldier )
 			bAction = CreatureDecideActionBlack(pSoldier);
 			break;
 	}
-	SLOGD(DEBUG_TAG_AI, "DecideAction: selected action %d, actionData %d\n\n",
+	SLOGD("DecideAction: selected action {}, actionData {}\n\n",
 		bAction, pSoldier->usActionData);
 	return(bAction);
 }

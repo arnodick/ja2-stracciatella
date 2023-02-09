@@ -8,8 +8,11 @@
 
 #include "Animation_Cache.h"
 #include "JA2Types.h"
+#include "Keys.h"
 #include "Overhead_Types.h"
 #include "Item_Types.h"
+
+#include <string_theory/string>
 
 
 // ANDREW: these are defines for OKDestanation usage - please move to approprite file
@@ -20,9 +23,9 @@
 
 #define LOCKED_NO_NEWGRIDNO				2
 
-#define NO_PROFILE					200
+constexpr ProfileID NO_PROFILE = 200;
 
-#define BATTLE_SND_LOWER_VOLUME			1
+constexpr bool BATTLE_SND_LOWER_VOLUME = true;
 
 #define TAKE_DAMAGE_GUNFIRE				1
 #define TAKE_DAMAGE_BLADE				2
@@ -170,7 +173,7 @@ enum
 };
 
 // An enumeration for playing battle sounds
-enum BattleSound
+enum BattleSound : INT8
 {
 	BATTLE_SOUND_OK1,
 	BATTLE_SOUND_OK2,
@@ -184,9 +187,9 @@ enum BattleSound
 	BATTLE_SOUND_HUMM,
 	BATTLE_SOUND_NOTHING,
 	BATTLE_SOUND_GOTIT,
-	BATTLE_SOUND_LOWMARALE_OK1,
-	BATTLE_SOUND_LOWMARALE_OK2,
-	BATTLE_SOUND_LOWMARALE_ATTN1,
+	BATTLE_SOUND_LOWMORALE_OK1,
+	BATTLE_SOUND_LOWMORALE_OK2,
+	BATTLE_SOUND_LOWMORALE_ATTN1,
 	BATTLE_SOUND_LOCKED,
 	BATTLE_SOUND_ENEMY,
 	NUM_MERC_BATTLE_SOUNDS
@@ -267,8 +270,10 @@ enum SoldierClass
 
 struct KEY_ON_RING
 {
-	UINT8 ubKeyID;
-	UINT8 ubNumber;
+	UINT8 ubKeyID{INVALID_KEY_NUMBER};
+	UINT8 ubNumber{0};
+
+	bool isValid() const { return ubKeyID != INVALID_KEY_NUMBER && ubNumber != 0; }
 };
 
 
@@ -303,10 +308,23 @@ enum
 };
 
 
+enum WeaponModes : INT8
+{
+	WM_NORMAL = 0,
+	WM_BURST,
+	WM_ATTACHED,
+	NUM_WEAPON_MODES
+};
+
+using SoldierID = UINT8;
+
+#define SOLDIERTYPE_NAME_LENGTH 10
+
+
 struct SOLDIERTYPE
 {
 	// ID
-	UINT8 ubID;
+	SoldierID ubID;
 
 	// DESCRIPTION / STATS, ETC
 	UINT8 ubBodyType;
@@ -340,7 +358,7 @@ struct SOLDIERTYPE
 	UINT8 ubAttackingHand;
 	// traits
 	INT16 sWeightCarriedAtTurnStart;
-	wchar_t name[ 10 ];
+	ST::string name;
 
 	INT8 bVisible; // to render or not to render...
 
@@ -357,8 +375,6 @@ struct SOLDIERTYPE
 
 	UINT8 ubMovementNoiseHeard;// 8 flags by direction
 
-	// 23 bytes so far
-
 	// WORLD POSITION STUFF
 	FLOAT dXPos;
 	FLOAT dYPos;
@@ -372,8 +388,6 @@ struct SOLDIERTYPE
 
 	INT8 bCollapsed; // collapsed due to being out of APs
 	INT8 bBreathCollapsed; // collapsed due to being out of APs
-	// 50 bytes so far
-
 
 	UINT8 ubDesiredHeight;
 	UINT16 usPendingAnimation;
@@ -383,8 +397,6 @@ struct SOLDIERTYPE
 	BOOLEAN fPausedMove;
 	BOOLEAN fUIdeadMerc; // UI Flags for removing a newly dead merc
 	BOOLEAN fUICloseMerc; // UI Flags for closing panels
-
-
 
 	TIMECOUNTER UpdateCounter;
 	TIMECOUNTER DamageCounter;
@@ -409,8 +421,7 @@ struct SOLDIERTYPE
 
 	BOOLEAN fContinueMoveAfterStanceChange;
 
-	// 60
-	AnimationSurfaceCacheType AnimCache; // will be 9 bytes once changed to pointers
+	AnimationSurfaceCacheType AnimCache;
 
 	INT8 bLife; // current life (hit points or health)
 	UINT8 bSide;
@@ -456,13 +467,13 @@ struct SOLDIERTYPE
 
 
 	// PALETTE MANAGEMENT STUFF
-	PaletteRepID HeadPal; // 30
-	PaletteRepID PantsPal; // 30
-	PaletteRepID VestPal; // 30
-	PaletteRepID SkinPal; // 30
+	ST::string HeadPal;
+	ST::string PantsPal;
+	ST::string VestPal;
+	ST::string SkinPal;
 
 	UINT16 *pShades[ NUM_SOLDIER_SHADES ]; // Shading tables
-	UINT16 *pGlowShades[ 20 ]; //
+	UINT16 *pGlowShades[20];
 	INT8 bMedical;
 	BOOLEAN fBeginFade;
 	UINT8 ubFadeLevel;
@@ -590,7 +601,7 @@ struct SOLDIERTYPE
 	TIMECOUNTER BlinkSelCounter;
 	TIMECOUNTER PortraitFlashCounter;
 	BOOLEAN fDeadSoundPlayed;
-	UINT8 ubProfile;
+	ProfileID ubProfile;
 	UINT8 ubQuoteRecord;
 	UINT8 ubQuoteActionID;
 	UINT8 ubBattleSoundID;
@@ -637,9 +648,7 @@ struct SOLDIERTYPE
 	INT8 bAssignment; // soldiers current assignment
 	BOOLEAN fForcedToStayAwake; // forced by player to stay awake, reset to false, the moment they are set to rest or sleep
 	INT8 bTrainStat; // current stat soldier is training
-	INT16 sSectorX; // X position on the Stategic Map
-	INT16 sSectorY; // Y position on the Stategic Map
-	INT8 bSectorZ; // Z sector location
+	SGPSector sSector; // position on the Stategic Map
 	INT32 iVehicleId; // the id of the vehicle the char is in
 	PathSt* pMercPath; // Path Structure
 	UINT8 fHitByGasFlags; // flags
@@ -685,7 +694,7 @@ struct SOLDIERTYPE
 	INT8 bBlockedByAnotherMercDirection;
 	UINT16 usAttackingWeapon;
 	SOLDIERTYPE* target;
-	INT8 bWeaponMode;
+	WeaponModes bWeaponMode;
 	INT8 bAIScheduleProgress;
 	INT16 sOffWorldGridNo;
 	ANITILE* pAniTile;
@@ -704,15 +713,15 @@ struct SOLDIERTYPE
 	INT16 sBoundingBoxOffsetX;
 	INT16 sBoundingBoxOffsetY;
 	UINT32 uiTimeSameBattleSndDone;
-	INT8 bOldBattleSnd;
+	BattleSound bOldBattleSnd;
 	BOOLEAN fContractPriceHasIncreased;
-	INT32 iBurstSoundID;
+	UINT32 uiBurstSoundID;
 	BOOLEAN fFixingSAMSite;
 	BOOLEAN fFixingRobot;
 	INT8 bSlotItemTakenFrom;
 	BOOLEAN fSignedAnotherContract;
-	SOLDIERTYPE* auto_bandaging_medic;
 	BOOLEAN fDontChargeTurningAPs;
+	SOLDIERTYPE* auto_bandaging_medic;
 	SOLDIERTYPE* robot_remote_holder;
 	UINT32 uiTimeOfLastContractUpdate;
 	INT8 bTypeOfLastContract;
@@ -794,7 +803,7 @@ struct SOLDIERTYPE
 	BOOLEAN fDoingExternalDeath;
 	INT8 bCorpseQuoteTolerance;
 	INT32 iPositionSndID;
-	INT32 iTuringSoundID;
+	UINT32 uiTuringSoundID;
 	UINT8 ubLastDamageReason;
 	BOOLEAN fComplainedThatTired;
 	INT16 sLastTwoLocations[2];
@@ -808,7 +817,7 @@ struct SOLDIERTYPE
 #define CFOR_EACH_SOLDIER_INV_SLOT(iter, soldier) \
 	BASE_FOR_EACH_SOLDIER_INV_SLOT(OBJECTTYPE const, iter, soldier)
 
-#define HEALTH_INCREASE				0x0001
+#define HEALTH_INCREASE					0x0001
 #define STRENGTH_INCREASE				0x0002
 #define DEX_INCREASE					0x0004
 #define AGIL_INCREASE					0x0008
@@ -822,14 +831,6 @@ struct SOLDIERTYPE
 
 #define LVL_INCREASE					0x0400
 
-
-enum WeaponModes
-{
-	WM_NORMAL = 0,
-	WM_BURST,
-	WM_ATTACHED,
-	NUM_WEAPON_MODES
-};
 
 // TYPEDEFS FOR ANIMATION PROFILES
 struct ANIM_PROF_TILE
@@ -854,7 +855,7 @@ struct ANIM_PROF
 struct PaletteReplacementType
 {
 	UINT8            ubType;
-	PaletteRepID     ID;
+	ST::string       ID;
 	UINT8            ubPaletteSize;
 	SGPPaletteEntry* rgb;
 };
@@ -932,8 +933,8 @@ void ReviveSoldier( SOLDIERTYPE *pSoldier );
 
 // Palette functions for soldiers
 void  CreateSoldierPalettes(SOLDIERTYPE&);
-UINT8 GetPaletteRepIndexFromID(const PaletteRepID pal_rep);
-void  SetPaletteReplacement(SGPPaletteEntry*, PaletteRepID);
+UINT8 GetPaletteRepIndexFromID(const ST::string& pal_rep);
+void SetPaletteReplacement(SGPPaletteEntry* p8BPPPalette, const ST::string& aPalRep);
 void  LoadPaletteData(void);
 void  DeletePaletteData(void);
 
@@ -950,10 +951,12 @@ UINT16 GetMoveStateBasedOnStance(const SOLDIERTYPE*, UINT8 ubStanceHeight);
 void SoldierGotoStationaryStance( SOLDIERTYPE *pSoldier );
 void ReCreateSoldierLight(SOLDIERTYPE*);
 
+// Returns the soldier's structure ID if he has a levelnode, INVALID_STRUCTURE_ID otherwise
+UINT16 GetStructureID(SOLDIERTYPE const *);
 
 void    MakeCharacterDialogueEventDoBattleSound(SOLDIERTYPE& s, BattleSound, UINT32 delay);
 BOOLEAN DoMercBattleSound(SOLDIERTYPE*, BattleSound);
-BOOLEAN InternalDoMercBattleSound(SOLDIERTYPE*, BattleSound, INT8 bSpecialCode);
+BOOLEAN InternalDoMercBattleSound(SOLDIERTYPE*, BattleSound, bool lowerVolume);
 
 
 UINT32 SoldierDressWound( SOLDIERTYPE *pSoldier, SOLDIERTYPE *pVictim, INT16 sKitPts, INT16 sStatus );

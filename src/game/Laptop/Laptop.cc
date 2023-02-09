@@ -36,10 +36,12 @@
 #include "BobbyRUsed.h"
 #include "BobbyRMailOrder.h"
 #include "CharProfile.h"
+#include "ContentManager.h"
 #include "Florist.h"
 #include "Florist_Cards.h"
 #include "Florist_Gallery.h"
 #include "Florist_Order_Form.h"
+#include "GameInstance.h"
 #include "Insurance.h"
 #include "Insurance_Contract.h"
 #include "Insurance_Info.h"
@@ -75,18 +77,25 @@
 #include "Map_Screen_Interface_Bottom.h"
 #include "Cursor_Control.h"
 #include "Quests.h"
-#include "Multi_Language_Graphic_Utils.h"
+#include "GameRes.h"
 #include "BrokenLink.h"
 #include "BobbyRShipments.h"
 #include "Dialogue_Control.h"
 #include "HelpScreen.h"
 #include "Cheats.h"
 #include "Video.h"
-#include "MemMan.h"
 #include "Debug.h"
 #include "Button_System.h"
 #include "JAScreens.h"
 #include "UILayout.h"
+
+#include "policy/GamePolicy.h"
+
+#include <string_theory/format>
+#include <string_theory/string>
+
+#include <algorithm>
+#include <iterator>
 
 // laptop programs
 enum
@@ -332,15 +341,11 @@ void SetLaptopNewGameFlag(void)
 
 static void GetLaptopKeyboardInput(void)
 {
-	SGPPoint MousePos;
-	GetMousePos(&MousePos);
-
 	fTabHandled = FALSE;
 
 	InputAtom InputEvent;
-	while (DequeueEvent(&InputEvent))
+	while (DequeueSpecificEvent(&InputEvent, KEYBOARD_EVENTS))
 	{
-		MouseSystemHook(InputEvent.usEvent, MousePos.iX, MousePos.iY);
 		HandleKeyBoardShortCutsForLapTop(InputEvent.usEvent, InputEvent.usParam, InputEvent.usKeyState);
 	}
 }
@@ -353,7 +358,7 @@ static void InitBookMarkList(void);
 void LaptopScreenInit(void)
 {
 	//Memset the whole structure, to make sure of no 'JUNK'
-	memset(&LaptopSaveInfo, 0, sizeof(LaptopSaveInfoStruct));
+	LaptopSaveInfo = LaptopSaveInfoStruct{};
 
 	LaptopSaveInfo.gfNewGameLaptop = TRUE;
 
@@ -381,7 +386,7 @@ void LaptopScreenInit(void)
 	GameInitPersonnel();
 
 	// init program states
-	memset(&gLaptopProgramStates, LAPTOP_PROGRAM_MINIMIZED, sizeof(gLaptopProgramStates));
+	std::fill(std::begin(gLaptopProgramStates), std::end(gLaptopProgramStates), LAPTOP_PROGRAM_MINIMIZED);
 
 	gfAtLeastOneMercWasHired = FALSE;
 
@@ -505,10 +510,10 @@ static void EnterLaptop(void)
 	fFirstTimeInLaptop = TRUE;
 
 	// reset all bookmark visits
-	memset(&LaptopSaveInfo.fVisitedBookmarkAlready, 0, sizeof(LaptopSaveInfo.fVisitedBookmarkAlready));
+	std::fill(std::begin(LaptopSaveInfo.fVisitedBookmarkAlready), std::end(LaptopSaveInfo.fVisitedBookmarkAlready), 0);
 
 	// init program states
-	memset(&gLaptopProgramStates, LAPTOP_PROGRAM_MINIMIZED, sizeof(gLaptopProgramStates));
+	std::fill(std::begin(gLaptopProgramStates), std::end(gLaptopProgramStates), LAPTOP_PROGRAM_MINIMIZED);
 
 	// turn the power on
 	fPowerLightOn = TRUE;
@@ -743,7 +748,7 @@ static void RenderLaptop(void)
 }
 
 
-static void InitTitleBarMaximizeGraphics(const SGPVObject* uiBackgroundGraphic, const wchar_t* pTitle, const SGPVObject* uiIconGraphic, UINT16 usIconGraphicIndex);
+static void InitTitleBarMaximizeGraphics(const SGPVObject* uiBackgroundGraphic, const ST::string& str, const SGPVObject* uiIconGraphic, UINT16 usIconGraphicIndex);
 static void SetSubSiteAsVisted(void);
 
 
@@ -757,7 +762,7 @@ static void EnterNewLaptopMode(void)
 
 	// handle maximizing of programs
 	UINT           prog;
-	const wchar_t* title;
+	ST::string title;
 	UINT16         gfx_idx;
 	switch (guiCurrentLaptopMode)
 	{
@@ -1029,7 +1034,7 @@ ScreenID LaptopScreenHandle()
 		{
 			const UINT32 uiCurrTime = GetClock();
 			iPercentage = (uiCurrTime-uiStartTime) * 100 / uiTimeRange;
-			iPercentage = MIN(iPercentage, 100);
+			iPercentage = std::min(iPercentage, 100);
 
 			iRealPercentage = iPercentage;
 
@@ -1294,6 +1299,9 @@ static void ExitLaptopMode(LaptopMode uiMode)
 		case LAPTOP_MODE_FILES:                    ExitFiles();             break;
 		case LAPTOP_MODE_EMAIL:                    ExitEmail();             break;
 		case LAPTOP_MODE_BROKEN_LINK:              ExitBrokenLink();        break;
+
+		// nothing to do for other subwindows
+		default: break;
 	}
 
 	if (uiMode != LAPTOP_MODE_NONE && uiMode < LAPTOP_MODE_WWW)
@@ -1305,7 +1313,7 @@ static void ExitLaptopMode(LaptopMode uiMode)
 }
 
 
-static void MakeButton(UINT idx, INT16 y, GUI_CALLBACK click, INT8 off_x, const wchar_t* text, const wchar_t* help_text)
+static void MakeButton(UINT idx, INT16 y, GUI_CALLBACK click, INT8 off_x, const ST::string& text, const ST::string& help_text)
 {
 	GUIButtonRef const btn = QuickCreateButtonImg(LAPTOPDIR "/buttonsforlaptop.sti", idx, idx + 8, (29 + STD_SCREEN_X), (y + STD_SCREEN_Y), MSYS_PRIORITY_HIGH, click);
 	gLaptopButton[idx] = btn;
@@ -1316,19 +1324,20 @@ static void MakeButton(UINT idx, INT16 y, GUI_CALLBACK click, INT8 off_x, const 
 }
 
 
-static void BtnOnCallback(                GUI_BUTTON* btn, INT32 reason);
-static void EmailRegionButtonCallback(    GUI_BUTTON* btn, INT32 reason);
-static void FilesRegionButtonCallback(    GUI_BUTTON* btn, INT32 reason);
-static void FinancialRegionButtonCallback(GUI_BUTTON* btn, INT32 reason);
-static void HistoryRegionButtonCallback(  GUI_BUTTON* btn, INT32 reason);
-static void PersonnelRegionButtonCallback(GUI_BUTTON* btn, INT32 reason);
-static void WWWRegionButtonCallback(      GUI_BUTTON* btn, INT32 reason);
+static void BtnOnCallback(                GUI_BUTTON* btn, UINT32 reason);
+static void EmailRegionButtonCallback(    GUI_BUTTON* btn, UINT32 reason);
+static void FilesRegionButtonCallback(    GUI_BUTTON* btn, UINT32 reason);
+static void FinancialRegionButtonCallback(GUI_BUTTON* btn, UINT32 reason);
+static void HistoryRegionButtonCallback(  GUI_BUTTON* btn, UINT32 reason);
+static void PersonnelRegionButtonCallback(GUI_BUTTON* btn, UINT32 reason);
+static void WWWRegionButtonCallbackPrimary(GUI_BUTTON* btn, UINT32 reason);
+static void WWWRegionButtonCallbackSecondary(GUI_BUTTON* btn, UINT32 reason);
 
 
 static void CreateLaptopButtons(void)
 {
 	MakeButton(0,  66, EmailRegionButtonCallback,     30, pLaptopIcons[0], gzLaptopHelpText[LAPTOP_BN_HLP_TXT_VIEW_EMAIL]);
-	MakeButton(1,  98, WWWRegionButtonCallback,       30, pLaptopIcons[1], gzLaptopHelpText[LAPTOP_BN_HLP_TXT_BROWSE_VARIOUS_WEB_SITES]);
+	MakeButton(1,  98, ButtonCallbackPrimarySecondary(WWWRegionButtonCallbackPrimary, WWWRegionButtonCallbackSecondary), 30, pLaptopIcons[1], gzLaptopHelpText[LAPTOP_BN_HLP_TXT_BROWSE_VARIOUS_WEB_SITES]);
 	MakeButton(2, 130, FilesRegionButtonCallback,     30, pLaptopIcons[5], gzLaptopHelpText[LAPTOP_BN_HLP_TXT_VIEW_FILES_AND_EMAIL_ATTACHMENTS]);
 	MakeButton(3, 194, PersonnelRegionButtonCallback, 30, pLaptopIcons[3], gzLaptopHelpText[LAPTOP_BN_HLP_TXT_VIEW_TEAM_INFO]);
 	MakeButton(4, 162, HistoryRegionButtonCallback,   30, pLaptopIcons[4], gzLaptopHelpText[LAPTOP_BN_HLP_TXT_READ_LOG_OF_EVENTS]);
@@ -1346,9 +1355,9 @@ static void DeleteLapTopButtons(void)
 static BOOLEAN HandleExit(void);
 
 
-static void BtnOnCallback(GUI_BUTTON *btn, INT32 reason)
+static void BtnOnCallback(GUI_BUTTON *btn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		if (HandleExit()) fExitingLaptopFlag = TRUE;
 	}
@@ -1367,7 +1376,7 @@ static void LeaveLapTopScreen(void)
 		if (gfAtLeastOneMercWasHired)
 		{
 			if (LaptopSaveInfo.gfNewGameLaptop)
-	{
+			{
 				LaptopSaveInfo.gfNewGameLaptop = FALSE;
 				fExitingLaptopFlag = TRUE;
 				InitNewGame();
@@ -1398,7 +1407,7 @@ static void LeaveLapTopScreen(void)
 
 			//Step 2:  The mapscreen image is in the EXTRABUFFER, and laptop is in the SAVEBUFFER
 			//         Start transitioning the screen.
-			SGPBox const DstRect = { STD_SCREEN_X, STD_SCREEN_Y, MAP_SCREEN_WIDTH, MAP_SCREEN_HEIGHT };
+			SGPBox const SrcRect = { STD_SCREEN_X, STD_SCREEN_Y, MAP_SCREEN_WIDTH, MAP_SCREEN_HEIGHT };
 			const UINT32 uiTimeRange = 1000;
 			INT32 iPercentage     = 100;
 			INT32 iRealPercentage = 100;
@@ -1411,7 +1420,7 @@ static void LeaveLapTopScreen(void)
 
 				const UINT32 uiCurrTime = GetClock();
 				iPercentage = (uiCurrTime-uiStartTime) * 100 / uiTimeRange;
-				iPercentage = MIN(iPercentage, 100);
+				iPercentage = std::min(iPercentage, 100);
 				iPercentage = 100 - iPercentage;
 
 				iRealPercentage = iPercentage;
@@ -1427,13 +1436,7 @@ static void LeaveLapTopScreen(void)
 					iPercentage += (100-iPercentage) * iFactor * 0.01 + 0.5;
 				}
 
-				//Mapscreen source rect
-				SGPRect SrcRect1;
-				SrcRect1.iLeft   =                 464 * iPercentage / 100;
-				SrcRect1.iRight  = SCREEN_WIDTH  - 163 * iPercentage / 100;
-				SrcRect1.iTop    =                 417 * iPercentage / 100;
-				SrcRect1.iBottom = SCREEN_HEIGHT -  55 * iPercentage / 100;
-				//Laptop source rect
+				//Scaled laptop
 				INT32 iScalePercentage;
 				if (iPercentage < 99)
 				{
@@ -1448,9 +1451,9 @@ static void LeaveLapTopScreen(void)
 				const UINT16 uX = 472 - (472 - 320) * iScalePercentage / 5333;
 				const UINT16 uY = 424 - (424 - 240) * iScalePercentage / 5333;
 
-				SGPBox const SrcRect2 = { (UINT16)(STD_SCREEN_X + uX - uWidth / 2), (UINT16)(STD_SCREEN_Y + uY - uHeight / 2), uWidth, uHeight };
+				SGPBox const DstRect = { (UINT16)(STD_SCREEN_X + uX - uWidth / 2), (UINT16)(STD_SCREEN_Y + uY - uHeight / 2), uWidth, uHeight };
 
-				BltStretchVideoSurface(FRAME_BUFFER, guiSAVEBUFFER, &DstRect, &SrcRect2);
+				BltStretchVideoSurface(FRAME_BUFFER, guiSAVEBUFFER, &SrcRect, &DstRect);
 				InvalidateScreen();
 				RefreshScreen();
 			}
@@ -1503,9 +1506,9 @@ static void DeleteLapTopMouseRegions(void)
 static void UpdateListToReflectNewProgramOpened(INT32 iOpenedProgram);
 
 
-static void FinancialRegionButtonCallback(GUI_BUTTON* btn, INT32 reason)
+static void FinancialRegionButtonCallback(GUI_BUTTON* btn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		if (gfShowBookmarks)
 		{
@@ -1519,9 +1522,9 @@ static void FinancialRegionButtonCallback(GUI_BUTTON* btn, INT32 reason)
 }
 
 
-static void PersonnelRegionButtonCallback(GUI_BUTTON *btn, INT32 reason)
+static void PersonnelRegionButtonCallback(GUI_BUTTON *btn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		guiCurrentLaptopMode = LAPTOP_MODE_PERSONNEL;
 		if (gfShowBookmarks)
@@ -1536,9 +1539,9 @@ static void PersonnelRegionButtonCallback(GUI_BUTTON *btn, INT32 reason)
 }
 
 
-static void EmailRegionButtonCallback(GUI_BUTTON *btn, INT32 reason)
+static void EmailRegionButtonCallback(GUI_BUTTON *btn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		guiCurrentLaptopMode = LAPTOP_MODE_EMAIL;
 		gfShowBookmarks = FALSE;
@@ -1548,50 +1551,48 @@ static void EmailRegionButtonCallback(GUI_BUTTON *btn, INT32 reason)
 }
 
 
-static void WWWRegionButtonCallback(GUI_BUTTON *btn, INT32 reason)
+static void WWWRegionButtonCallbackPrimary(GUI_BUTTON *btn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	// reset show bookmarks
+	if (guiCurrentLaptopMode < LAPTOP_MODE_WWW)
 	{
-		// reset show bookmarks
-		if (guiCurrentLaptopMode < LAPTOP_MODE_WWW)
-		{
-			gfShowBookmarks = FALSE;
-			fShowBookmarkInfo = TRUE;
-		}
-		else
-		{
-			gfShowBookmarks = !gfShowBookmarks;
-		}
-
-		if (fNewWWW)
-		{
-			// no longer a new WWW mode
-			fNewWWW = FALSE;
-
-			// make sure program is maximized
-			if (gLaptopProgramStates[LAPTOP_PROGRAM_WEB_BROWSER] == LAPTOP_PROGRAM_OPEN)
-			{
-				RenderLapTopImage();
-				DrawDeskTopBackground();
-			}
-		}
-
-		guiCurrentLaptopMode = (guiCurrentWWWMode == LAPTOP_MODE_NONE ? LAPTOP_MODE_WWW : guiCurrentWWWMode);
-
-		UpdateListToReflectNewProgramOpened(LAPTOP_PROGRAM_WEB_BROWSER);
-		fReDrawScreenFlag = TRUE;
+		gfShowBookmarks = FALSE;
+		fShowBookmarkInfo = TRUE;
 	}
-	else if (reason & MSYS_CALLBACK_REASON_RBUTTON_UP)
+	else
 	{
-		guiCurrentLaptopMode = (guiCurrentWWWMode == LAPTOP_MODE_NONE ? LAPTOP_MODE_WWW : guiCurrentWWWMode);
-		fReDrawScreenFlag = TRUE;
+		gfShowBookmarks = !gfShowBookmarks;
 	}
+
+	if (fNewWWW)
+	{
+		// no longer a new WWW mode
+		fNewWWW = FALSE;
+
+		// make sure program is maximized
+		if (gLaptopProgramStates[LAPTOP_PROGRAM_WEB_BROWSER] == LAPTOP_PROGRAM_OPEN)
+		{
+			RenderLapTopImage();
+			DrawDeskTopBackground();
+		}
+	}
+
+	guiCurrentLaptopMode = (guiCurrentWWWMode == LAPTOP_MODE_NONE ? LAPTOP_MODE_WWW : guiCurrentWWWMode);
+
+	UpdateListToReflectNewProgramOpened(LAPTOP_PROGRAM_WEB_BROWSER);
+	fReDrawScreenFlag = TRUE;
+}
+
+static void WWWRegionButtonCallbackSecondary(GUI_BUTTON *btn, UINT32 reason)
+{
+	guiCurrentLaptopMode = (guiCurrentWWWMode == LAPTOP_MODE_NONE ? LAPTOP_MODE_WWW : guiCurrentWWWMode);
+	fReDrawScreenFlag = TRUE;
 }
 
 
-static void HistoryRegionButtonCallback(GUI_BUTTON *btn, INT32 reason)
+static void HistoryRegionButtonCallback(GUI_BUTTON *btn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		if (gfShowBookmarks)
 		{
@@ -1605,9 +1606,9 @@ static void HistoryRegionButtonCallback(GUI_BUTTON *btn, INT32 reason)
 }
 
 
-static void FilesRegionButtonCallback(GUI_BUTTON *btn, INT32 reason)
+static void FilesRegionButtonCallback(GUI_BUTTON *btn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		if (gfShowBookmarks)
 		{
@@ -1623,7 +1624,7 @@ static void FilesRegionButtonCallback(GUI_BUTTON *btn, INT32 reason)
 static void InitBookMarkList(void)
 {
 	// sets bookmark list to -1
-	memset(LaptopSaveInfo.iBookMarkList, -1, sizeof(LaptopSaveInfo.iBookMarkList));
+	std::fill(std::begin(LaptopSaveInfo.iBookMarkList), std::end(LaptopSaveInfo.iBookMarkList), -1);
 }
 
 
@@ -1678,7 +1679,7 @@ static void DisplayBookMarks(void)
 
 		SetFontForeground(highlighted ? FONT_WHITE : FONT_BLACK);
 		INT32          const idx = LaptopSaveInfo.iBookMarkList[i];
-		wchar_t const* const txt = pBookMarkStrings[idx != -1 ? idx : CANCEL_STRING];
+		ST::string txt = pBookMarkStrings[idx != -1 ? idx : CANCEL_STRING];
 		INT16                sX;
 		INT16                sY;
 		FindFontCenterCoordinates(BOOK_X + 3, y + 2, BOOK_WIDTH - 3, h, txt, BOOK_FONT, &sX, &sY);
@@ -1704,8 +1705,8 @@ static void DeleteBookmark(void)
 }
 
 
-static void BookmarkCallBack(MOUSE_REGION* pRegion, INT32 iReason);
-static void BookmarkMvtCallBack(MOUSE_REGION* pRegion, INT32 iReason);
+static void BookmarkCallBack(MOUSE_REGION* pRegion, UINT32 iReason);
+static void BookmarkMvtCallBack(MOUSE_REGION* pRegion, UINT32 iReason);
 
 
 static void CreateBookMarkMouseRegions(void)
@@ -1756,12 +1757,12 @@ static void CreateDestoryBookMarkRegions(void)
 }
 
 
-static void BookmarkCallBack(MOUSE_REGION* pRegion, INT32 iReason)
+static void BookmarkCallBack(MOUSE_REGION* pRegion, UINT32 iReason)
 {
 	// we are in process of loading
 	if (fLoadPendingFlag) return;
 
-	if (iReason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (iReason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		INT32 const i   = MSYS_GetRegionUserData(pRegion, 0);
 		INT32 const idx = LaptopSaveInfo.iBookMarkList[i];
@@ -1859,15 +1860,15 @@ void GoToWebPage(INT32 iPageId)
 }
 
 
-static void BookmarkMvtCallBack(MOUSE_REGION* pRegion, INT32 iReason)
+static void BookmarkMvtCallBack(MOUSE_REGION* pRegion, UINT32 iReason)
 {
-	if (iReason == MSYS_CALLBACK_REASON_MOVE)
-	{
-		iHighLightBookLine=MSYS_GetRegionUserData(pRegion, 0);
-	}
-	if (iReason == MSYS_CALLBACK_REASON_LOST_MOUSE)
+	if (iReason & MSYS_CALLBACK_REASON_LOST_MOUSE)
 	{
 		iHighLightBookLine = -1;
+	}
+	else if (iReason & MSYS_CALLBACK_REASON_MOVE)
+	{
+		iHighLightBookLine=MSYS_GetRegionUserData(pRegion, 0);
 	}
 }
 
@@ -1881,42 +1882,43 @@ static void LoadLoadPending(void)
 	guiGRAPHBAR    = AddVideoObjectFromFile(LAPTOPDIR "/graphsegment.sti");
 }
 
-
-static INT32 WWaitDelayIncreasedIfRaining(INT32 iUnitTime);
-
-
 static void DisplayLoadPending(void)
 {
 	// this function will display the load pending and return if the load is done
-	static INT32 iBaseTime  = 0;
-	static INT32 iTotalTime = 0;
+	static UINT32 uiBaseTime  = 0;
+	static UINT32 uiTotalTime = 0;
 
 	// if merc webpage, make it longer
-	// TEMP disables the loadpending
-	INT32 iLoadTime;
-	INT32 iUnitTime;
-
+	UINT32 uiUnitTime = UNIT_TIME;
 	if (fFastLoadFlag)
 	{
-		iUnitTime = (fConnectingToSubPage ? FASTEST_UNIT_TIME : FAST_UNIT_TIME);
+		uiUnitTime = fConnectingToSubPage ? FASTEST_UNIT_TIME : FAST_UNIT_TIME;
 	}
 	else if (fConnectingToSubPage)
 	{
-		iUnitTime = ALMOST_FAST_UNIT_TIME;
+		uiUnitTime = ALMOST_FAST_UNIT_TIME;
 	}
 	else if (guiCurrentLaptopMode == LAPTOP_MODE_MERC && !LaptopSaveInfo.fMercSiteHasGoneDownYet)
 	{
 		// if we are connecting the MERC site, and the MERC site hasnt yet moved
 		// to their new site, have the sloooww wait
-		iUnitTime = LONG_UNIT_TIME;
-	}
-	else
-	{
-		iUnitTime = UNIT_TIME;
+		uiUnitTime = LONG_UNIT_TIME;
 	}
 
-	iUnitTime += WWaitDelayIncreasedIfRaining(iUnitTime);
-	iLoadTime  = iUnitTime * 30;
+	// increase delay if it's raining
+	if (guiEnvWeather & WEATHER_FORECAST_THUNDERSHOWERS)
+	{
+		uiUnitTime += uiUnitTime * 0.8f;
+	}
+	else if (guiEnvWeather & WEATHER_FORECAST_SHOWERS)
+	{
+		uiUnitTime += uiUnitTime * 0.6f;
+	}
+
+	// Adjust loading time based on config var
+	uiUnitTime *= gamepolicy(website_loading_time_scale);
+
+	UINT32 uiLoadTime = uiUnitTime * 30;
 
 	// we are now waiting on a web page to download, reset counter
 	if (!fLoadPendingFlag)
@@ -1924,34 +1926,34 @@ static void DisplayLoadPending(void)
 		fDoneLoadPending     = FALSE;
 		fFastLoadFlag        = FALSE;
 		fConnectingToSubPage = FALSE;
-		iBaseTime            = 0;
-		iTotalTime           = 0;
+		uiBaseTime           = 0;
+		uiTotalTime          = 0;
 		return;
 	}
-	if (iBaseTime == 0) iBaseTime = GetJA2Clock();
+	if (uiBaseTime == 0) uiBaseTime = GetJA2Clock();
 
 	// if total time is exceeded, return
-	if (iTotalTime >= iLoadTime)
+	if (uiTotalTime >= uiLoadTime)
 	{
 		// done loading, redraw screen
 		fLoadPendingFlag        = FALSE;
 		fFastLoadFlag           = FALSE;
-		iTotalTime              = 0;
-		iBaseTime               = 0;
+		uiTotalTime             = 0;
+		uiBaseTime              = 0;
 		fDoneLoadPending        = TRUE;
 		fConnectingToSubPage    = FALSE;
 		fPausedReDrawScreenFlag = TRUE;
 		return;
 	}
 
-	const INT32 iDifference = GetJA2Clock() - iBaseTime;
+	const UINT32 uiDifference = GetJA2Clock() - uiBaseTime;
 
 	// difference has been long enough or we are redrawing the screen
-	if (iDifference > iUnitTime)
+	if (uiDifference > uiUnitTime)
 	{
 		// LONG ENOUGH TIME PASSED
-		iBaseTime   = GetJA2Clock();
-		iTotalTime += iDifference;
+		uiBaseTime   = GetJA2Clock();
+		uiTotalTime += uiDifference;
 	}
 
 	// new mail, don't redraw
@@ -1968,7 +1970,7 @@ static void DisplayLoadPending(void)
 	SetFontAttributes(DOWNLOAD_FONT, FONT_WHITE, NO_SHADOW);
 
 	// reload or download?
-	const wchar_t* const str = (fFastLoadFlag ? pDownloadString[1] : pDownloadString[0]);
+	ST::string str = (fFastLoadFlag ? pDownloadString[1] : pDownloadString[0]);
 	INT16 sXPosition = 0;
 	INT16 sYPosition = 0;
 	FindFontCenterCoordinates(328, 0, 446 - 328, 0, str, DOWNLOAD_FONT, &sXPosition, &sYPosition);
@@ -1979,9 +1981,10 @@ static void DisplayLoadPending(void)
 	// check to see if we are only updating screen, but not passed a new element in the load pending display
 
 	// decide how many time units are to be displayed, based on amount of time passed
-	for (INT32 i = 0, iTempTime = iTotalTime; i <= 30 && iTempTime > 0; ++i, iTempTime -= iUnitTime)
+	for (UINT32 i = 0, uiTempTime = uiTotalTime; i <= 30 && uiTempTime > 0; ++i, uiTempTime -= uiUnitTime)
 	{
 		BltVideoObject(FRAME_BUFFER, guiGRAPHBAR, 0, LAPTOP_BAR_X + UNIT_WIDTH * i, LAPTOP_BAR_Y);
+		if (uiUnitTime > uiTempTime) break; // prevent underflow
 	}
 
 	InvalidateRegion(DOWNLOAD_X, DOWNLOAD_Y, DOWNLOAD_X + 150, DOWNLOAD_Y + 100);
@@ -2156,40 +2159,39 @@ static void HandleLeftButtonUpEvent(void)
 	}
 }
 
-void LapTopScreenCallBack(MOUSE_REGION* pRegion, INT32 iReason)
+void LapTopScreenCallBackPrimary(MOUSE_REGION* pRegion, UINT32 iReason)
 {
-	if (iReason & MSYS_CALLBACK_REASON_LBUTTON_UP)
-	{
-		HandleLeftButtonUpEvent();
-	}
-	if (iReason & MSYS_CALLBACK_REASON_RBUTTON_UP)
-	{
-		HandleRightButtonUpEvent();
-	}
+	HandleLeftButtonUpEvent();
 }
 
+void LapTopScreenCallBackSecondary(MOUSE_REGION* pRegion, UINT32 iReason)
+{
+	HandleRightButtonUpEvent();
+}
 
-void DoLapTopMessageBox(MessageBoxStyleID const ubStyle, wchar_t const* const zString, ScreenID const uiExitScreen, MessageBoxFlags const ubFlags, MSGBOX_CALLBACK const ReturnCallback)
+MOUSE_CALLBACK LapTopScreenCallBack = MouseCallbackPrimarySecondary(LapTopScreenCallBackPrimary, LapTopScreenCallBackSecondary);
+
+void DoLapTopMessageBox(MessageBoxStyleID ubStyle, const ST::string& str, ScreenID uiExitScreen, MessageBoxFlags ubFlags, MSGBOX_CALLBACK ReturnCallback)
 {
 	SGPBox const centering_rect = { LAPTOP_SCREEN_UL_X, LAPTOP_SCREEN_UL_Y, LAPTOP_SCREEN_WIDTH, LAPTOP_SCREEN_HEIGHT };
-	DoLapTopSystemMessageBoxWithRect(ubStyle, zString, uiExitScreen, ubFlags, ReturnCallback, &centering_rect);
+	DoLapTopSystemMessageBoxWithRect(ubStyle, str, uiExitScreen, ubFlags, ReturnCallback, &centering_rect);
 }
 
 
-void DoLapTopSystemMessageBoxWithRect(MessageBoxStyleID const ubStyle, wchar_t const* const zString, ScreenID const uiExitScreen, MessageBoxFlags const usFlags, MSGBOX_CALLBACK const ReturnCallback, SGPBox const* const centering_rect)
+void DoLapTopSystemMessageBoxWithRect(MessageBoxStyleID ubStyle, const ST::string& str, ScreenID uiExitScreen, MessageBoxFlags usFlags, MSGBOX_CALLBACK ReturnCallback, SGPBox const* centering_rect)
 {
 	// reset exit mode
 	fExitDueToMessageBox = TRUE;
 
 	// do message box and return
-	DoMessageBox(ubStyle, zString, uiExitScreen, usFlags, ReturnCallback, centering_rect);
+	DoMessageBox(ubStyle, str, uiExitScreen, usFlags, ReturnCallback, centering_rect);
 }
 
 
-void DoLapTopSystemMessageBox(wchar_t const* const zString, ScreenID const uiExitScreen, MessageBoxFlags const usFlags, MSGBOX_CALLBACK const ReturnCallback)
+void DoLapTopSystemMessageBox(const ST::string& str, ScreenID uiExitScreen, MessageBoxFlags usFlags, MSGBOX_CALLBACK ReturnCallback)
 {
 	SGPBox const centering_rect = { 0, 0, SCREEN_WIDTH, INV_INTERFACE_START_Y };
-	DoLapTopSystemMessageBoxWithRect(MSG_BOX_LAPTOP_DEFAULT, zString, uiExitScreen, usFlags, ReturnCallback, &centering_rect);
+	DoLapTopSystemMessageBoxWithRect(MSG_BOX_LAPTOP_DEFAULT, str, uiExitScreen, usFlags, ReturnCallback, &centering_rect);
 }
 
 
@@ -2210,7 +2212,7 @@ void WebPageTileBackground(const UINT8 ubNumX, const UINT8 ubNumY, const UINT16 
 }
 
 
-static void InitTitleBarMaximizeGraphics(const SGPVObject* const uiBackgroundGraphic, const wchar_t* const pTitle, const SGPVObject* const uiIconGraphic, const UINT16 usIconGraphicIndex)
+static void InitTitleBarMaximizeGraphics(const SGPVObject* uiBackgroundGraphic, const ST::string& str, const SGPVObject* uiIconGraphic, UINT16 usIconGraphicIndex)
 {
 	Assert(uiBackgroundGraphic);
 
@@ -2222,7 +2224,7 @@ static void InitTitleBarMaximizeGraphics(const SGPVObject* const uiBackgroundGra
 	BltVideoObject(guiTitleBarSurface, uiIconGraphic, usIconGraphicIndex, LAPTOP_TITLE_BAR_ICON_OFFSET_X, LAPTOP_TITLE_BAR_ICON_OFFSET_Y);
 
 	SetFontDestBuffer(guiTitleBarSurface);
-	DrawTextToScreen(pTitle, LAPTOP_TITLE_BAR_TEXT_OFFSET_X, LAPTOP_TITLE_BAR_TEXT_OFFSET_Y, 0, FONT14ARIAL, FONT_MCOLOR_WHITE, FONT_MCOLOR_BLACK, LEFT_JUSTIFIED);
+	DrawTextToScreen(str, LAPTOP_TITLE_BAR_TEXT_OFFSET_X, LAPTOP_TITLE_BAR_TEXT_OFFSET_Y, 0, FONT14ARIAL, FONT_MCOLOR_WHITE, FONT_MCOLOR_BLACK, LEFT_JUSTIFIED);
 	SetFontDestBuffer(FRAME_BUFFER);
 }
 
@@ -2425,32 +2427,32 @@ static void ShowLights(void)
 
 static void FlickerHDLight(void)
 {
-	static INT32 iBaseTime        = 0;
-	static INT32 iTotalDifference = 0;
+	static UINT32 uiBaseTime       = 0;
+	static UINT32 uiTotalDifference = 0;
 
 	if (fLoadPendingFlag) fFlickerHD = TRUE;
 	if (!fFlickerHD) return;
 
-	if (iBaseTime == 0) iBaseTime = GetJA2Clock();
+	if (uiBaseTime == 0) uiBaseTime = GetJA2Clock();
 
-	const INT32 iDifference = GetJA2Clock() - iBaseTime;
+	const UINT32 uiDifference = GetJA2Clock() - uiBaseTime;
 
-	if (iTotalDifference > HD_FLICKER_TIME && !fLoadPendingFlag)
+	if (uiTotalDifference > HD_FLICKER_TIME && !fLoadPendingFlag)
 	{
-		iBaseTime         = GetJA2Clock();
+		uiBaseTime         = GetJA2Clock();
 		fHardDriveLightOn = FALSE;
-		iBaseTime         = 0;
-		iTotalDifference  = 0;
+		uiBaseTime         = 0;
+		uiTotalDifference  = 0;
 		fFlickerHD        = FALSE;
 		InvalidateRegion(88, 466, 102, 477);
 		return;
 	}
 
-	if (iDifference > FLICKER_TIME)
+	if (uiDifference > FLICKER_TIME)
 	{
-		iTotalDifference += iDifference;
+		uiTotalDifference += uiDifference;
 
-		if (fLoadPendingFlag) iTotalDifference = 0;
+		if (fLoadPendingFlag) uiTotalDifference = 0;
 
 		fHardDriveLightOn = (Random(2) == 0);
 		InvalidateRegion(88, 466, 102, 477);
@@ -2462,24 +2464,24 @@ static BOOLEAN ExitLaptopDone(void)
 {
 	// check if this is the first time, to reset counter
 	static BOOLEAN fOldLeaveLaptopState = FALSE;
-	static INT32 iBaseTime              = 0;
+	static UINT32  uiBaseTime            = 0;
 
 	if (!fOldLeaveLaptopState)
 	{
 		fOldLeaveLaptopState = TRUE;
-		iBaseTime = GetJA2Clock();
+		uiBaseTime = GetJA2Clock();
 	}
 
 	fPowerLightOn = FALSE;
 
 	InvalidateRegion(44, 466, 58, 477);
 	// get the current difference
-	const INT32 iDifference = GetJA2Clock() - iBaseTime;
+	const UINT32 iDifference = GetJA2Clock() - uiBaseTime;
 
 	// did we wait long enough?
 	if (iDifference > EXIT_LAPTOP_DELAY_TIME)
 	{
-		iBaseTime = 0;
+		uiBaseTime = 0;
 		fOldLeaveLaptopState = FALSE;
 		return TRUE;
 	}
@@ -2541,7 +2543,7 @@ static void CreateDestroyMinimizeButtonForCurrentMode(void)
 }
 
 
-static void LaptopMinimizeProgramButtonCallback(GUI_BUTTON* btn, INT32 reason);
+static void LaptopMinimizeProgramButtonCallback(GUI_BUTTON* btn, UINT32 reason);
 
 
 static void CreateMinimizeButtonForCurrentMode(void)
@@ -2562,12 +2564,12 @@ static void DestroyMinimizeButtonForCurrentMode(void)
 static void SetCurrentToLastProgramOpened(void);
 
 
-static void LaptopMinimizeProgramButtonCallback(GUI_BUTTON* btn, INT32 reason)
+static void LaptopMinimizeProgramButtonCallback(GUI_BUTTON* btn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		UINT           prog;
-		const wchar_t* title;
+		ST::string title;
 		UINT16         gfx_idx;
 		switch (guiCurrentLaptopMode)
 		{
@@ -2728,8 +2730,7 @@ void PrintBalance(void)
 {
 	SetFontAttributes(FONT10ARIAL, FONT_BLACK, NO_SHADOW);
 
-	wchar_t pString[32];
-	SPrintMoney(pString, LaptopSaveInfo.iCurrentBalance);
+	ST::string pString = SPrintMoney(LaptopSaveInfo.iCurrentBalance);
 
 	INT32 x = STD_SCREEN_X + 47;
 	INT32 y = STD_SCREEN_Y + 257 + 15;
@@ -2757,7 +2758,7 @@ void PrintNumberOnTeam(void)
 		++usPosX;
 		++usPosY;
 	}
-	mprintf(usPosX, usPosY, L"%ls %d", pPersonnelString, iCounter);
+	MPrint(usPosX, usPosY, ST::format("{} {}", pPersonnelString, iCounter));
 
 	SetFontShadow(DEFAULT_SHADOW);
 }
@@ -2880,7 +2881,7 @@ void RenderWWWProgramTitleBar(void)
 	else
 	{
 		const INT32 iIndex = guiCurrentLaptopMode - LAPTOP_MODE_WWW-1;
-		mprintf(STD_SCREEN_X + 140, STD_SCREEN_Y + 33, L"%ls  -  %ls", pWebTitle, pWebPagesTitles[iIndex]);
+		MPrint(STD_SCREEN_X + 140, STD_SCREEN_Y + 33, ST::format("{}  -  {}", pWebTitle, pWebPagesTitles[iIndex]));
 	}
 
 	BlitTitleBarIcons();
@@ -2888,7 +2889,7 @@ void RenderWWWProgramTitleBar(void)
 }
 
 
-static void LaptopProgramIconMinimizeCallback(MOUSE_REGION* pRegion, INT32 iReason);
+static void LaptopProgramIconMinimizeCallback(MOUSE_REGION* pRegion, UINT32 iReason);
 
 
 static void CreateMinimizeRegionsForLaptopProgramIcons(void)
@@ -2910,10 +2911,10 @@ static void DestroyMinimizeRegionsForLaptopProgramIcons(void)
 }
 
 
-static void LaptopProgramIconMinimizeCallback(MOUSE_REGION* pRegion, INT32 iReason)
+static void LaptopProgramIconMinimizeCallback(MOUSE_REGION* pRegion, UINT32 iReason)
 {
 	// callback handler for the minize region that is attatched to the laptop program icon
-	if (iReason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (iReason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		switch (guiCurrentLaptopMode)
 		{
@@ -2987,8 +2988,8 @@ void DisplayProgramBoundingBox(BOOLEAN fMarkButtons)
 }
 
 
-static void NewEmailIconCallback(MOUSE_REGION* pRegion, INT32 iReason);
-static void NewFileIconCallback(MOUSE_REGION* pRegion, INT32 iReason);
+static void NewEmailIconCallback(MOUSE_REGION* pRegion, UINT32 iReason);
+static void NewFileIconCallback(MOUSE_REGION* pRegion, UINT32 iReason);
 
 
 static void CreateDestroyMouseRegionForNewMailIcon(void)
@@ -3022,9 +3023,9 @@ static void CreateDestroyMouseRegionForNewMailIcon(void)
 }
 
 
-static void NewEmailIconCallback(MOUSE_REGION* pRegion, INT32 iReason)
+static void NewEmailIconCallback(MOUSE_REGION* pRegion, UINT32 iReason)
 {
-	if (iReason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (iReason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		if (fUnReadMailFlag)
 		{
@@ -3035,9 +3036,9 @@ static void NewEmailIconCallback(MOUSE_REGION* pRegion, INT32 iReason)
 }
 
 
-static void NewFileIconCallback(MOUSE_REGION* pRegion, INT32 iReason)
+static void NewFileIconCallback(MOUSE_REGION* pRegion, UINT32 iReason)
 {
-	if (iReason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (iReason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		if (fNewFilesInFileViewer)
 		{
@@ -3205,7 +3206,7 @@ static void DisplayWebBookMarkNotify(void)
 // handle timer for bookmark notify
 static void HandleWebBookMarkNotifyTimer(void)
 {
-	static INT32 iBaseTime              = 0;
+	static UINT32  uiBaseTime            = 0;
 	static BOOLEAN fOldShowBookMarkInfo = FALSE;
 
 	// check if maxing or mining?
@@ -3234,25 +3235,25 @@ static void HandleWebBookMarkNotifyTimer(void)
 	// check if flag false, is so, leave
 	if (!fShowBookmarkInfo)
 	{
-		iBaseTime = 0;
+		uiBaseTime = 0;
 		return;
 	}
 
 	// check if this is the first time in here
-	if (iBaseTime == 0)
+	if (uiBaseTime == 0)
 	{
-		iBaseTime = GetJA2Clock();
+		uiBaseTime = GetJA2Clock();
 		return;
 	}
 
-	const INT32 iDifference = GetJA2Clock() - iBaseTime;
+	const UINT32 uiDifference = GetJA2Clock() - uiBaseTime;
 
 	fReDrawBookMarkInfo = TRUE;
 
-	if (iDifference > DISPLAY_TIME_FOR_WEB_BOOKMARK_NOTIFY)
+	if (uiDifference > DISPLAY_TIME_FOR_WEB_BOOKMARK_NOTIFY)
 	{
 		// waited long enough, stop showing
-		iBaseTime = 0;
+		uiBaseTime = 0;
 		fShowBookmarkInfo = FALSE;
 	}
 }
@@ -3261,38 +3262,35 @@ static void HandleWebBookMarkNotifyTimer(void)
 void ClearOutTempLaptopFiles(void)
 {
 	// clear out all temp files from laptop
-	FileDelete("files.dat");
-	FileDelete("finances.dat");
-	FileDelete("email.dat");
-	FileDelete("history.dat");
+	GCM->tempFiles()->deleteFile(FILES_DATA_FILE);
+	GCM->tempFiles()->deleteFile(FINANCES_DATA_FILE);
+	GCM->tempFiles()->deleteFile(HISTORY_DATA_FILE);
 }
 
 
-static BYTE* InjectStoreInvetory(BYTE* const data, STORE_INVENTORY const& i)
+static void InjectStoreInvetory(DataWriter& d, STORE_INVENTORY const& i)
 {
-	BYTE* d = data;
+	size_t start = d.getConsumed();
 	INJ_U16( d, i.usItemIndex)
 	INJ_U8(  d, i.ubQtyOnHand)
 	INJ_U8(  d, i.ubQtyOnOrder)
 	INJ_U8(  d, i.ubItemQuality)
 	INJ_BOOL(d, i.fPreviouslyEligible)
 	INJ_SKIP(d, 2)
-	Assert(d == data + 8);
-	return d;
+	Assert(d.getConsumed() == start + 8);
 }
 
 
-static BYTE const* ExtractStoreInvetory(BYTE const* const data, STORE_INVENTORY& i)
+static void ExtractStoreInvetory(DataReader& d, STORE_INVENTORY& i)
 {
-	BYTE const* d = data;
+	size_t start = d.getConsumed();
 	EXTR_U16( d, i.usItemIndex)
 	EXTR_U8(  d, i.ubQtyOnHand)
 	EXTR_U8(  d, i.ubQtyOnOrder)
 	EXTR_U8(  d, i.ubItemQuality)
 	EXTR_BOOL(d, i.fPreviouslyEligible)
 	EXTR_SKIP(d, 2)
-	Assert(d == data + 8);
-	return d;
+	Assert(d.getConsumed() == start + 8);
 }
 
 
@@ -3301,7 +3299,7 @@ void SaveLaptopInfoToSavedGame(HWFILE const f)
 	LaptopSaveInfoStruct const& l = LaptopSaveInfo;
 
 	BYTE  data[7440];
-	BYTE* d = data;
+	DataWriter d{data};
 	INJ_BOOL( d, l.gfNewGameLaptop)
 	INJ_BOOLA(d, l.fVisitedBookmarkAlready, lengthof(l.fVisitedBookmarkAlready))
 	INJ_SKIP( d, 3)
@@ -3319,17 +3317,20 @@ void SaveLaptopInfoToSavedGame(HWFILE const f)
 	INJ_SKIP( d, 1)
 	FOR_EACH(STORE_INVENTORY const, i, l.BobbyRayInventory)
 	{
-		d = InjectStoreInvetory(d, *i);
+		InjectStoreInvetory(d, *i);
 	}
 	FOR_EACH(STORE_INVENTORY const, i, l.BobbyRayUsedInventory)
 	{
-		d = InjectStoreInvetory(d, *i);
+		InjectStoreInvetory(d, *i);
 	}
 	INJ_SKIP( d, 6)
-	INJ_U8(   d, l.usNumberOfBobbyRayOrderItems)
+	Assert(l.BobbyRayOrdersOnDeliveryArray.size() <= UINT8_MAX);
+	INJ_U8(   d, static_cast<UINT8>(l.BobbyRayOrdersOnDeliveryArray.size()))
 	INJ_U8(   d, l.usNumberOfBobbyRayOrderUsed)
 	INJ_SKIP( d, 6)
-	INJ_U8(   d, l.ubNumberLifeInsurancePayouts)
+	Assert(l.pLifeInsurancePayouts.size() <= UINT8_MAX);
+	INJ_U8(   d, static_cast<UINT8>(l.pLifeInsurancePayouts.size()))
+	Assert(l.ubNumberLifeInsurancePayoutUsed <= l.pLifeInsurancePayouts.size());
 	INJ_U8(   d, l.ubNumberLifeInsurancePayoutUsed)
 	INJ_BOOL( d, l.fBobbyRSiteCanBeAccessed)
 	INJ_U8(   d, l.ubPlayerBeenToMercSiteStatus)
@@ -3357,20 +3358,19 @@ void SaveLaptopInfoToSavedGame(HWFILE const f)
 	INJ_U32(  d, l.uiTotalMoneyPaidToSpeck)
 	INJ_U8(   d, l.ubLastMercAvailableId)
 	INJ_SKIP( d, 87)
-	Assert(d == endof(data));
+	Assert(d.getConsumed() == lengthof(data));
 
-	FileWrite(f, data, sizeof(data));
+	f->write(data, sizeof(data));
 
 	if (l.usNumberOfBobbyRayOrderUsed != 0)
 	{ // There is anything in the Bobby Ray Orders on delivery
-		UINT32 const size = sizeof(*l.BobbyRayOrdersOnDeliveryArray) * l.usNumberOfBobbyRayOrderItems;
-		FileWrite(f, l.BobbyRayOrdersOnDeliveryArray, size);
+		size_t const size = sizeof(*l.BobbyRayOrdersOnDeliveryArray.data()) * l.BobbyRayOrdersOnDeliveryArray.size();
+		f->write(l.BobbyRayOrdersOnDeliveryArray.data(), size);
 	}
 
 	if (l.ubNumberLifeInsurancePayoutUsed != 0)
 	{ // There are any insurance payouts in progress
-		UINT32 const size = sizeof(*l.pLifeInsurancePayouts) * l.ubNumberLifeInsurancePayouts;
-		FileWrite(f, l.pLifeInsurancePayouts, size);
+		f->write(l.pLifeInsurancePayouts.data(), sizeof(LIFE_INSURANCE_PAYOUT) * l.pLifeInsurancePayouts.size());
 	}
 }
 
@@ -3379,21 +3379,14 @@ void LoadLaptopInfoFromSavedGame(HWFILE const f)
 {
 	LaptopSaveInfoStruct& l = LaptopSaveInfo;
 
-	if (l.usNumberOfBobbyRayOrderItems)
-	{ // There is memory allocated for the BobbyR orders
-		FreeNull(l.BobbyRayOrdersOnDeliveryArray);
-	}
+	l.BobbyRayOrdersOnDeliveryArray.clear();
 
-	if (l.ubNumberLifeInsurancePayouts)
-	{ // There is memory allocated for life insurance payouts
-		Assert(l.pLifeInsurancePayouts);
-		FreeNull(l.pLifeInsurancePayouts);
-	}
+	l.pLifeInsurancePayouts.clear();
 
 	BYTE data[7440];
-	FileRead(f, data, sizeof(data));
+	f->read(data, sizeof(data));
 
-	BYTE const* d = data;
+	DataReader d{data};
 	EXTR_BOOL( d, l.gfNewGameLaptop)
 	EXTR_BOOLA(d, l.fVisitedBookmarkAlready, lengthof(l.fVisitedBookmarkAlready))
 	EXTR_SKIP( d, 3)
@@ -3411,18 +3404,21 @@ void LoadLaptopInfoFromSavedGame(HWFILE const f)
 	EXTR_SKIP( d, 1)
 	FOR_EACH(STORE_INVENTORY, i, l.BobbyRayInventory)
 	{
-		d = ExtractStoreInvetory(d, *i);
+		ExtractStoreInvetory(d, *i);
 	}
 	FOR_EACH(STORE_INVENTORY, i, l.BobbyRayUsedInventory)
 	{
-		d = ExtractStoreInvetory(d, *i);
+		ExtractStoreInvetory(d, *i);
 	}
 	EXTR_SKIP( d, 6)
-	EXTR_U8(   d, l.usNumberOfBobbyRayOrderItems)
+	UINT8 BobbyRayOrdersOnDeliveryArraySize;
+	EXTR_U8(   d, BobbyRayOrdersOnDeliveryArraySize)
 	EXTR_U8(   d, l.usNumberOfBobbyRayOrderUsed)
 	EXTR_SKIP( d, 6)
-	EXTR_U8(   d, l.ubNumberLifeInsurancePayouts)
+	UINT8 numLifeInsurancePayouts;
+	EXTR_U8(   d, numLifeInsurancePayouts)
 	EXTR_U8(   d, l.ubNumberLifeInsurancePayoutUsed)
+	Assert(l.ubNumberLifeInsurancePayoutUsed <= numLifeInsurancePayouts);
 	EXTR_BOOL( d, l.fBobbyRSiteCanBeAccessed)
 	EXTR_U8(   d, l.ubPlayerBeenToMercSiteStatus)
 	EXTR_BOOL( d, l.fFirstVisitSinceServerWentDown)
@@ -3449,48 +3445,32 @@ void LoadLaptopInfoFromSavedGame(HWFILE const f)
 	EXTR_U32(  d, l.uiTotalMoneyPaidToSpeck)
 	EXTR_U8(   d, l.ubLastMercAvailableId)
 	EXTR_SKIP( d, 87)
-	Assert(d == endof(data));
+	Assert(d.getConsumed() == lengthof(data));
+
+	// Handle old saves in M.E.R.C. module
+	SyncLastMercFromSaveGame();
 
 	if (l.usNumberOfBobbyRayOrderUsed != 0)
 	{ // There is anything in the Bobby Ray Orders on Delivery
-		UINT32 const size = sizeof(*l.BobbyRayOrdersOnDeliveryArray) * l.usNumberOfBobbyRayOrderItems;
-		l.BobbyRayOrdersOnDeliveryArray = MALLOCN(BobbyRayOrderStruct, l.usNumberOfBobbyRayOrderItems);
-		FileRead(f, l.BobbyRayOrdersOnDeliveryArray, size);
+		l.BobbyRayOrdersOnDeliveryArray.resize(BobbyRayOrdersOnDeliveryArraySize);
+		size_t const size = sizeof(*l.BobbyRayOrdersOnDeliveryArray.data()) * BobbyRayOrdersOnDeliveryArraySize;
+		f->read(l.BobbyRayOrdersOnDeliveryArray.data(), size);
 	}
 	else
 	{
-		l.usNumberOfBobbyRayOrderItems  = 0;
-		l.BobbyRayOrdersOnDeliveryArray = 0;
+		l.BobbyRayOrdersOnDeliveryArray.clear();
 	}
 
 	if (l.ubNumberLifeInsurancePayoutUsed != 0)
 	{ // There are any Insurance Payouts in progress
-		UINT32 const size = sizeof(*l.pLifeInsurancePayouts) * l.ubNumberLifeInsurancePayouts;
-		l.pLifeInsurancePayouts = MALLOCN(LIFE_INSURANCE_PAYOUT, l.ubNumberLifeInsurancePayouts);
-		FileRead(f, l.pLifeInsurancePayouts, size);
+		l.pLifeInsurancePayouts.assign(numLifeInsurancePayouts, LIFE_INSURANCE_PAYOUT{});
+		f->read(l.pLifeInsurancePayouts.data(), sizeof(LIFE_INSURANCE_PAYOUT) * numLifeInsurancePayouts);
 	}
 	else
 	{
-		l.ubNumberLifeInsurancePayouts = 0;
-		l.pLifeInsurancePayouts        = 0;
+		l.pLifeInsurancePayouts.clear();
 	}
 }
-
-
-static INT32 WWaitDelayIncreasedIfRaining(INT32 iUnitTime)
-{
-	INT32 iRetVal = 0;
-	if (guiEnvWeather & WEATHER_FORECAST_THUNDERSHOWERS)
-	{
-		iRetVal = iUnitTime * 0.8f;
-	}
-	else if (guiEnvWeather & WEATHER_FORECAST_SHOWERS)
-	{
-		iRetVal = iUnitTime * 0.6f;
-	}
-	return iRetVal;
-}
-
 
 // Used to determine delay if its raining
 static BOOLEAN IsItRaining(void)
@@ -3519,11 +3499,11 @@ void CreateFileAndNewEmailIconFastHelpText(UINT32 uiHelpTextID, BOOLEAN fClearHe
 		case LAPTOP_BN_HLP_TXT_YOU_HAVE_NEW_FILE: pRegion = &gNewFileIconRegion; break;
 
 		default:
-			SLOGE(DEBUG_TAG_ASSERTS, "CreateFileAndNewEmailIconFastHelpText: invalid HelpTextID");
+			SLOGA("CreateFileAndNewEmailIconFastHelpText: invalid HelpTextID");
 			return;
 	}
 
-	const wchar_t* help = (fClearHelpText ? L"" : gzLaptopHelpText[uiHelpTextID]);
+	ST::string help = (fClearHelpText ? ST::null : gzLaptopHelpText[uiHelpTextID]);
 	pRegion->SetFastHelpText(help);
 }
 
@@ -3533,9 +3513,9 @@ void CreateFileAndNewEmailIconFastHelpText(UINT32 uiHelpTextID, BOOLEAN fClearHe
 
 TEST(Laptop, asserts)
 {
-	EXPECT_EQ(sizeof(LIFE_INSURANCE_PAYOUT), 8);
-	EXPECT_EQ(sizeof(BobbyRayPurchaseStruct), 8);
-	EXPECT_EQ(sizeof(BobbyRayOrderStruct), 84);
+	EXPECT_EQ(sizeof(LIFE_INSURANCE_PAYOUT), 8u);
+	EXPECT_EQ(sizeof(BobbyRayPurchaseStruct), 8u);
+	EXPECT_EQ(sizeof(BobbyRayOrderStruct), 84u);
 }
 
 #endif

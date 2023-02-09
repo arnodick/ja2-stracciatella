@@ -18,6 +18,8 @@
 #include "VSurface.h"
 #include "Font_Control.h"
 
+#include <string_theory/string>
+
 
 extern UINT8			gbCurrentIndex;
 
@@ -61,9 +63,11 @@ static MOUSE_REGION gMercFaceMouseRegions[MAX_NUMBER_MERCS];
 static MOUSE_REGION gScreenMouseRegions;
 
 
-static void SelectMercFaceMoveRegionCallBack(MOUSE_REGION* pRegion, INT32 reason);
-static void SelectMercFaceRegionCallBack(MOUSE_REGION* pRegion, INT32 iReason);
-static void SelectScreenRegionCallBack(MOUSE_REGION* pRegion, INT32 iReason);
+static void SelectMercFaceMoveRegionCallBack(MOUSE_REGION* pRegion, UINT32 reason);
+static void SelectMercFaceRegionCallBackPrimary(MOUSE_REGION* pRegion, UINT32 iReason);
+static void SelectMercFaceRegionCallBackSecondary(MOUSE_REGION* pRegion, UINT32 iReason);
+// There is no SelectScreenRegionCallBackPrimary
+static void SelectScreenRegionCallBackSecondary(MOUSE_REGION* pRegion, UINT32 iReason);
 
 
 void EnterAimFacialIndex()
@@ -87,7 +91,7 @@ void EnterAimFacialIndex()
 						(INT16)(usPosY + AIM_FI_PORTRAIT_HEIGHT),
 						MSYS_PRIORITY_HIGH,
 						CURSOR_WWW, SelectMercFaceMoveRegionCallBack,
-						SelectMercFaceRegionCallBack);
+						MouseCallbackPrimarySecondary(SelectMercFaceRegionCallBackPrimary, SelectMercFaceRegionCallBackSecondary));
 			MSYS_SetRegionUserData( &gMercFaceMouseRegions[ i ], 0, i);
 
 			guiAimFiFace[i] = LoadSmallPortrait(GetProfile(AimMercArray[i]));
@@ -101,7 +105,7 @@ void EnterAimFacialIndex()
 
 	MSYS_DefineRegion(&gScreenMouseRegions, LAPTOP_SCREEN_UL_X, LAPTOP_SCREEN_WEB_UL_Y,
 				LAPTOP_SCREEN_LR_X, LAPTOP_SCREEN_WEB_LR_Y, MSYS_PRIORITY_HIGH-1,
-				CURSOR_LAPTOP_SCREEN, MSYS_NO_CALLBACK, SelectScreenRegionCallBack);
+				CURSOR_LAPTOP_SCREEN, MSYS_NO_CALLBACK, MouseCallbackPrimarySecondary(MSYS_NO_CALLBACK, SelectScreenRegionCallBackSecondary));
 
 	InitAimMenuBar();
 	InitAimDefaults();
@@ -130,16 +134,16 @@ static void DrawMercsFaceToScreen(UINT8 ubMercID, UINT16 usPosX, UINT16 usPosY, 
 void RenderAimFacialIndex()
 {
 	UINT16		usPosX, usPosY, x,y;
-	wchar_t		sString[150];
+	ST::string sString;
 	UINT8			i;
 
 	DrawAimDefaults();
 
 	//Display the 'A.I.M. Members Sorted Ascending By Price' type string
 	if( gubCurrentListMode == AIM_ASCEND )
-		swprintf(sString, lengthof(sString), AimFiText[ AIM_FI_AIM_MEMBERS_SORTED_ASCENDING ], AimFiText[gubCurrentSortMode] );
+		sString = st_format_printf(AimFiText[ AIM_FI_AIM_MEMBERS_SORTED_ASCENDING ], AimFiText[gubCurrentSortMode]);
 	else
-		swprintf(sString, lengthof(sString), AimFiText[ AIM_FI_AIM_MEMBERS_SORTED_DESCENDING ], AimFiText[gubCurrentSortMode] );
+		sString = st_format_printf(AimFiText[ AIM_FI_AIM_MEMBERS_SORTED_DESCENDING ], AimFiText[gubCurrentSortMode]);
 
 	DrawTextToScreen(sString, AIM_FI_MEMBER_TEXT_X, AIM_FI_MEMBER_TEXT_Y, AIM_FI_MEMBER_TEXT_WIDTH, AIM_MAINTITLE_FONT, AIM_MAINTITLE_COLOR, FONT_MCOLOR_BLACK, CENTER_JUSTIFIED);
 
@@ -180,30 +184,25 @@ void RenderAimFacialIndex()
 }
 
 
-static void SelectMercFaceRegionCallBack(MOUSE_REGION* pRegion, INT32 iReason)
+static void SelectMercFaceRegionCallBackPrimary(MOUSE_REGION* pRegion, UINT32 iReason)
 {
-	if (iReason & MSYS_CALLBACK_REASON_LBUTTON_UP)
-	{
-		guiCurrentLaptopMode = LAPTOP_MODE_AIM_MEMBERS;
-		gbCurrentIndex = (UINT8) MSYS_GetRegionUserData( pRegion, 0 );
-	}
-	else if (iReason & MSYS_CALLBACK_REASON_RBUTTON_UP)
-	{
-		guiCurrentLaptopMode = LAPTOP_MODE_AIM_MEMBERS_SORTED_FILES;
-	}
+	guiCurrentLaptopMode = LAPTOP_MODE_AIM_MEMBERS;
+	gbCurrentIndex = (UINT8) MSYS_GetRegionUserData( pRegion, 0 );
+}
+
+static void SelectMercFaceRegionCallBackSecondary(MOUSE_REGION* pRegion, UINT32 iReason)
+{
+	guiCurrentLaptopMode = LAPTOP_MODE_AIM_MEMBERS_SORTED_FILES;
 }
 
 
-static void SelectScreenRegionCallBack(MOUSE_REGION* pRegion, INT32 iReason)
+static void SelectScreenRegionCallBackSecondary(MOUSE_REGION* pRegion, UINT32 iReason)
 {
-	if (iReason & MSYS_CALLBACK_REASON_RBUTTON_UP)
-	{
-		guiCurrentLaptopMode = LAPTOP_MODE_AIM_MEMBERS_SORTED_FILES;
-	}
+	guiCurrentLaptopMode = LAPTOP_MODE_AIM_MEMBERS_SORTED_FILES;
 }
 
 
-static void SelectMercFaceMoveRegionCallBack(MOUSE_REGION* pRegion, INT32 reason)
+static void SelectMercFaceMoveRegionCallBack(MOUSE_REGION* pRegion, UINT32 reason)
 {
 	UINT8	ubMercNum;
 	UINT16 usPosX, usPosY;
@@ -242,7 +241,7 @@ static void DrawMercsFaceToScreen(const UINT8 ubMercID, const UINT16 usPosX, con
 	SGPVObject* const face = guiAimFiFace[ubMercID];
 
 	BOOLEAN                  shaded;
-	wchar_t           const* text;
+	ST::string text;
 	MERCPROFILESTRUCT const& p = GetProfile(id);
 	if (IsMercDead(p))
 	{
@@ -273,7 +272,7 @@ static void DrawMercsFaceToScreen(const UINT8 ubMercID, const UINT16 usPosX, con
 	else
 	{
 		shaded = FALSE;
-		text   = NULL;
+		text   = ST::null;
 	}
 
 	BltVideoObject(FRAME_BUFFER, face, 0, usPosX + AIM_FI_FACE_OFFSET, usPosY + AIM_FI_FACE_OFFSET);

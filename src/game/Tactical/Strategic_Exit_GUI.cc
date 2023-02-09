@@ -35,6 +35,8 @@
 #include "VSurface.h"
 #include "UILayout.h"
 
+#include <string_theory/string>
+
 
 BOOLEAN gfInSectorExitMenu = FALSE;
 
@@ -89,13 +91,11 @@ EXIT_DIALOG_STRUCT gExitDialog;
 
 UINT8   gubExitGUIDirection;
 INT16   gsExitGUIAdditionalData;
-INT16   gsWarpWorldX;
-INT16   gsWarpWorldY;
-INT8    gbWarpWorldZ;
+SGPSector gsWarpWorld;
 INT16   gsWarpGridNo;
 
 
-static GUIButtonRef MakeButton(const wchar_t* text, INT16 dx, GUI_CALLBACK click)
+static GUIButtonRef MakeButton(const ST::string& text, INT16 dx, GUI_CALLBACK click)
 {
 	const INT16 text_col   = FONT_MCOLOR_WHITE;
 	const INT16 shadow_col = DEFAULT_SHADOW;
@@ -105,18 +105,17 @@ static GUIButtonRef MakeButton(const wchar_t* text, INT16 dx, GUI_CALLBACK click
 }
 
 
-static void AllMoveCallback(GUI_BUTTON* btn, INT32 reason);
-static void AllRegionCallback(MOUSE_REGION* pRegion, INT32 iReason);
-static void AllRegionMoveCallback(MOUSE_REGION* pRegion, INT32 iReason);
-static void CancelCallback(GUI_BUTTON* btn, INT32 reason);
-static void CheckLoadMapCallback(GUI_BUTTON* btn, INT32 reason);
-static void LoadRegionCallback(MOUSE_REGION* pRegion, INT32 iReason);
-static void LoadRegionMoveCallback(MOUSE_REGION* pRegion, INT32 iReason);
-static void OKCallback(GUI_BUTTON* btn, INT32 reason);
-static void SectorExitBackgroundCallback(MOUSE_REGION* pRegion, INT32 iReason);
-static void SingleMoveCallback(GUI_BUTTON* btn, INT32 reason);
-static void SingleRegionCallback(MOUSE_REGION* pRegion, INT32 iReason);
-static void SingleRegionMoveCallback(MOUSE_REGION* pRegion, INT32 iReason);
+static void AllMoveCallback(GUI_BUTTON* btn, UINT32 reason);
+static void AllRegionCallback(MOUSE_REGION* pRegion, UINT32 iReason);
+static void AllRegionMoveCallback(MOUSE_REGION* pRegion, UINT32 iReason);
+static void CancelCallback(GUI_BUTTON* btn, UINT32 reason);
+static void CheckLoadMapCallback(GUI_BUTTON* btn, UINT32 reason);
+static void LoadRegionCallback(MOUSE_REGION* pRegion, UINT32 iReason);
+static void LoadRegionMoveCallback(MOUSE_REGION* pRegion, UINT32 iReason);
+static void OKCallback(GUI_BUTTON* btn, UINT32 reason);
+static void SingleMoveCallback(GUI_BUTTON* btn, UINT32 reason);
+static void SingleRegionCallback(MOUSE_REGION* pRegion, UINT32 iReason);
+static void SingleRegionMoveCallback(MOUSE_REGION* pRegion, UINT32 iReason);
 
 
 //KM:  New method is coded for more sophistocated rules.  All the information is stored within the gExitDialog struct
@@ -131,7 +130,7 @@ static void InternalInitSectorExitMenu(UINT8 const ubDirection, INT16 const sAdd
 	BOOLEAN OkExitCode;
 
 	//STEP 1:  Calculate the information for the exit gui
-	memset( &gExitDialog, 0, sizeof( EXIT_DIALOG_STRUCT ) );
+	gExitDialog = EXIT_DIALOG_STRUCT{};
 
 	// OK, bring up dialogue... first determine some logic here...
 	switch( ubDirection )
@@ -218,9 +217,7 @@ static void InternalInitSectorExitMenu(UINT8 const ubDirection, INT16 const sAdd
 	{
 		if (pSoldier == sel) continue;
 		if( !pSoldier->fBetweenSectors &&
-			pSoldier->sSectorX == gWorldSectorX &&
-			pSoldier->sSectorY == gWorldSectorY &&
-			pSoldier->bSectorZ == gbWorldSectorZ &&
+			pSoldier->sSector == gWorldSector &&
 			pSoldier->bLife >= OKLIFE &&
 			pSoldier->bAssignment != sel->bAssignment &&
 			pSoldier->bAssignment != ASSIGNMENT_POW &&
@@ -298,7 +295,7 @@ static void InternalInitSectorExitMenu(UINT8 const ubDirection, INT16 const sAdd
 			gExitDialog.fGotoSectorDisabled = TRUE;
 			gExitDialog.fGotoSector = FALSE;
 		}
-		else if( GetNumberOfMilitiaInSector( gWorldSectorX, gWorldSectorY, gbWorldSectorZ ) )
+		else if (GetNumberOfMilitiaInSector(gWorldSector))
 		{
 			//Leaving this sector will result in militia being forced to fight the battle, can't load adjacent sector.
 			gExitDialog.fGotoSectorDisabled = TRUE;
@@ -336,8 +333,7 @@ static void InternalInitSectorExitMenu(UINT8 const ubDirection, INT16 const sAdd
 	gfInSectorExitMenu = TRUE;
 
 	MSYS_DefineRegion(&gExitDialog.BackRegion, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT,
-				MSYS_PRIORITY_HIGHEST - 1, CURSOR_NORMAL, MSYS_NO_CALLBACK,
-				SectorExitBackgroundCallback);
+				MSYS_PRIORITY_HIGHEST - 1, CURSOR_NORMAL, MSYS_NO_CALLBACK, MSYS_NO_CALLBACK);
 
 	gExitDialog.iButtonImages = LoadButtonImage(INTERFACEDIR "/popupbuttons.sti", 0, 1);
 
@@ -380,7 +376,7 @@ static void InternalInitSectorExitMenu(UINT8 const ubDirection, INT16 const sAdd
 
 	InterruptTime();
 	PauseGame();
-	LockPauseState(LOCK_PAUSE_21);
+	LockPauseState(LOCK_PAUSE_SECTOR_EXIT);
 }
 
 
@@ -398,12 +394,10 @@ static void DoneFadeOutWarpCallback(void)
 		if (pSoldier->bLife >= OKLIFE && pSoldier->bInSector)
 		{
 			gfTacticalTraversal = TRUE;
-			SetGroupSectorValue(gsWarpWorldX, gsWarpWorldY, gbWarpWorldZ, *GetGroup(pSoldier->ubGroupID));
+			SetGroupSectorValue(gsWarpWorld, *GetGroup(pSoldier->ubGroupID));
 
 			// Set next sectore
-			pSoldier->sSectorX = gsWarpWorldX;
-			pSoldier->sSectorY = gsWarpWorldY;
-			pSoldier->bSectorZ = gbWarpWorldZ;
+			pSoldier->sSector = gsWarpWorld;
 
 			// Set gridno
 			pSoldier->ubStrategicInsertionCode = INSERTION_CODE_GRIDNO;
@@ -415,7 +409,7 @@ static void DoneFadeOutWarpCallback(void)
 
 
 	// OK, insertion data found, enter sector!
-	SetCurrentWorldSector( gsWarpWorldX, gsWarpWorldY, gbWarpWorldZ );
+	SetCurrentWorldSector(gsWarpWorld);
 
 	// OK, once down here, adjust the above map with crate info....
 	gfTacticalTraversal = FALSE;
@@ -448,9 +442,9 @@ void InitSectorExitMenu(UINT8 const ubDirection, INT16 const sAdditionalData)
 	gubExitGUIDirection     = ubDirection;
 	gsExitGUIAdditionalData = sAdditionalData;
 
-	if ( gbWorldSectorZ >= 2 && gubQuest[ QUEST_CREATURES ] == QUESTDONE )
+	if (gWorldSector.z >= 2 && gubQuest[ QUEST_CREATURES ] == QUESTDONE)
 	{
-		if ( GetWarpOutOfMineCodes( &gsWarpWorldX, &gsWarpWorldY, &gbWarpWorldZ, &gsWarpGridNo ) )
+		if (GetWarpOutOfMineCodes(gsWarpWorld, &gsWarpGridNo))
 		{
 			// ATE: Check if we are in a creature lair and bring up box if so....
 			DoMessageBox(MSG_BOX_BASIC_STYLE, gzLateLocalizedString[STR_LATE_33], GAME_SCREEN,
@@ -494,7 +488,7 @@ static void UpdateSectorExitMenu(void)
 
 
 	{
-		wchar_t const* help;
+		ST::string help;
 		if (gExitDialog.fGotoSectorDisabled)
 		{
 			DisableButton(gExitDialog.uiLoadCheckButton);
@@ -542,8 +536,7 @@ static void UpdateSectorExitMenu(void)
 		if( gExitDialog.fSelectedMercIsEPC )
 		{
 			//EPCs cannot leave the sector alone and must be escorted
-			wchar_t str[ 256 ];
-			swprintf(str, lengthof(str), pExitingSectorHelpText[EXIT_GUI_ESCORTED_CHARACTERS_MUST_BE_ESCORTED_HELPTEXT], sel->name);
+			ST::string str = st_format_printf(pExitingSectorHelpText[EXIT_GUI_ESCORTED_CHARACTERS_MUST_BE_ESCORTED_HELPTEXT], sel->name);
 			gExitDialog.uiSingleMoveButton->SetFastHelpText(str);
 			gExitDialog.SingleRegion.SetFastHelpText(str);
 		}
@@ -552,18 +545,18 @@ static void UpdateSectorExitMenu(void)
 			//It has been previously determined that there are only two mercs in the squad, the selected merc
 			//isn't an EPC, but the other merc is.  That means that this merc cannot leave the sector alone
 			//as he would isolate the EPC.
-			wchar_t str[ 256 ];
+			ST::string str;
 			if( !gExitDialog.fSquadHasMultipleEPCs )
 			{
 				if (gMercProfiles[sel->ubProfile].bSex == MALE)
 				{
 					//male singular
-					swprintf(str, lengthof(str), pExitingSectorHelpText[EXIT_GUI_MERC_CANT_ISOLATE_EPC_HELPTEXT_MALE_SINGULAR], sel->name, gExitDialog.single_move_will_isolate_epc->name);
+					str = st_format_printf(pExitingSectorHelpText[EXIT_GUI_MERC_CANT_ISOLATE_EPC_HELPTEXT_MALE_SINGULAR], sel->name, gExitDialog.single_move_will_isolate_epc->name);
 				}
 				else
 				{
 					//female singular
-					swprintf(str, lengthof(str), pExitingSectorHelpText[EXIT_GUI_MERC_CANT_ISOLATE_EPC_HELPTEXT_FEMALE_SINGULAR], sel->name, gExitDialog.single_move_will_isolate_epc->name);
+					str = st_format_printf(pExitingSectorHelpText[EXIT_GUI_MERC_CANT_ISOLATE_EPC_HELPTEXT_FEMALE_SINGULAR], sel->name, gExitDialog.single_move_will_isolate_epc->name);
 				}
 			}
 			else
@@ -571,12 +564,12 @@ static void UpdateSectorExitMenu(void)
 				if (gMercProfiles[sel->ubProfile].bSex == MALE)
 				{
 					//male plural
-					swprintf(str, lengthof(str), pExitingSectorHelpText[EXIT_GUI_MERC_CANT_ISOLATE_EPC_HELPTEXT_MALE_PLURAL], sel->name);
+					str = st_format_printf(pExitingSectorHelpText[EXIT_GUI_MERC_CANT_ISOLATE_EPC_HELPTEXT_MALE_PLURAL], sel->name);
 				}
 				else
 				{
 					//female plural
-					swprintf(str, lengthof(str), pExitingSectorHelpText[EXIT_GUI_MERC_CANT_ISOLATE_EPC_HELPTEXT_FEMALE_PLURAL], sel->name);
+					str = st_format_printf(pExitingSectorHelpText[EXIT_GUI_MERC_CANT_ISOLATE_EPC_HELPTEXT_FEMALE_PLURAL], sel->name);
 				}
 			}
 			gExitDialog.uiSingleMoveButton->SetFastHelpText(str);
@@ -585,16 +578,16 @@ static void UpdateSectorExitMenu(void)
 	}
 	else
 	{
-		wchar_t str[ 256 ];
+		ST::string str;
 		EnableButton( gExitDialog.uiSingleMoveButton );
 		gExitDialog.SingleRegion.Enable();
-		swprintf(str, lengthof(str), pExitingSectorHelpText[EXIT_GUI_SINGLE_TRAVERSAL_WILL_SEPARATE_SQUADS_HELPTEXT], sel->name);
+		str = st_format_printf(pExitingSectorHelpText[EXIT_GUI_SINGLE_TRAVERSAL_WILL_SEPARATE_SQUADS_HELPTEXT], sel->name);
 		gExitDialog.uiSingleMoveButton->SetFastHelpText(str);
 		gExitDialog.SingleRegion.SetFastHelpText(str);
 	}
 
 	{
-		wchar_t const* help;
+		ST::string help;
 		if (gExitDialog.fAllMoveDisabled)
 		{
 			DisableButton(gExitDialog.uiAllMoveButton);
@@ -623,7 +616,7 @@ void RenderSectorExitMenu()
 	SetCurrentCursorFromDatabase(CURSOR_NORMAL);
 
 	InputAtom Event;
-	while (DequeueEvent(&Event))
+	while (DequeueSpecificEvent(&Event, KEYBOARD_EVENTS))
 	{
 		if (Event.usEvent == KEY_DOWN)
 		{
@@ -670,7 +663,7 @@ void RenderSectorExitMenu()
 			gExitDialog.fGotoSectorHilighted ? FONT_MCOLOR_LTYELLOW :
 			FONT_MCOLOR_WHITE;
 		SetFontForeground(foreground);
-		wchar_t const* const msg = gExitDialog.fGotoSectorText ?
+		ST::string msg = gExitDialog.fGotoSectorText ?
 			TacticalStr[EXIT_GUI_GOTO_SECTOR_STR] : // 5 minute convenience warp for town traversal
 			TacticalStr[EXIT_GUI_GOTO_MAP_STR];     // Enter map screen
 		MPrint(x + 180, y + 45, msg);
@@ -729,8 +722,7 @@ void RemoveSectorExitMenu(BOOLEAN const fOk)
 	SOLDIERTYPE const* const sel = GetSelectedMan();
 	if (AM_AN_EPC(sel) && d.ubNumPeopleOnSquad == 0)
 	{
-		wchar_t buf[50];
-		swprintf(buf, lengthof(buf), pMessageStrings[MSG_EPC_CANT_TRAVERSE], sel->name);
+		ST::string buf = st_format_printf(pMessageStrings[MSG_EPC_CANT_TRAVERSE], sel->name);
 		DoMessageBox(MSG_BOX_BASIC_STYLE, buf, GAME_SCREEN, MSG_BOX_FLAG_OK, 0, 0);
 		return;
 	}
@@ -754,9 +746,9 @@ void RemoveSectorExitMenu(BOOLEAN const fOk)
 }
 
 
-static void CheckLoadMapCallback(GUI_BUTTON* btn, INT32 reason)
+static void CheckLoadMapCallback(GUI_BUTTON* btn, UINT32 reason)
 {
-	if( reason & MSYS_CALLBACK_REASON_LBUTTON_UP )
+	if( reason & MSYS_CALLBACK_REASON_POINTER_UP )
 	{
 		gExitDialog.fGotoSector =!gExitDialog.fGotoSector;
 	}
@@ -817,27 +809,27 @@ static void AllMoveAction(void)
 }
 
 
-static void SingleMoveCallback(GUI_BUTTON* btn, INT32 reason)
+static void SingleMoveCallback(GUI_BUTTON* btn, UINT32 reason)
 {
-	if(reason & MSYS_CALLBACK_REASON_LBUTTON_UP )
+	if(reason & MSYS_CALLBACK_REASON_POINTER_UP )
 	{
 		SingleMoveAction();
 	}
 }
 
 
-static void AllMoveCallback(GUI_BUTTON* btn, INT32 reason)
+static void AllMoveCallback(GUI_BUTTON* btn, UINT32 reason)
 {
-	if(reason & MSYS_CALLBACK_REASON_LBUTTON_UP )
+	if(reason & MSYS_CALLBACK_REASON_POINTER_UP )
 	{
 		AllMoveAction();
 	}
 }
 
 
-static void OKCallback(GUI_BUTTON* btn, INT32 reason)
+static void OKCallback(GUI_BUTTON* btn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		// OK, exit
 		RemoveSectorExitMenu( TRUE );
@@ -845,9 +837,9 @@ static void OKCallback(GUI_BUTTON* btn, INT32 reason)
 }
 
 
-static void CancelCallback(GUI_BUTTON* btn, INT32 reason)
+static void CancelCallback(GUI_BUTTON* btn, UINT32 reason)
 {
-	if (reason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		// OK, exit
 		RemoveSectorExitMenu( FALSE );
@@ -855,39 +847,34 @@ static void CancelCallback(GUI_BUTTON* btn, INT32 reason)
 }
 
 
-static void SectorExitBackgroundCallback(MOUSE_REGION* pRegion, INT32 iReason)
+static void SingleRegionCallback(MOUSE_REGION* pRegion, UINT32 iReason)
 {
-}
-
-
-static void SingleRegionCallback(MOUSE_REGION* pRegion, INT32 iReason)
-{
-	if (iReason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (iReason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		SingleMoveAction();
 	}
 }
 
 
-static void AllRegionCallback(MOUSE_REGION* pRegion, INT32 iReason)
+static void AllRegionCallback(MOUSE_REGION* pRegion, UINT32 iReason)
 {
-	if (iReason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (iReason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		AllMoveAction();
 	}
 }
 
 
-static void LoadRegionCallback(MOUSE_REGION* pRegion, INT32 iReason)
+static void LoadRegionCallback(MOUSE_REGION* pRegion, UINT32 iReason)
 {
-	if (iReason & MSYS_CALLBACK_REASON_LBUTTON_UP)
+	if (iReason & MSYS_CALLBACK_REASON_POINTER_UP)
 	{
 		gExitDialog.fGotoSector =!gExitDialog.fGotoSector;
 	}
 }
 
 
-static void SingleRegionMoveCallback(MOUSE_REGION* pRegion, INT32 iReason)
+static void SingleRegionMoveCallback(MOUSE_REGION* pRegion, UINT32 iReason)
 {
 	if (iReason & MSYS_CALLBACK_REASON_MOVE )
 	{
@@ -900,7 +887,7 @@ static void SingleRegionMoveCallback(MOUSE_REGION* pRegion, INT32 iReason)
 }
 
 
-static void AllRegionMoveCallback(MOUSE_REGION* pRegion, INT32 iReason)
+static void AllRegionMoveCallback(MOUSE_REGION* pRegion, UINT32 iReason)
 {
 	if (iReason & MSYS_CALLBACK_REASON_MOVE )
 	{
@@ -913,7 +900,7 @@ static void AllRegionMoveCallback(MOUSE_REGION* pRegion, INT32 iReason)
 }
 
 
-static void LoadRegionMoveCallback(MOUSE_REGION* pRegion, INT32 iReason)
+static void LoadRegionMoveCallback(MOUSE_REGION* pRegion, UINT32 iReason)
 {
 	if (iReason & MSYS_CALLBACK_REASON_MOVE )
 	{

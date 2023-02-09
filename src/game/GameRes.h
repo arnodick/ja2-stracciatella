@@ -1,8 +1,5 @@
 #pragma once
 
-#include <string>
-#include <vector>
-
 /* Game resources */
 
 #include "Types.h"
@@ -10,6 +7,12 @@
 #include "stracciatella.h"
 
 #include "StringEncodingTypes.h"
+
+#include <string_theory/string>
+
+#include <vector>
+
+class SGPVObject;
 
 /** List of supported game versions (localizations). */
 using GameVersion = VanillaVersion;
@@ -53,12 +56,11 @@ enum MultiLanguageGraphic
 };
 
 char const* GetMLGFilename(MultiLanguageGraphic);
+// Shortcut for AddVideoObjectFromFile(GetMLGFilename(id))
+SGPVObject* AddVideoObjectFromFile(MultiLanguageGraphic);
 
 /** Choose game version. */
 void setGameVersion(GameVersion ver);
-
-/** Get list of resource libraries. */
-std::vector<std::string> GetResourceLibraries(const std::string &dataDir);
 
 /**
  * Get encoding corrector for strings in data files.
@@ -80,10 +82,11 @@ bool isRussianVersion();
 /** Check if this is Russian GOLD version of the game. */
 bool isRussianGoldVersion();
 
+/** Check if this is Chinese version of the game. */
+bool isChineseVersion();
+
 /** Get major map version. */
 FLOAT getMajorMapVersion();
-
-wchar_t getZeroGlyphChar();
 
 /*************************************************************
  *

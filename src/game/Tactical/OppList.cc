@@ -50,9 +50,16 @@
 #include "Debug.h"
 #include "Items.h"
 #include "GameRes.h"
+#include "MercProfile.h"
 
 #include "ContentManager.h"
 #include "GameInstance.h"
+
+#include <string_theory/format>
+#include <string_theory/string>
+
+#include <algorithm>
+#include <iterator>
 
 #define WE_SEE_WHAT_MILITIA_SEES_AND_VICE_VERSA
 
@@ -200,27 +207,29 @@ INT8 gbLightSighting[1][16] =
 
 SightFlags gubSightFlags;
 
-#define DECAY_OPPLIST_VALUE( value )\
-{\
-	if ( (value) >= SEEN_THIS_TURN)\
-	{\
-		(value)++;\
-		if ( (value) > OLDEST_SEEN_VALUE )\
-		{\
-			(value) = NOT_HEARD_OR_SEEN;\
-		}\
-	}\
-	else\
-	{\
-		if ( (value) <= HEARD_THIS_TURN)\
-		{\
-			(value)--;\
-			if ( (value) < OLDEST_HEARD_VALUE)\
-			{\
-				(value) = NOT_HEARD_OR_SEEN;\
-			}\
-		}\
-	}\
+
+// Returns whether the new value was out of the acceptable range.
+static bool DecayOppListValue(int8_t& value)
+{
+	// if this person has been SEEN recently, but is not currently visible
+	if (value >= SEEN_THIS_TURN)
+	{
+		++value; // increment how long it's been
+	}
+	// if this person has been only HEARD recently
+	else if (value <= HEARD_THIS_TURN)
+	{
+		--value; // increment how long it's been
+	}
+
+	// if it's been longer than the maximum we care to remember
+	if (value < OLDEST_HEARD_VALUE || value > OLDEST_SEEN_VALUE)
+	{
+		value = NOT_HEARD_OR_SEEN;
+		return true;
+	}
+
+	return false;
 }
 
 
@@ -285,9 +294,7 @@ static void ReevaluateBestSightingPosition(SOLDIERTYPE* pSoldier, INT8 bInterrup
 		if (fFound)
 		{
 			// set new points
-			SLOGD(DEBUG_TAG_OPPLIST,
-				"RBSP: reducing points for %d to %d",
-				pSoldier->ubID, bInterruptDuelPts);
+			SLOGD("RBSP: reducing points for {} to {}", pSoldier->ubID, bInterruptDuelPts);
 			pSoldier->bInterruptDuelPts = bInterruptDuelPts;
 
 			// must percolate him down
@@ -306,8 +313,7 @@ static void ReevaluateBestSightingPosition(SOLDIERTYPE* pSoldier, INT8 bInterrup
 		else if (pSoldier == gBestToMakeSighting[gubBestToMakeSightingSize - 1])
 		{
 			// in list but can't be bumped down... set his new points
-			SLOGD(DEBUG_TAG_OPPLIST,
-				"RBSP: reduced points for last individual %d to %d",
+			SLOGD("RBSP: reduced points for last individual {} to {}",
 				pSoldier->ubID, bInterruptDuelPts);
 			pSoldier->bInterruptDuelPts = bInterruptDuelPts;
 		}
@@ -333,14 +339,11 @@ static void ReevaluateBestSightingPosition(SOLDIERTYPE* pSoldier, INT8 bInterrup
 					if (gBestToMakeSighting[gubBestToMakeSightingSize - 1] !=  NULL)
 					{
 						gBestToMakeSighting[gubBestToMakeSightingSize - 1]->bInterruptDuelPts = NO_INTERRUPT;
-						SLOGD(DEBUG_TAG_OPPLIST,
-							"RBSP: resetting points for %d to zilch",
-							pSoldier->ubID);
+						SLOGD("RBSP: resetting points for {} to zilch", pSoldier->ubID);
 					}
 
 					// set new points
-					SLOGD(DEBUG_TAG_OPPLIST, "RBSP: setting points for %d to %d",
-								pSoldier->ubID, bInterruptDuelPts);
+					SLOGD("RBSP: setting points for {} to {}", pSoldier->ubID, bInterruptDuelPts);
 					pSoldier->bInterruptDuelPts = bInterruptDuelPts;
 
 					// insert here!
@@ -361,7 +364,7 @@ static void ReevaluateBestSightingPosition(SOLDIERTYPE* pSoldier, INT8 bInterrup
 	{
 		if (gBestToMakeSighting[ubLoop] != NULL)
 		{
-			SLOGD(DEBUG_TAG_OPPLIST, "RBSP entry %d: %d (%d pts)",
+			SLOGD("RBSP entry {}: {} ({} pts)",
 				ubLoop, gBestToMakeSighting[ubLoop]->ubID,
 				gBestToMakeSighting[ubLoop]->bInterruptDuelPts);
 		}
@@ -376,13 +379,13 @@ static void HandleBestSightingPositionInRealtime(void)
 
 	if ( gfDelayResolvingBestSightingDueToDoor )
 	{
-		SLOGD(DEBUG_TAG_OPPLIST, "HBSPIR: skipping due to door flag" );
+		SLOGD("HBSPIR: skipping due to door flag" );
 		return;
 	}
 
 	if (gBestToMakeSighting[0] != NULL)
 	{
-		SLOGD(DEBUG_TAG_OPPLIST, "HBSPIR called and there is someone in the list" );
+		SLOGD("HBSPIR called and there is someone in the list" );
 
 		//if (gfHumanSawSomeoneInRealtime)
 		{
@@ -402,8 +405,7 @@ static void HandleBestSightingPositionInRealtime(void)
 				}
 				else // give turn to 2nd best but interrupt to 1st
 				{
-					SLOGD(DEBUG_TAG_OPPLIST,
-						"Entering combat mode: turn for 2nd best, int for best" );
+					SLOGD("Entering combat mode: turn for 2nd best, int for best");
 
 					EnterCombatMode(gBestToMakeSighting[1]->bTeam);
 					// 2nd guy loses control
@@ -420,7 +422,7 @@ static void HandleBestSightingPositionInRealtime(void)
 			if (gBestToMakeSighting[ubLoop] != NULL)
 			{
 				gBestToMakeSighting[ubLoop]->bInterruptDuelPts = NO_INTERRUPT;
-				SLOGD(DEBUG_TAG_OPPLIST, "RBSP: done, resetting points for %d to zilch",
+				SLOGD("RBSP: done, resetting points for {} to zilch",
 					gBestToMakeSighting[ubLoop]->ubID);
 			}
 		}
@@ -430,7 +432,7 @@ static void HandleBestSightingPositionInRealtime(void)
 		{
 			SOLDIERTYPE* const s = *i;
 			AssertMsg(s->bInterruptDuelPts == NO_INTERRUPT,
-					String("%ls (%d) still has interrupt pts!", s->name, s->ubID));
+				ST::format("{} ({}) still has interrupt pts!", s->name, s->ubID));
 		}
 #endif
 	}
@@ -484,7 +486,7 @@ static void HandleBestSightingPositionInTurnbased(void)
 			if (gBestToMakeSighting[ubLoop] != NULL)
 			{
 				gBestToMakeSighting[ubLoop]->bInterruptDuelPts = NO_INTERRUPT;
-				SLOGD(DEBUG_TAG_OPPLIST, "RBSP (TB): done, resetting points for %d to zilch",
+				SLOGD("RBSP (TB): done, resetting points for {} to zilch",
 							gBestToMakeSighting[ubLoop]->ubID);
 			}
 		}
@@ -493,7 +495,7 @@ static void HandleBestSightingPositionInTurnbased(void)
 		FOR_EACH_MERC(i)
 		{
 			SOLDIERTYPE* const s = *i;
-			AssertMsg(s->bInterruptDuelPts == NO_INTERRUPT, String("%ls (%d) still has interrupt pts!", s->name, s->ubID));
+			AssertMsg(s->bInterruptDuelPts == NO_INTERRUPT, ST::format("{} ({}) still has interrupt pts!", s->name, s->ubID));
 		}
 #endif
 	}
@@ -587,7 +589,7 @@ void CheckHostileOrSayQuoteList( void )
 			// unpause all AI
 			UnPauseAI();
 			// reset the list
-			memset(gShouldBecomeHostileOrSayQuote, 0, sizeof(gShouldBecomeHostileOrSayQuote));
+			std::fill(std::begin(gShouldBecomeHostileOrSayQuote), std::end(gShouldBecomeHostileOrSayQuote), nullptr);
 			gubNumShouldBecomeHostileOrSayQuote = 0;
 			//and return/go into combat
 			if ( !(gTacticalStatus.uiFlags & INCOMBAT ) )
@@ -619,11 +621,26 @@ static void OurTeamRadiosRandomlyAbout(SOLDIERTYPE* about);
 static void OtherTeamsLookForMan(SOLDIERTYPE* pOpponent);
 
 
+static bool IsSoldierValidForSightings(SOLDIERTYPE const& s)
+{
+	extern INT32 iHelicopterVehicleId; 	// I don't want to include a map screen header file for this
+	return !(!s.bActive
+	      || !s.bInSector
+	      || s.uiStatusFlags & SOLDIER_DEAD
+	      || s.bLife <= 0 // should be redundant, but who knows?
+	      || (s.bAssignment == VEHICLE && s.iVehicleId == iHelicopterVehicleId));
+}
+
+
 void HandleSight(SOLDIERTYPE& s, SightFlags const sight_flags)
 {
-	if (!s.bActive)                     return;
-	if (!s.bInSector)                   return;
-	if (s.uiStatusFlags & SOLDIER_DEAD) return;
+	if (!IsSoldierValidForSightings(s)) return;
+
+	if (s.sGridNo == NOWHERE)
+	{
+		SLOGE("HandleSight: {} ({}) is NOWHERE", s.ubID, s.name);
+		return;
+	}
 
 	gubSightFlags = sight_flags;
 
@@ -685,7 +702,7 @@ void HandleSight(SOLDIERTYPE& s, SightFlags const sight_flags)
 	{
 		HaultSoldierFromSighting(&s, TRUE);
 	}
-	s.bNewSituation = __max(s.bNewSituation, temp_new_situation);
+	s.bNewSituation = std::max(s.bNewSituation, temp_new_situation);
 
 	// If we've been told to radio the results
 	if (sight_flags & SIGHT_RADIO)
@@ -726,7 +743,7 @@ void HandleSight(SOLDIERTYPE& s, SightFlags const sight_flags)
 		FOR_EACH_MERC(i)
 		{
 			SOLDIERTYPE& them = **i;
-			if (them.bLife < OKLIFE) continue;
+			if (!IsSoldierValidForSightings(them) || them.bLife < OKLIFE) continue;
 
 			// if this merc is on the same team as the target soldier
 			if (them.bTeam == s.bTeam) continue; // he doesn't look (he ALWAYS knows about him)
@@ -771,7 +788,7 @@ static void OurTeamRadiosRandomlyAbout(SOLDIERTYPE* const about)
 	{
 		// if this merc is in this sector, and well enough to look, then put him on
 		// our list
-		if (s->bInSector && s->bLife >= OKLIFE)
+		if (IsSoldierValidForSightings(*s) && s->bLife >= OKLIFE)
 			radio_men[radio_cnt++] = s;
 	}
 
@@ -796,7 +813,7 @@ static void OurTeamRadiosRandomlyAbout(SOLDIERTYPE* const about)
 }
 
 
-static INT16 TeamNoLongerSeesMan(const UINT8 ubTeam, SOLDIERTYPE* const pOpponent, const SOLDIERTYPE* const exclude, const INT8 bIteration)
+static bool TeamNoLongerSeesMan(const UINT8 ubTeam, SOLDIERTYPE* const pOpponent, const SOLDIERTYPE* const exclude, const INT8 bIteration)
 {
 	// look for all mercs on the same team, check opplists for this soldier
 	CFOR_EACH_IN_TEAM(pMate, ubTeam)
@@ -810,12 +827,12 @@ static INT16 TeamNoLongerSeesMan(const UINT8 ubTeam, SOLDIERTYPE* const pOpponen
 			continue; // skip him, he's no teammate at all!
 
 		// if this merc is at base, on assignment, dead, unconscious
-		if (!pMate->bInSector || pMate->bLife < OKLIFE)
+		if (!IsSoldierValidForSightings(*pMate) || pMate->bLife < OKLIFE)
 			continue; // next merc
 
 		// if this teammate currently sees this opponent
 		if (pMate->bOppList[pOpponent->ubID] == SEEN_CURRENTLY)
-			return(FALSE); // that's all I need to know, get out of here
+			return false; // that's all I need to know, get out of here
 	}
 
 #ifdef WE_SEE_WHAT_MILITIA_SEES_AND_VICE_VERSA
@@ -835,7 +852,7 @@ static INT16 TeamNoLongerSeesMan(const UINT8 ubTeam, SOLDIERTYPE* const pOpponen
 #endif
 
 	// none of my friends is currently seeing the guy, so return success
-	return(TRUE);
+	return true;
 }
 
 
@@ -875,8 +892,7 @@ INT16 MaxDistanceVisible( void )
 
 INT16 DistanceVisible(const SOLDIERTYPE* pSoldier, INT8 bFacingDir, INT8 bSubjectDir, INT16 sSubjectGridNo, INT8 bLevel)
 {
-	INT16 sDistVisible;
-	INT8  bLightLevel;
+	int sDistVisible;
 
 	// IMPORTANT! WhoIsThere2 can return a null-pointer for grid calcs
 	const SOLDIERTYPE* const pSubject = WhoIsThere2(sSubjectGridNo, bLevel);
@@ -950,10 +966,10 @@ INT16 DistanceVisible(const SOLDIERTYPE* pSoldier, INT8 bFacingDir, INT8 bSubjec
 
 	// now reduce based on light level; SHADE_MIN is the define for the
 	// highest number the light can be
-	bLightLevel = LightTrueLevel(sSubjectGridNo, bLevel);
+	int bLightLevel = LightTrueLevel(sSubjectGridNo, bLevel);
 
 	if (hasMuzzleFlash)
-		bLightLevel = MIN(bLightLevel, NORMAL_LIGHTLEVEL_DAY);
+		bLightLevel = std::min(bLightLevel, NORMAL_LIGHTLEVEL_DAY);
 	sDistVisible = AdjustMaxSightRangeForEnvEffects(bLightLevel, sDistVisible);
 
 	// if we wanted to simulate desert-blindness, we'd bump up the light level
@@ -994,7 +1010,7 @@ INT16 DistanceVisible(const SOLDIERTYPE* pSoldier, INT8 bFacingDir, INT8 bSubjec
 
 			}
 			// UV goggles only function above ground... ditto for bloodcats
-			else if ( gbWorldSectorZ == 0 )
+			else if (gWorldSector.z == 0)
 			{
 				sDistVisible += UVGOGGLES_BONUS;
 			}
@@ -1009,7 +1025,7 @@ INT16 DistanceVisible(const SOLDIERTYPE* pSoldier, INT8 bFacingDir, INT8 bSubjec
 	// let tanks see and be seen further (at night)
 	if ( (TANK( pSoldier ) && sDistVisible > 0) || (pSubject && TANK( pSubject ) ) )
 	{
-		sDistVisible = __max( sDistVisible + 5, MaxDistanceVisible() );
+		sDistVisible = std::max(sDistVisible + 5, int(MaxDistanceVisible()));
 	}
 
 	if ( gpWorldLevelData[ pSoldier->sGridNo ].ubExtFlags[ bLevel ] & (MAPELEMENT_EXT_TEARGAS | MAPELEMENT_EXT_MUSTARDGAS) )
@@ -1017,7 +1033,7 @@ INT16 DistanceVisible(const SOLDIERTYPE* pSoldier, INT8 bFacingDir, INT8 bSubjec
 		if (!IsWearingHeadGear(*pSoldier, GASMASK))
 		{
 			// in gas without a gas mask; reduce max distance visible to 2 tiles at most
-			sDistVisible = __min( sDistVisible, 2 );
+			sDistVisible = std::min(2, sDistVisible);
 		}
 	}
 
@@ -1156,7 +1172,7 @@ void InitOpplistForDoorOpening( void )
 	// the results of hearing the noise are lumped in with the results from AllTeamsLookForAll
 	gubBestToMakeSightingSize = BEST_SIGHTING_ARRAY_SIZE_ALL_TEAMS_LOOK_FOR_ALL;
 	gfDelayResolvingBestSightingDueToDoor = TRUE; // will be turned off in allteamslookforall
-	SLOGD(DEBUG_TAG_OPPLIST, "HBSPIR: setting door flag on" );
+	SLOGD("HBSPIR: setting door flag on" );
 	// must init sight arrays here
 	InitSightArrays();
 }
@@ -1175,7 +1191,7 @@ void AllTeamsLookForAll(UINT8 ubAllowInterrupts)
 		if ( gfDelayResolvingBestSightingDueToDoor )
 		{
 			// turn off flag now, and skip init of sight arrays
-			SLOGD(DEBUG_TAG_OPPLIST, "HBSPIR: turning door flag off" );
+			SLOGD("HBSPIR: turning door flag off" );
 			gfDelayResolvingBestSightingDueToDoor = FALSE;
 		}
 		else
@@ -1187,6 +1203,7 @@ void AllTeamsLookForAll(UINT8 ubAllowInterrupts)
 	FOR_EACH_MERC(i)
 	{
 		SOLDIERTYPE& s = **i;
+		if (s.sGridNo == NOWHERE) continue;
 		if (s.bLife >= OKLIFE) HandleSight(s, SIGHT_LOOK); // no radio or interrupts yet
 	}
 
@@ -1227,14 +1244,14 @@ static INT16 ManLooksForMan(SOLDIERTYPE* pSoldier, SOLDIERTYPE* pOpponent, UINT8
 
 static void ManLooksForOtherTeams(SOLDIERTYPE* pSoldier)
 {
-	SLOGD(DEBUG_TAG_OPPLIST, "MANLOOKSFOROTHERTEAMS ID %d(%ls) team %d side %d",
+	SLOGD("MANLOOKSFOROTHERTEAMS ID {}({}) team {} side {}",
 		pSoldier->ubID, pSoldier->name, pSoldier->bTeam, pSoldier->bSide);
 
 	// one soldier (pSoldier) looks for every soldier on another team (pOpponent)
 	FOR_EACH_MERC(i)
 	{
 		SOLDIERTYPE* const pOpponent = *i;
-		if (pOpponent->bLife)
+		if (IsSoldierValidForSightings(*pOpponent))
 		{
 			// and if he's on another team...
 			if (pSoldier->bTeam != pOpponent->bTeam)
@@ -1301,8 +1318,7 @@ static void HandleManNoLongerSeen(SOLDIERTYPE* pSoldier, SOLDIERTYPE* pOpponent,
 		// THIS MUST HAPPEN EVEN FOR ENEMIES, TO MAKE THEIR PUBLIC opplist DECAY!
 		if (TeamNoLongerSeesMan(pSoldier->bTeam, pOpponent, pSoldier, 0))
 		{
-			SLOGD(DEBUG_TAG_OPPLIST, "TeamNoLongerSeesMan: ID %d(%ls) to ID %d",
-				pSoldier->ubID, pSoldier->name, pOpponent->ubID);
+			SLOGD("TeamNoLongerSeesMan: ID {}({}) to ID {}", pSoldier->ubID, pSoldier->name, pOpponent->ubID);
 
 			// don't use UpdatePublic() here, because we're changing to a *lower*
 			// opplist value (which UpdatePublic ignores) and we're not updating
@@ -1321,7 +1337,7 @@ static void HandleManNoLongerSeen(SOLDIERTYPE* pSoldier, SOLDIERTYPE* pOpponent,
 		}
 	}
 	else
-		SLOGD(DEBUG_TAG_OPPLIST, "ManLooksForMan: ID %d(%ls) to ID %d Personally seen, public %d",
+		SLOGD("ManLooksForMan: ID {}({}) to ID {} Personally seen, public {}",
 			pSoldier->ubID, pSoldier->name, pOpponent->ubID, *pbPublOL);
 
 	// if we had only seen the guy for an instant and now lost sight of him
@@ -1345,20 +1361,26 @@ static INT16 ManLooksForMan(SOLDIERTYPE* pSoldier, SOLDIERTYPE* pOpponent, UINT8
 
 
 	/*
-	if (ptr->guynum >= NOBODY)
+	if (ptr->guynum >= MAX_NUM_SOLDIERS)
 	{
 		return(success);
 	}
 
-	if (oppPtr->guynum >= NOBODY)
+	if (oppPtr->guynum >= MAX_NUM_SOLDIERS)
 	{
 		return(success);
 	}*/
 
-	// if we're somehow looking while inactive, at base, dead or dying
-	if (!pSoldier->bActive || !pSoldier->bInSector || (pSoldier->bLife < OKLIFE))
+	if (pSoldier == pOpponent)
 	{
-		SLOGE(DEBUG_TAG_OPPLIST, "ManLooksForMan - WE are inactive/dead etc ID %d(%ls)to ID %d",
+		SLOGD("ManLooksForMan - Looking for self - ID {}({})", pSoldier->ubID, pSoldier->name);
+		return(FALSE);
+	}
+
+	// if we're somehow looking while inactive, at base, dead or dying
+	if (!IsSoldierValidForSightings(*pSoldier) || pSoldier->bLife < OKLIFE)
+	{
+		SLOGD("ManLooksForMan - WE are inactive/dead etc ID {}({})to ID {}",
 			pSoldier->ubID, pSoldier->name, pOpponent->ubID);
 		return(FALSE);
 	}
@@ -1366,11 +1388,8 @@ static INT16 ManLooksForMan(SOLDIERTYPE* pSoldier, SOLDIERTYPE* pOpponent, UINT8
 
 
 	// if we're somehow looking for a guy who is inactive, at base, or already dead
-	if (!pOpponent->bActive || !pOpponent->bInSector || pOpponent->bLife <= 0 ||
-		pOpponent->sGridNo == NOWHERE )
+	if (!IsSoldierValidForSightings(*pOpponent) || pOpponent->sGridNo == NOWHERE)
 	{
-		SLOGE(DEBUG_TAG_OPPLIST, "ManLooksForMan - TARGET is inactive etc ID %d(%ls)to ID %d",
-			pSoldier->ubID, pSoldier->name, pOpponent->ubID);
 		return(FALSE);
 	}
 
@@ -1378,7 +1397,7 @@ static INT16 ManLooksForMan(SOLDIERTYPE* pSoldier, SOLDIERTYPE* pOpponent, UINT8
 	// if he's looking for a guy who is on the same team
 	if (pSoldier->bTeam == pOpponent->bTeam)
 	{
-		SLOGE(DEBUG_TAG_OPPLIST, "ManLooksForMan - SAME TEAM ID %d(%ls)to ID %d",
+		SLOGD("ManLooksForMan - SAME TEAM ID {}({})to ID {}",
 			pSoldier->ubID, pSoldier->name, pOpponent->ubID);
 		return(FALSE);
 	}
@@ -1460,7 +1479,7 @@ static INT16 ManLooksForMan(SOLDIERTYPE* pSoldier, SOLDIERTYPE* pOpponent, UINT8
 
 	// calculate how many spaces away soldier is (using Pythagoras' theorem)
 	sDistAway = PythSpacesAway(pSoldier->sGridNo,pOpponent->sGridNo);
-	SLOGD(DEBUG_TAG_OPPLIST, "MANLOOKSFORMAN: ID %d(%ls) to ID %d: sDistAway %d sDistVisible %d",
+	SLOGD("MANLOOKSFORMAN: ID {}({}) to ID {}: sDistAway {} sDistVisible {}",
 		pSoldier->ubID, pSoldier->name, pOpponent->ubID, sDistAway, sDistVisible);
 
 	// if we see close enough to see the soldier
@@ -1475,7 +1494,7 @@ static INT16 ManLooksForMan(SOLDIERTYPE* pSoldier, SOLDIERTYPE* pOpponent, UINT8
 		}
 		else
 		{
-			SLOGD(DEBUG_TAG_OPPLIST, "FAILED LINEOFSIGHT: ID %d (%ls)to ID %d Personally %d, public %d",
+			SLOGD("FAILED LINEOFSIGHT: ID {} ({})to ID {} Personally {}, public {}",
 				pSoldier->ubID, pSoldier->name, pOpponent->ubID, *pPersOL, *pbPublOL);
 		}
 	}
@@ -1489,8 +1508,7 @@ static INT16 ManLooksForMan(SOLDIERTYPE* pSoldier, SOLDIERTYPE* pOpponent, UINT8
 	{
 		if (!bSuccess)
 		{
-			SLOGD(DEBUG_TAG_OPPLIST,
-				"NO LONGER VISIBLE ID %d (%ls)to ID %d Personally %d, public %d success: %d",
+			SLOGD("NO LONGER VISIBLE ID {} ({})to ID {} Personally {}, public {} success: {}",
 				pSoldier->ubID, pSoldier->name, pOpponent->ubID, *pPersOL, *pbPublOL, bSuccess);
 
 
@@ -1500,8 +1518,7 @@ static INT16 ManLooksForMan(SOLDIERTYPE* pSoldier, SOLDIERTYPE* pOpponent, UINT8
 		}
 		else
 		{
-			SLOGD(DEBUG_TAG_OPPLIST,
-				"COOL. STILL VISIBLE ID %d (%ls)to ID %d Personally %d, public %d success: %d",
+			SLOGD("COOL. STILL VISIBLE ID {} ({})to ID {} Personally {}, public {} success: {}",
 				pSoldier->ubID, pSoldier->name, pOpponent->ubID, *pPersOL, *pbPublOL, bSuccess);
 		}
 	}
@@ -1518,18 +1535,15 @@ static void UpdatePersonal(SOLDIERTYPE* pSoldier, UINT8 ubID, INT8 bNewOpplist, 
 
 static void ManSeesMan(SOLDIERTYPE& s, SOLDIERTYPE& opponent, UINT8 const caller2)
 {
-	if (s.ubID        >= NOBODY) return;
-	if (opponent.ubID >= NOBODY) return;
+	if (s.ubID        >= MAX_NUM_SOLDIERS) return;
+	if (opponent.ubID >= MAX_NUM_SOLDIERS) return;
 
 	// if we're somehow looking while inactive, at base, dying or already dead
-	if (!s.bActive)       return;
-	if (!s.bInSector)     return;
+	if (!IsSoldierValidForSightings(s)) return;
 	if (s.bLife < OKLIFE) return;
 
 	// if we're somehow seeing a guy who is inactive, at base, or already dead
-	if (!opponent.bActive)   return;
-	if (!opponent.bInSector) return;
-	if (opponent.bLife <= 0) return;
+	if (!IsSoldierValidForSightings(opponent)) return;
 
 	// If we're somehow seeing a guy who is on the same team
 	if (s.bTeam == opponent.bTeam) return;
@@ -1786,8 +1800,7 @@ static void ManSeesMan(SOLDIERTYPE& s, SOLDIERTYPE& opponent, UINT8 const caller
 			s.bSide != opponent.bSide)
 		{
 			AddOneOpponent(&s);
-			SLOGD(DEBUG_TAG_OPPLIST, "ManSeesMan: ID %d(%ls) to ID %d NEW TO ME",
-				s.ubID, s.name, opponent.ubID);
+			SLOGD("ManSeesMan: ID {}({}) to ID {} NEW TO ME", s.ubID, s.name, opponent.ubID);
 
 			// if we also haven't seen him earlier this turn
 			if (s.bOppList[opponent.ubID] != SEEN_THIS_TURN)
@@ -1841,8 +1854,7 @@ static void ManSeesMan(SOLDIERTYPE& s, SOLDIERTYPE& opponent, UINT8 const caller
 	}
 	else
 	{
-		SLOGD(DEBUG_TAG_OPPLIST, "ManSeesMan: ID %d(%ls) to ID %d ALREADYSEENCURRENTLY",
-			s.ubID, s.name, opponent.ubID);
+		SLOGD("ManSeesMan: ID {}({}) to ID {} ALREADYSEENCURRENTLY", s.ubID, s.name, opponent.ubID);
 	}
 	// Remember that the soldier is currently seen and his new location
 	UpdatePersonal(&s, opponent.ubID, SEEN_CURRENTLY, opp_gridno, opp_level);
@@ -1919,8 +1931,7 @@ static void ManSeesMan(SOLDIERTYPE& s, SOLDIERTYPE& opponent, UINT8 const caller
 				opponent.pLevelNode->ubShadeLevel = opponent.ubFadeLevel;
 			}
 		}
-		SLOGD(DEBUG_TAG_OPPLIST, "ID %d (%ls) MAKING %d VISIBLE",
-			s.ubID, s.name, opponent.ubID);
+		SLOGD("ID {} ({}) MAKING {} VISIBLE", s.ubID, s.name, opponent.ubID);
 
 		if (do_locate)
 		{
@@ -1973,7 +1984,7 @@ static void OtherTeamsLookForMan(SOLDIERTYPE* pOpponent)
 		// assume he's no longer visible, until one of our mercs sees him again
 		pOpponent->bVisible = 0;
 	}
-		SLOGD(DEBUG_TAG_OPPLIST, "OTHERTEAMSLOOKFORMAN ID %d(%ls) team %d side %d",
+		SLOGD("OTHERTEAMSLOOKFORMAN ID {}({}) team {} side {}",
 			pOpponent->ubID, pOpponent->name, pOpponent->bTeam, pOpponent->bSide);
 
 	// all soldiers not on oppPtr's team now look for him
@@ -1982,7 +1993,7 @@ static void OtherTeamsLookForMan(SOLDIERTYPE* pOpponent)
 		SOLDIERTYPE* const pSoldier = *i;
 
 		// if this merc is active, in this sector, and well enough to look
-		if (pSoldier->bLife >= OKLIFE  && (pSoldier->ubBodyType != LARVAE_MONSTER))
+		if (IsSoldierValidForSightings(*pSoldier) && pSoldier->bLife >= OKLIFE  && (pSoldier->ubBodyType != LARVAE_MONSTER))
 		{
 			// if this merc is on the same team as the target soldier
 			if (pSoldier->bTeam == pOpponent->bTeam)
@@ -2011,8 +2022,7 @@ static void OtherTeamsLookForMan(SOLDIERTYPE* pOpponent)
 						{
 							// calculate the interrupt duel points
 							pSoldier->bInterruptDuelPts = CalcInterruptDuelPts(pSoldier, pOpponent, TRUE);
-							SLOGD(DEBUG_TAG_OPPLIST,
-								"Calculating int duel pts in OtherTeamsLookForMan, %d has %d points",
+							SLOGD("Calculating int duel pts in OtherTeamsLookForMan, {} has {} points",
 								pSoldier->ubID, pSoldier->bInterruptDuelPts);
 						}
 						else
@@ -2078,8 +2088,7 @@ static void RemoveOneOpponent(SOLDIERTYPE* pSoldier)
 
 	if ( pSoldier->bOppCnt < 0 )
 	{
-		SLOGD(DEBUG_TAG_OPPLIST, "Oppcnt for %d (%ls) tried to go below 0",
-			pSoldier->ubID, pSoldier->name);
+		SLOGD("Oppcnt for {} ({}) tried to go below 0", pSoldier->ubID, pSoldier->name);
 		pSoldier->bOppCnt = 0;
 	}
 
@@ -2163,7 +2172,7 @@ static void UpdatePublic(const UINT8 ubTeam, SOLDIERTYPE* const s, const INT8 bN
 		FOR_EACH_IN_TEAM(pSoldier, ubTeam)
 		{
 			// if this soldier is active, in this sector, and well enough to look
-			if (pSoldier->bInSector && pSoldier->bLife >= OKLIFE && !(pSoldier->uiStatusFlags & SOLDIER_GASSED))
+			if (IsSoldierValidForSightings(*pSoldier) && pSoldier->bLife >= OKLIFE && !(pSoldier->uiStatusFlags & SOLDIER_GASSED))
 			{
 				// if soldier isn't aware of guynum, give him another chance to see
 				if (pSoldier->bOppList[s->ubID] == NOT_HEARD_OR_SEEN)
@@ -2238,8 +2247,14 @@ void InitOpponentKnowledgeSystem(void)
 {
 	INT32 iTeam, cnt, cnt2;
 
-	memset(gbSeenOpponents,0,sizeof(gbSeenOpponents));
-	memset(gbPublicOpplist,NOT_HEARD_OR_SEEN,sizeof(gbPublicOpplist));
+	for (auto& i : gbSeenOpponents)
+	{
+		std::fill(std::begin(i), std::end(i), 0);
+	}
+	for (auto& i : gbPublicOpplist)
+	{
+		std::fill(std::begin(i), std::end(i), NOT_HEARD_OR_SEEN);
+	}
 
 	for (iTeam=0; iTeam < MAXTEAMS; iTeam++)
 	{
@@ -2275,10 +2290,10 @@ void InitOpponentKnowledgeSystem(void)
 
 void InitSoldierOppList(SOLDIERTYPE& s)
 {
-	memset(s.bOppList, NOT_HEARD_OR_SEEN, sizeof(s.bOppList));
+	std::fill(std::begin(s.bOppList), std::end(s.bOppList), NOT_HEARD_OR_SEEN);
 	s.bOppCnt = 0;
 	ResetLastKnownLocs(s);
-	memset(gbSeenOpponents[s.ubID], 0, MAXMERCS);
+	std::fill_n(gbSeenOpponents[s.ubID], MAXMERCS, 0);
 }
 
 
@@ -2288,8 +2303,7 @@ void BetweenTurnsVisibilityAdjustments()
 	FOR_EACH_SOLDIER(i)
 	{
 		SOLDIERTYPE& s = *i;
-		if (!s.bInSector)            continue;
-		if (s.bLife == 0)            continue;
+		if (!IsSoldierValidForSightings(s)) continue;
 		if (IsOnOurTeam(s))          continue;
 #ifdef WE_SEE_WHAT_MILITIA_SEES_AND_VICE_VERSA
 		if (s.bTeam == MILITIA_TEAM) continue;
@@ -2409,7 +2423,7 @@ static void SaySeenQuote(SOLDIERTYPE* pSoldier, BOOLEAN fSeenCreature, BOOLEAN f
 		}
 		else
 		{
-			if(isEnglishVersion())
+			if(isEnglishVersion() || isChineseVersion())
 			{
 				if ( Random( 100 ) < 30 )
 				{
@@ -2497,7 +2511,7 @@ void RadioSightings(SOLDIERTYPE* const pSoldier, SOLDIERTYPE* const about, UINT8
 	BOOLEAN fContactSeen;
 	BOOLEAN fSawCreatureForFirstTime = FALSE;
 
-	SLOGD(DEBUG_TAG_OPPLIST, "RADIO SIGHTINGS: for %d about %d",
+	SLOGD("RADIO SIGHTINGS: for {} about {}",
 		pSoldier->ubID, SOLDIER2ID(about));
 
 	gTacticalStatus.Team[pSoldier->bTeam].last_merc_to_radio = pSoldier;
@@ -2526,14 +2540,13 @@ void RadioSightings(SOLDIERTYPE* const pSoldier, SOLDIERTYPE* const about, UINT8
 	for (iLoop = start; iLoop < end; iLoop++,pOpponent++,pPersOL++,pbPublOL++)
 	{
 		fContactSeen = FALSE;
-		SLOGD(DEBUG_TAG_OPPLIST, "RS: checking %d", pOpponent->ubID);
+		SLOGD("RS: checking {}", pOpponent->ubID);
 
 
 		// make sure this merc is active, here & still alive (unconscious OK)
-		if (!pOpponent->bActive || !pOpponent->bInSector || !pOpponent->bLife)
+		if (!IsSoldierValidForSightings(*pOpponent))
 		{
-			SLOGD(DEBUG_TAG_OPPLIST, "RS: inactive/notInSector/life %d",
-				pOpponent->ubID);
+			SLOGD("RS: inactive/notInSector/life {}", pOpponent->ubID);
 			continue; // skip to the next merc
 		}
 
@@ -2541,14 +2554,14 @@ void RadioSightings(SOLDIERTYPE* const pSoldier, SOLDIERTYPE* const about, UINT8
 		// NEW: Apr. 21 '96: must allow ALL non-humans to get radioed about
 		if ((pSoldier->bSide == pOpponent->bSide) && (pOpponent->uiStatusFlags & SOLDIER_PC))
 		{
-			SLOGD(DEBUG_TAG_OPPLIST, "RS: same side %d", pSoldier->bSide);
+			SLOGD("RS: same side {}", pSoldier->bSide);
 			continue; // skip to the next merc
 		}
 
 		// if we personally don't know a thing about this opponent
 		if (*pPersOL == NOT_HEARD_OR_SEEN)
 		{
-			SLOGD(DEBUG_TAG_OPPLIST, "RS: not heard or seen");
+			SLOGD("RS: not heard or seen");
 			continue; // skip to the next opponent
 		}
 
@@ -2556,11 +2569,10 @@ void RadioSightings(SOLDIERTYPE* const pSoldier, SOLDIERTYPE* const about, UINT8
 		if ((!gubKnowledgeValue[*pbPublOL - OLDEST_HEARD_VALUE][*pPersOL - OLDEST_HEARD_VALUE]) &&
 			(*pbPublOL != *pPersOL))
 		{
-			SLOGD(DEBUG_TAG_OPPLIST, "RS: no new knowledge per %d pub %d",
-				*pPersOL, *pbPublOL);
+			SLOGD("RS: no new knowledge per {} pub {}", *pPersOL, *pbPublOL);
 			continue; // skip to the next opponent
 		}
-		SLOGD(DEBUG_TAG_OPPLIST, "RS: made it!");
+		SLOGD("RS: made it!");
 
 		// if it's our merc, and he currently sees this opponent
 		if (IsOnOurTeam(*pSoldier) &&
@@ -2667,7 +2679,7 @@ void RadioSightings(SOLDIERTYPE* const pSoldier, SOLDIERTYPE* const about, UINT8
 
 		// IF WE'RE HERE, OUR PERSONAL INFORMATION IS AT LEAST AS UP-TO-DATE
 		// AS THE PUBLIC KNOWLEDGE, SO WE WILL REPLACE THE PUBLIC KNOWLEDGE
-		SLOGD(DEBUG_TAG_OPPLIST, "UPDATE PUBLIC: soldier %d SEEING soldier %d",
+		SLOGD("UPDATE PUBLIC: soldier {} SEEING soldier {}",
 			pSoldier->ubID, pOpponent->ubID);
 		UpdatePublic(ubTeamToRadioTo, pOpponent, *pPersOL,
 				gsLastKnownOppLoc[pSoldier->ubID][pOpponent->ubID],
@@ -2715,47 +2727,47 @@ void DebugSoldierPage1()
 {
 	INT32 const h = DEBUG_PAGE_LINE_HEIGHT;
 
-	const SOLDIERTYPE* const s = FindSoldierFromMouse();
+	const SOLDIERTYPE* const s = gUIFullTarget;
 	if (s != NULL)
 	{
-		MPageHeader(L"DEBUG SOLDIER PAGE ONE, GRIDNO %d", s->sGridNo);
+		MPageHeader(ST::format("DEBUG SOLDIER PAGE ONE, GRIDNO {}", s->sGridNo));
 
 		INT32 y = DEBUG_PAGE_START_Y;
 
-		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, L"ID:",   s->ubID);
-		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, L"TEAM:", s->bTeam);
-		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, L"SIDE:", s->bSide);
+		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, "ID:",   s->ubID);
+		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, "TEAM:", s->bTeam);
+		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, "SIDE:", s->bSide);
 
-		MHeader(DEBUG_PAGE_FIRST_COLUMN, y +=  h, L"STATUS FLAGS:");
-		mprintf(DEBUG_PAGE_FIRST_COLUMN+DEBUG_PAGE_LABEL_WIDTH, y, L"%x", s->uiStatusFlags);
+		MHeader(DEBUG_PAGE_FIRST_COLUMN, y +=  h, "STATUS FLAGS:");
+		MPrint(DEBUG_PAGE_FIRST_COLUMN+DEBUG_PAGE_LABEL_WIDTH, y, ST::format("{x}", s->uiStatusFlags));
 
-		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, L"HUMAN:",    gTacticalStatus.Team[s->bTeam].bHuman);
-		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, L"APs:",      s->bActionPoints);
-		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, L"Breath:",   s->bBreath);
-		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, L"Life:",     s->bLife);
-		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, L"LifeMax:",  s->bLifeMax);
-		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, L"Bleeding:", s->bBleeding);
+		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, "HUMAN:",    gTacticalStatus.Team[s->bTeam].bHuman);
+		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, "APs:",      s->bActionPoints);
+		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, "Breath:",   s->bBreath);
+		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, "Life:",     s->bLife);
+		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, "LifeMax:",  s->bLifeMax);
+		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, "Bleeding:", s->bBleeding);
 
 		y = DEBUG_PAGE_START_Y;
 
-		MPrintStat(DEBUG_PAGE_SECOND_COLUMN, y += h, L"Agility:",               s->bAgility,      EffectiveAgility(s));
-		MPrintStat(DEBUG_PAGE_SECOND_COLUMN, y += h, L"Dexterity:",             s->bDexterity,    EffectiveDexterity(s));
-		MPrintStat(DEBUG_PAGE_SECOND_COLUMN, y += h, L"Strength:",              s->bStrength);
-		MPrintStat(DEBUG_PAGE_SECOND_COLUMN, y += h, L"Wisdom:",                s->bWisdom,       EffectiveWisdom(s));
-		MPrintStat(DEBUG_PAGE_SECOND_COLUMN, y += h, L"Exp Lvl:",               s->bExpLevel,     EffectiveExpLevel(s));
-		MPrintStat(DEBUG_PAGE_SECOND_COLUMN, y += h, L"Mrksmnship",             s->bMarksmanship, EffectiveMarksmanship(s));
-		MPrintStat(DEBUG_PAGE_SECOND_COLUMN, y += h, L"Mechanical:",            s->bMechanical);
-		MPrintStat(DEBUG_PAGE_SECOND_COLUMN, y += h, L"Explosive:",             s->bExplosive);
-		MPrintStat(DEBUG_PAGE_SECOND_COLUMN, y += h, L"Medical:",               s->bMedical);
-		MPrintStat(DEBUG_PAGE_SECOND_COLUMN, y += h, L"Drug Effects:",          s->bDrugEffect[0]);
-		MPrintStat(DEBUG_PAGE_SECOND_COLUMN, y += h, L"Drug Side Effects:",     s->bDrugSideEffect[0]);
-		MPrintStat(DEBUG_PAGE_SECOND_COLUMN, y += h, L"Booze Effects:",         s->bDrugEffect[1]);
-		MPrintStat(DEBUG_PAGE_SECOND_COLUMN, y += h, L"Hangover Side Effects:", s->bDrugSideEffect[1]);
-		MPrintStat(DEBUG_PAGE_SECOND_COLUMN, y += h, L"AI has Keys:",           s->bHasKeys);
+		MPrintStat(DEBUG_PAGE_SECOND_COLUMN, y += h, "Agility:",               s->bAgility,      EffectiveAgility(s));
+		MPrintStat(DEBUG_PAGE_SECOND_COLUMN, y += h, "Dexterity:",             s->bDexterity,    EffectiveDexterity(s));
+		MPrintStat(DEBUG_PAGE_SECOND_COLUMN, y += h, "Strength:",              s->bStrength);
+		MPrintStat(DEBUG_PAGE_SECOND_COLUMN, y += h, "Wisdom:",                s->bWisdom,       EffectiveWisdom(s));
+		MPrintStat(DEBUG_PAGE_SECOND_COLUMN, y += h, "Exp Lvl:",               s->bExpLevel,     EffectiveExpLevel(s));
+		MPrintStat(DEBUG_PAGE_SECOND_COLUMN, y += h, "Mrksmnship",             s->bMarksmanship, EffectiveMarksmanship(s));
+		MPrintStat(DEBUG_PAGE_SECOND_COLUMN, y += h, "Mechanical:",            s->bMechanical);
+		MPrintStat(DEBUG_PAGE_SECOND_COLUMN, y += h, "Explosive:",             s->bExplosive);
+		MPrintStat(DEBUG_PAGE_SECOND_COLUMN, y += h, "Medical:",               s->bMedical);
+		MPrintStat(DEBUG_PAGE_SECOND_COLUMN, y += h, "Drug Effects:",          s->bDrugEffect[0]);
+		MPrintStat(DEBUG_PAGE_SECOND_COLUMN, y += h, "Drug Side Effects:",     s->bDrugSideEffect[0]);
+		MPrintStat(DEBUG_PAGE_SECOND_COLUMN, y += h, "Booze Effects:",         s->bDrugEffect[1]);
+		MPrintStat(DEBUG_PAGE_SECOND_COLUMN, y += h, "Hangover Side Effects:", s->bDrugSideEffect[1]);
+		MPrintStat(DEBUG_PAGE_SECOND_COLUMN, y += h, "AI has Keys:",           s->bHasKeys);
 	}
-	else if (GetMouseMapPos() != NOWHERE)
+	else if (guiCurrentCursorGridNo != NOWHERE)
 	{
-		MPageHeader(L"DEBUG LAND PAGE ONE");
+		MPageHeader("DEBUG LAND PAGE ONE");
 	}
 }
 
@@ -2775,127 +2787,126 @@ void DebugSoldierPage2()
 
 	INT32 const h = DEBUG_PAGE_LINE_HEIGHT;
 
-	const SOLDIERTYPE* const s = FindSoldierFromMouse();
+	const SOLDIERTYPE* const s = gUIFullTarget;
 	if (s != NULL)
 	{
-		MPageHeader(L"DEBUG SOLDIER PAGE TWO, GRIDNO %d", s->sGridNo);
+		MPageHeader(ST::format("DEBUG SOLDIER PAGE TWO, GRIDNO {}", s->sGridNo));
 
 		INT32 y = DEBUG_PAGE_START_Y;
 
-		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, L"ID:", s->ubID);
-		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, L"Body Type:", s->ubBodyType);
-		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, L"Opp Cnt:", s->bOppCnt);
+		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, "ID:", s->ubID);
+		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, "Body Type:", s->ubBodyType);
+		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, "Opp Cnt:", s->bOppCnt);
 
-		wchar_t const* opp_header;
+		ST::string opp_header;
 		INT8    const* opp_list = s->bOppList;
 		if (s->bTeam == OUR_TEAM || s->bTeam == MILITIA_TEAM)	// look at 8 to 15 opplist entries
 		{
-			opp_header = L"Opplist B:";
+			opp_header = "Opplist B:";
 			opp_list += 20;
 		}
 		else	// team 1 - enemies so look at first 8 (0-7) opplist entries
 		{
-			opp_header = L"OppList A:";
+			opp_header = "OppList A:";
 		}
 		MHeader(DEBUG_PAGE_FIRST_COLUMN, y += h, opp_header);
-		mprintf(DEBUG_PAGE_FIRST_COLUMN+DEBUG_PAGE_LABEL_WIDTH, y, L"%d %d %d %d %d %d %d %d",
+		MPrint(DEBUG_PAGE_FIRST_COLUMN+DEBUG_PAGE_LABEL_WIDTH, y, ST::format("{} {} {} {} {} {} {} {}",
 			opp_list[0], opp_list[1], opp_list[2], opp_list[3],
-			opp_list[4], opp_list[5], opp_list[6], opp_list[7]
+			opp_list[4], opp_list[5], opp_list[6], opp_list[7])
 		);
 
-		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, L"Visible:",     s->bVisible);
-		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, L"Direction:",   gzDirectionStr[s->bDirection]);
-		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, L"DesDirection", gzDirectionStr[s->bDesiredDirection]);
-		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, L"GridNo:",      s->sGridNo);
-		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, L"Dest:",        s->sFinalDestination);
-		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, L"Path Size:",   s->ubPathDataSize);
-		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, L"Path Index:",  s->ubPathIndex);
+		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, "Visible:",     s->bVisible);
+		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, "Direction:",   gzDirectionStr[s->bDirection]);
+		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, "DesDirection", gzDirectionStr[s->bDesiredDirection]);
+		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, "Dest:",        s->sFinalDestination);
+		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, "Path Size:",   s->ubPathDataSize);
+		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, "Path Index:",  s->ubPathIndex);
 
-		MHeader(DEBUG_PAGE_FIRST_COLUMN, y += h, L"First 3 Steps:");
-		mprintf(DEBUG_PAGE_FIRST_COLUMN+DEBUG_PAGE_LABEL_WIDTH, y, L"%d %d %d",
+		MHeader(DEBUG_PAGE_FIRST_COLUMN, y += h, "First 3 Steps:");
+		MPrint(DEBUG_PAGE_FIRST_COLUMN+DEBUG_PAGE_LABEL_WIDTH, y, ST::format("{} {} {}",
 			s->ubPathingData[0],
 			s->ubPathingData[1],
-			s->ubPathingData[2]
+			s->ubPathingData[2])
 		);
 
-		MHeader(DEBUG_PAGE_FIRST_COLUMN, y += h, L"Next 3 Steps:");
-		mprintf(DEBUG_PAGE_FIRST_COLUMN+DEBUG_PAGE_LABEL_WIDTH, y, L"%d %d %d",
+		MHeader(DEBUG_PAGE_FIRST_COLUMN, y += h, "Next 3 Steps:");
+		MPrint(DEBUG_PAGE_FIRST_COLUMN+DEBUG_PAGE_LABEL_WIDTH, y, ST::format("{} {} {}",
 			s->ubPathingData[s->ubPathIndex],
 			s->ubPathingData[s->ubPathIndex + 1],
-			s->ubPathingData[s->ubPathIndex + 2]
+			s->ubPathingData[s->ubPathIndex + 2])
 		);
 
-		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, L"FlashInd:",    s->fFlashLocator);
-		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, L"ShowInd:",     s->fShowLocator);
-		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, L"Main hand:",   ShortItemNames[s->inv[HANDPOS].usItem]);
-		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, L"Second hand:", ShortItemNames[s->inv[SECONDHANDPOS].usItem]);
+		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, "FlashInd:",    s->fFlashLocator);
+		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, "ShowInd:",     s->fShowLocator);
+		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, "Main hand:",   GCM->getItem(s->inv[HANDPOS].usItem)->getShortName());
+		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, "Second hand:", GCM->getItem(s->inv[SECONDHANDPOS].usItem)->getShortName());
 
-		const GridNo map_pos = GetMouseMapPos();
+		const GridNo map_pos = guiCurrentCursorGridNo;
 		if (map_pos != NOWHERE)
 		{
-			MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, L"CurrGridNo:", map_pos);
+			MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, "CurrGridNo:", map_pos);
 		}
 	}
 	else
 	{
-		const GridNo map_pos = GetMouseMapPos();
+		const GridNo map_pos = guiCurrentCursorGridNo;
 		if (map_pos == NOWHERE) return;
 
-		MPageHeader(L"DEBUG LAND PAGE TWO");
+		MPageHeader("DEBUG LAND PAGE TWO");
 
 		INT32                    y  = DEBUG_PAGE_START_Y;
 		MAP_ELEMENT const* const me = &gpWorldLevelData[map_pos];
 
-		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, L"Land Raised:", me->sHeight);
+		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, "Land Raised:", me->sHeight);
 
 		LEVELNODE const* const land_head = me->pLandHead;
-		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, L"Land Node:", land_head);
+		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, "Land Node:", land_head);
 		if (land_head != NULL)
 		{
 			UINT16 const idx = land_head->usIndex;
-			MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, L"Land Node:", idx);
-			MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, L"Full Land:", gTileDatabase[idx].ubFullTile);
+			MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, "Land Node:", idx);
+			MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, "Full Land:", gTileDatabase[idx].ubFullTile);
 		}
 
-		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, L"Land St Node:", me->pLandStart);
-		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, L"GRIDNO:",       map_pos);
+		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, "Land St Node:", me->pLandStart);
+		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, "GRIDNO:",       map_pos);
 
 		if (me->uiFlags & MAPELEMENT_MOVEMENT_RESERVED)
 		{
-			mprintf(  DEBUG_PAGE_FIRST_COLUMN+DEBUG_PAGE_LABEL_WIDTH, y += h, L"Merc: %d",  me->ubReservedSoldierID);
-			MPrint( DEBUG_PAGE_FIRST_COLUMN, y,      L"RESERVED MOVEMENT FLAG ON:");
+			MPrint(  DEBUG_PAGE_FIRST_COLUMN+DEBUG_PAGE_LABEL_WIDTH, y += h, ST::format("Merc: {}",  me->ubReservedSoldierID));
+			MPrint( DEBUG_PAGE_FIRST_COLUMN, y,      "RESERVED MOVEMENT FLAG ON:");
 		}
 
 		LEVELNODE const* const node = GetCurInteractiveTile();
 		if (node != NULL)
 		{
-			mprintf(  DEBUG_PAGE_FIRST_COLUMN+DEBUG_PAGE_LABEL_WIDTH, y += h, L"Tile: %d", node->usIndex);
-			MPrint( DEBUG_PAGE_FIRST_COLUMN, y,      L"ON INT TILE");
+			MPrint(  DEBUG_PAGE_FIRST_COLUMN+DEBUG_PAGE_LABEL_WIDTH, y += h, ST::format("Tile: {}", node->usIndex));
+			MPrint( DEBUG_PAGE_FIRST_COLUMN, y,      "ON INT TILE");
 		}
 
 		if (me->uiFlags & MAPELEMENT_REVEALED)
 		{
-			MPrint(DEBUG_PAGE_FIRST_COLUMN, y += h, L"REVEALED");
+			MPrint(DEBUG_PAGE_FIRST_COLUMN, y += h, "REVEALED");
 		}
 
 		if (me->uiFlags & MAPELEMENT_RAISE_LAND_START)
 		{
-			MPrint(DEBUG_PAGE_FIRST_COLUMN, y += h, L"Land Raise Start");
+			MPrint(DEBUG_PAGE_FIRST_COLUMN, y += h, "Land Raise Start");
 		}
 
 		if (me->uiFlags & MAPELEMENT_RAISE_LAND_END)
 		{
-			MPrint(DEBUG_PAGE_FIRST_COLUMN, y += h, L"Raise Land End");
+			MPrint(DEBUG_PAGE_FIRST_COLUMN, y += h, "Raise Land End");
 		}
 
 		if (gubWorldRoomInfo[map_pos] != NO_ROOM)
 		{
-			MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, L"Room Number", gubWorldRoomInfo[map_pos]);
+			MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, "Room Number", gubWorldRoomInfo[map_pos]);
 		}
 
 		if (me->ubExtFlags[0] & MAPELEMENT_EXT_NOBURN_STRUCT)
 		{
-			MPrint(0, y += h, L"Don't Use Burn Through For Soldier");
+			MPrint(0, y += h, "Don't Use Burn Through For Soldier");
 		}
 	}
 }
@@ -2913,102 +2924,104 @@ void DebugSoldierPage3()
 
 	INT32 const h = DEBUG_PAGE_LINE_HEIGHT;
 
-	const SOLDIERTYPE* const s = FindSoldierFromMouse();
+	const SOLDIERTYPE* const s = gUIFullTarget;
 	if (s != NULL)
 	{
-		MPageHeader(L"DEBUG SOLDIER PAGE THREE, GRIDNO %d", s->sGridNo);
+		MPageHeader(ST::format("DEBUG SOLDIER PAGE THREE, GRIDNO {}", s->sGridNo));
 
 		INT32 y = DEBUG_PAGE_START_Y;
 
-		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, L"ID:",     s->ubID);
-		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, L"Action:", gzActionStr[s->bAction]);
+		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, "ID:",     s->ubID);
+		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, "Action:", gzActionStr[s->bAction]);
 
 		if (s->uiStatusFlags & SOLDIER_ENEMY)
 		{
-			MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, L"Alert:", gzAlertStr[s->bAlertStatus]);
+			MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, "Alert:", gzAlertStr[s->bAlertStatus]);
 		}
 
-		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, L"Action Data:", s->usActionData);
+		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, "Action Data:", s->usActionData);
 
 		if (s->uiStatusFlags & SOLDIER_ENEMY)
 		{
-			MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, L"AIMorale", s->bAIMorale);
+			MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, "AIMorale", s->bAIMorale);
 		}
 		else
 		{
-			MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, L"Morale", s->bMorale);
+			MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, "Morale", s->bMorale);
 		}
 
-		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, L"Delayed Movement:", s->fDelayedMovement);
+		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, "Delayed Movement:", s->fDelayedMovement);
 
 		if (gubWatchedLocPoints[s->ubID][0] > 0)
 		{
-			mprintf(DEBUG_PAGE_FIRST_COLUMN, y += h, L"Watch %d/%d for %d pts",
+			MPrint(DEBUG_PAGE_FIRST_COLUMN, y += h, ST::format("Watch {}/{} for {} pts",
 				gsWatchedLoc[s->ubID][0],
 				gbWatchedLocLevel[s->ubID][0],
-				gubWatchedLocPoints[s->ubID][0]
+				gubWatchedLocPoints[s->ubID][0])
 			);
 		}
 
-		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, L"ActionInProg:", s->bActionInProgress);
+		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, "ActionInProg:", s->bActionInProgress);
 
 		if (gubWatchedLocPoints[s->ubID][1] > 0)
 		{
-			mprintf(DEBUG_PAGE_FIRST_COLUMN+DEBUG_PAGE_LABEL_WIDTH, y += h, L"Watch %d/%d for %d pts",
+			MPrint(DEBUG_PAGE_FIRST_COLUMN+DEBUG_PAGE_LABEL_WIDTH, y += h, ST::format("Watch {}/{} for {} pts",
 				gsWatchedLoc[s->ubID][1],
 				gbWatchedLocLevel[s->ubID][1],
-				gubWatchedLocPoints[s->ubID][1]
+				gubWatchedLocPoints[s->ubID][1])
 			);
 		}
 
-		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, L"Last Action:", gzActionStr[s->bLastAction]);
+		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, "Last Action:", gzActionStr[s->bLastAction]);
 
 		if (gubWatchedLocPoints[s->ubID][2] > 0)
 		{
-			mprintf(DEBUG_PAGE_FIRST_COLUMN+DEBUG_PAGE_LABEL_WIDTH, y += h, L"Watch %d/%d for %d pts",
+			MPrint(DEBUG_PAGE_FIRST_COLUMN+DEBUG_PAGE_LABEL_WIDTH, y += h, ST::format("Watch {}/{} for {} pts",
 				gsWatchedLoc[s->ubID][2],
 				gbWatchedLocLevel[s->ubID][2],
-				gubWatchedLocPoints[s->ubID][2]
+				gubWatchedLocPoints[s->ubID][2])
 			);
 		}
 
-		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, L"Animation:",   gAnimControl[s->usAnimState].zAnimStr);
-		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, L"Getting Hit:", s->fGettingHit);
+		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, "Animation:",   gAnimControl[s->usAnimState].zAnimStr);
+		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, "Getting Hit:", s->fGettingHit);
 
 		if (s->ubCivilianGroup != 0)
 		{
-			MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, L"Civ group", s->ubCivilianGroup);
+			MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, "Civ group", s->ubCivilianGroup);
 		}
 
-		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, L"Suppress pts:",       s->ubSuppressionPoints);
-		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, L"Attacker ID:",        SOLDIER2ID(s->attacker));
-		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, L"EndAINotCalled:",     s->fTurnInProgress);
+		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, "Suppress pts:",       s->ubSuppressionPoints);
+		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, "Attacker ID:",        SOLDIER2ID(s->attacker));
+		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, "EndAINotCalled:",     s->fTurnInProgress);
 
 		y = DEBUG_PAGE_START_Y;
 
-		MPrintStat(DEBUG_PAGE_SECOND_COLUMN, y += h, L"PrevAnimation:",      gAnimControl[s->usOldAniState].zAnimStr);
-		MPrintStat(DEBUG_PAGE_SECOND_COLUMN, y += h, L"PrevAniCode:",        gusAnimInst[s->usOldAniState][s->sOldAniCode]);
-		MPrintStat(DEBUG_PAGE_SECOND_COLUMN, y += h, L"GridNo:",             s->sGridNo);
-		MPrintStat(DEBUG_PAGE_SECOND_COLUMN, y += h, L"AniCode:",            gusAnimInst[s->usAnimState][s->usAniCode]);
-		MPrintStat(DEBUG_PAGE_SECOND_COLUMN, y += h, L"No APS To fin Move:", s->fNoAPToFinishMove);
-		MPrintStat(DEBUG_PAGE_SECOND_COLUMN, y += h, L"Bullets out:",        s->bBulletsLeft);
-		MPrintStat(DEBUG_PAGE_SECOND_COLUMN, y += h, L"Anim non-int:",       s->fInNonintAnim);
-		MPrintStat(DEBUG_PAGE_SECOND_COLUMN, y += h, L"RT Anim non-int:",    s->fRTInNonintAnim);
+		MPrintStat(DEBUG_PAGE_SECOND_COLUMN, y += h, "PrevAnimation:",      gAnimControl[s->usOldAniState].zAnimStr);
+		MPrintStat(DEBUG_PAGE_SECOND_COLUMN, y += h, "PrevAniCode:",        gusAnimInst[s->usOldAniState][s->sOldAniCode]);
+		MPrintStat(DEBUG_PAGE_SECOND_COLUMN, y += h, "AniCode:",            gusAnimInst[s->usAnimState][s->usAniCode]);
+		MPrintStat(DEBUG_PAGE_SECOND_COLUMN, y += h, "No APS To fin Move:", s->fNoAPToFinishMove);
+		MPrintStat(DEBUG_PAGE_SECOND_COLUMN, y += h, "Bullets out:",        s->bBulletsLeft);
+		MPrintStat(DEBUG_PAGE_SECOND_COLUMN, y += h, "Anim non-int:",       s->fInNonintAnim);
+		MPrintStat(DEBUG_PAGE_SECOND_COLUMN, y += h, "RT Anim non-int:",    s->fRTInNonintAnim);
 
-		// OPIONION OF SELECTED MERC
+		// OPINION OF SELECTED MERC
 		const SOLDIERTYPE* const sel = GetSelectedMan();
-		if (sel != NULL &&
-				sel->ubProfile < FIRST_NPC && s->ubProfile != NO_PROFILE)
+		if (sel != NULL && s->ubProfile != NO_PROFILE)
 		{
-			MPrintStat(DEBUG_PAGE_SECOND_COLUMN, y += h, L"NPC Opinion:", GetProfile(s->ubProfile).bMercOpinion[sel->ubProfile]);
+			MercProfile const p = MercProfile(s->ubProfile);
+			if (p.isPlayerMerc() || p.isRPC())
+			{
+				MPrintStat(DEBUG_PAGE_SECOND_COLUMN, y += h, "NPC Opinion:", GetProfile(s->ubProfile).bMercOpinion[sel->ubProfile]);
+			}
 		}
 	}
 	else
 	{
-		const GridNo map_pos = GetMouseMapPos();
+		const GridNo map_pos = guiCurrentCursorGridNo;
 		if (map_pos == NOWHERE) return;
 
-		MPageHeader(L"DEBUG LAND PAGE THREE");
+		MPageHeader("DEBUG LAND PAGE THREE");
 
 		INT32 y = DEBUG_PAGE_START_Y;
 
@@ -3016,47 +3029,47 @@ void DebugSoldierPage3()
 		DOOR_STATUS const* const door = GetDoorStatus(map_pos);
 		if (door == NULL)
 		{
-			MHeader(DEBUG_PAGE_FIRST_COLUMN, y += h, L"No Door Status");
+			MHeader(DEBUG_PAGE_FIRST_COLUMN, y += h, "No Door Status");
 		}
 		else
 		{
-			MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, L"Door Status Found:", map_pos);
+			MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, "Door Status Found:", map_pos);
 
-			wchar_t const* const door_state =
-				door->ubFlags & DOOR_OPEN ? L"OPEN" : L"CLOSED";
-			MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, L"Actual Status:", door_state);
+			ST::string door_state =
+				door->ubFlags & DOOR_OPEN ? "OPEN" : "CLOSED";
+			MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, "Actual Status:", door_state);
 
-			wchar_t const* const perceived_state =
-				door->ubFlags & DOOR_PERCEIVED_NOTSET ? L"NOT SET" :
-				door->ubFlags & DOOR_PERCEIVED_OPEN   ? L"OPEN"    :
-									L"CLOSED";
-			MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, L"Perceived Status:", perceived_state);
+			ST::string perceived_state =
+				door->ubFlags & DOOR_PERCEIVED_NOTSET ? "NOT SET" :
+				door->ubFlags & DOOR_PERCEIVED_OPEN   ? "OPEN"    :
+									"CLOSED";
+			MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, "Perceived Status:", perceived_state);
 		}
 
 		//Find struct data and se what it says......
 		STRUCTURE const* const structure = FindStructure(map_pos, STRUCTURE_ANYDOOR);
 		if (structure == NULL)
 		{
-			MHeader(DEBUG_PAGE_FIRST_COLUMN, y += h, L"No Door Struct Data");
+			MHeader(DEBUG_PAGE_FIRST_COLUMN, y += h, "No Door Struct Data");
 		}
 		else
 		{
-			wchar_t const* const structure_state =
-				structure->fFlags & STRUCTURE_OPEN ? L"OPEN" : L"CLOSED";
-			MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, L"State:", structure_state);
+			ST::string structure_state =
+				structure->fFlags & STRUCTURE_OPEN ? "OPEN" : "CLOSED";
+			MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, "State:", structure_state);
 		}
 	}
 }
 
 
-static void AppendAttachmentCode(UINT16 const item, wchar_t* const str) /* XXX Needs length */
+static void AppendAttachmentCode(UINT16 item, ST::string& str)
 {
 	switch (item)
 	{
-		case SILENCER:    wcscat(str, L" Sil"); break;
-		case SNIPERSCOPE: wcscat(str, L" Scp"); break;
-		case BIPOD:       wcscat(str, L" Bip"); break;
-		case LASERSCOPE:  wcscat(str, L" Las"); break;
+		case SILENCER:    str += " Sil"; break;
+		case SNIPERSCOPE: str += " Scp"; break;
+		case BIPOD:       str += " Bip"; break;
+		case LASERSCOPE:  str += " Las"; break;
 	}
 }
 
@@ -3071,181 +3084,179 @@ static void WriteQuantityAndAttachments(OBJECTTYPE const* o, INT32 const y)
 	{
 		if (o->ubNumberOfObjects > 1)
 		{
-			wchar_t str[50];
-			swprintf(str, lengthof(str), L"Clips:  %d  (%d", o->ubNumberOfObjects, o->bStatus[0]);
+			ST::string str = ST::format("Clips:  {}  ({}", o->ubNumberOfObjects, o->bStatus[0]);
 			for (UINT8 i = 1; i < o->ubNumberOfObjects; ++i)
 			{
-				wchar_t temp[5];
-				swprintf(temp, lengthof(temp), L", %d", o->bStatus[0]);
-				wcscat(str, temp);
+				ST::string temp = ST::format(", {}", o->bStatus[0]);
+				str += temp;
 			}
-			wcscat(str, L")");
-			mprintf(DEBUG_PAGE_SECOND_COLUMN, y, str);
+			str += ")";
+			MPrint(DEBUG_PAGE_SECOND_COLUMN, y, str);
 		}
 		else
 		{
-			mprintf(DEBUG_PAGE_SECOND_COLUMN, y, L"%d rounds", o->bStatus[0]);
+			MPrint(DEBUG_PAGE_SECOND_COLUMN, y, ST::format("{} rounds", o->bStatus[0]));
 		}
 	}
 	else
 	{
 		// Build attachment string
-		wchar_t attachments[30];
+		ST::string attachments;
 		if (o->usAttachItem[0] ||
 				o->usAttachItem[1] ||
 				o->usAttachItem[2] ||
 				o->usAttachItem[3])
 		{
-			swprintf(attachments, lengthof(attachments), L"  (");
+			attachments = "  (";
 			AppendAttachmentCode(o->usAttachItem[0], attachments);
 			AppendAttachmentCode(o->usAttachItem[1], attachments);
 			AppendAttachmentCode(o->usAttachItem[2], attachments);
 			AppendAttachmentCode(o->usAttachItem[3], attachments);
-			wcscat(attachments, L" )");
+			attachments += " )";
 		}
 		else
 		{
-			attachments[0] = L'\0';
+			attachments = ST::null;
 		}
 
 		if (o->ubNumberOfObjects > 1)
 		{
 			//everything
-			mprintf(DEBUG_PAGE_SECOND_COLUMN, y, L"%d%%  Qty:  %d%ls", o->bStatus[0], o->ubNumberOfObjects, attachments);
+			MPrint(DEBUG_PAGE_SECOND_COLUMN, y, ST::format("{}%  Qty:  {}{}", o->bStatus[0], o->ubNumberOfObjects, attachments));
 		}
 		else
 		{
 			//condition and attachments
-			mprintf(DEBUG_PAGE_SECOND_COLUMN, y, L"%d%%%ls", o->bStatus[0], attachments);
+			MPrint(DEBUG_PAGE_SECOND_COLUMN, y, ST::format("{}%{}", o->bStatus[0], attachments));
 		}
 	}
 }
 
 
-static void PrintItem(INT32 const y, wchar_t const* const header, OBJECTTYPE const* o)
+static void PrintItem(INT32 y, const ST::string& header, const OBJECTTYPE* o)
 {
 	MHeader(DEBUG_PAGE_FIRST_COLUMN, y, header);
 	if (!o->usItem) return;
-	mprintf(DEBUG_PAGE_FIRST_COLUMN+DEBUG_PAGE_LABEL_WIDTH, y, L"%ls", ShortItemNames[o->usItem]);
+	MPrint(DEBUG_PAGE_FIRST_COLUMN+DEBUG_PAGE_LABEL_WIDTH, y, ST::format("{}", GCM->getItem(o->usItem)->getShortName()));
 	WriteQuantityAndAttachments(o, y);
 }
 
 
 void DebugSoldierPage4()
 {
-	const SOLDIERTYPE* const s = FindSoldierFromMouse();
+	const SOLDIERTYPE* const s = gUIFullTarget;
 
 	INT32 const h = DEBUG_PAGE_LINE_HEIGHT;
 
 	if (s != NULL)
 	{
-		MPageHeader(L"DEBUG SOLDIER PAGE FOUR, GRIDNO %d", s->sGridNo);
+		MPageHeader(ST::format("DEBUG SOLDIER PAGE FOUR, GRIDNO {}", s->sGridNo));
 
 		INT32 y = DEBUG_PAGE_START_Y;
 
-		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, L"Exp. Level:", s->bExpLevel);
-		wchar_t const* sclass;
+		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, "Exp. Level:", s->bExpLevel);
+		ST::string sclass;
 		switch (s->ubSoldierClass)
 		{
 			case SOLDIER_CLASS_ADMINISTRATOR:
-				sclass = L"(Administrator)";
+				sclass = "(Administrator)";
 				break;
 			case SOLDIER_CLASS_ELITE:
-				sclass = L"(Army Elite)";
+				sclass = "(Army Elite)";
 				break;
 			case SOLDIER_CLASS_ARMY:
-				sclass = L"(Army Troop)";
+				sclass = "(Army Troop)";
 				break;
 			case SOLDIER_CLASS_CREATURE:
-				sclass = L"(Creature)";
+				sclass = "(Creature)";
 				break;
 			case SOLDIER_CLASS_GREEN_MILITIA:
-				sclass = L"(Green Militia)";
+				sclass = "(Green Militia)";
 				break;
 			case SOLDIER_CLASS_REG_MILITIA:
-				sclass = L"(Reg Militia)";
+				sclass = "(Reg Militia)";
 				break;
 			case SOLDIER_CLASS_ELITE_MILITIA:
-				sclass = L"(Elite Militia)";
+				sclass = "(Elite Militia)";
 				break;
 			case SOLDIER_CLASS_MINER:
-				sclass = L"(Miner)";
+				sclass = "(Miner)";
 				break;
 			// don't care (don't write anything)
 			default:
-				sclass = NULL;
+				sclass = ST::null;
 				break;
 		}
-		if (sclass)
-			mprintf(DEBUG_PAGE_SECOND_COLUMN, y, L"%ls", sclass);
+		if (!sclass.empty())
+			MPrint(DEBUG_PAGE_SECOND_COLUMN, y, ST::format("{}", sclass));
 
 		if (s->bTeam != OUR_TEAM)
 		{
-			const wchar_t* orders;
+			ST::string orders;
 			switch (s->bOrders)
 			{
-				case STATIONARY:  orders = L"STATIONARY";    break;
-				case ONGUARD:     orders = L"ON GUARD";      break;
-				case ONCALL:      orders = L"ON CALL";       break;
-				case SEEKENEMY:   orders = L"SEEK ENEMY";    break;
-				case CLOSEPATROL: orders = L"CLOSE PATROL";  break;
-				case FARPATROL:   orders = L"FAR PATROL";    break;
-				case POINTPATROL: orders = L"POINT PATROL";  break;
-				case RNDPTPATROL: orders = L"RND PT PATROL"; break;
-				default:          orders = L"UNKNOWN";       break;
+				case STATIONARY:  orders = "STATIONARY";    break;
+				case ONGUARD:     orders = "ON GUARD";      break;
+				case ONCALL:      orders = "ON CALL";       break;
+				case SEEKENEMY:   orders = "SEEK ENEMY";    break;
+				case CLOSEPATROL: orders = "CLOSE PATROL";  break;
+				case FARPATROL:   orders = "FAR PATROL";    break;
+				case POINTPATROL: orders = "POINT PATROL";  break;
+				case RNDPTPATROL: orders = "RND PT PATROL"; break;
+				default:          orders = "UNKNOWN";       break;
 			}
-			const wchar_t* attitude;
+			ST::string attitude;
 			switch (s->bAttitude)
 			{
-				case DEFENSIVE:   attitude = L"DEFENSIVE";    break;
-				case BRAVESOLO:   attitude = L"BRAVE SOLO";   break;
-				case BRAVEAID:    attitude = L"BRAVE AID";    break;
-				case AGGRESSIVE:  attitude = L"AGGRESSIVE";   break;
-				case CUNNINGSOLO: attitude = L"CUNNING SOLO"; break;
-				case CUNNINGAID:  attitude = L"CUNNING AID";  break;
-				default:          attitude = L"UNKNOWN";      break;
+				case DEFENSIVE:   attitude = "DEFENSIVE";    break;
+				case BRAVESOLO:   attitude = "BRAVE SOLO";   break;
+				case BRAVEAID:    attitude = "BRAVE AID";    break;
+				case AGGRESSIVE:  attitude = "AGGRESSIVE";   break;
+				case CUNNINGSOLO: attitude = "CUNNING SOLO"; break;
+				case CUNNINGAID:  attitude = "CUNNING AID";  break;
+				default:          attitude = "UNKNOWN";      break;
 			}
 			SOLDIERINITNODE const* const node = FindSoldierInitNodeBySoldier(*s);
 			y += h;
 			if (node)
 			{
-				mprintf(DEBUG_PAGE_FIRST_COLUMN, y, L"%ls, %ls, REL EQUIP: %d, REL ATTR: %d",
+				MPrint(DEBUG_PAGE_FIRST_COLUMN, y, ST::format("{}, {}, REL EQUIP: {}, REL ATTR: {}",
 					orders, attitude,
 					node->pBasicPlacement->bRelativeEquipmentLevel,
-					node->pBasicPlacement->bRelativeAttributeLevel
+					node->pBasicPlacement->bRelativeAttributeLevel)
 				);
 			}
 			else
 			{
-				mprintf(DEBUG_PAGE_FIRST_COLUMN, y, L"%ls, %ls", orders, attitude);
+				MPrint(DEBUG_PAGE_FIRST_COLUMN, y, ST::format("{}, {}", orders, attitude));
 			}
 		}
 
-		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, L"ID:", s->ubID);
+		MPrintStat(DEBUG_PAGE_FIRST_COLUMN, y += h, "ID:", s->ubID);
 
-		PrintItem(y += h, L"HELMETPOS:",     &s->inv[HELMETPOS]);
-		PrintItem(y += h, L"VESTPOS:",       &s->inv[VESTPOS]);
-		PrintItem(y += h, L"LEGPOS:",        &s->inv[LEGPOS]);
-		PrintItem(y += h, L"HEAD1POS:",      &s->inv[HEAD1POS]);
-		PrintItem(y += h, L"HEAD2POS:",      &s->inv[HEAD2POS]);
-		PrintItem(y += h, L"HANDPOS:",       &s->inv[HANDPOS]);
-		PrintItem(y += h, L"SECONDHANDPOS:", &s->inv[SECONDHANDPOS]);
-		PrintItem(y += h, L"BIGPOCK1POS:",   &s->inv[BIGPOCK1POS]);
-		PrintItem(y += h, L"BIGPOCK2POS:",   &s->inv[BIGPOCK2POS]);
-		PrintItem(y += h, L"BIGPOCK3POS:",   &s->inv[BIGPOCK3POS]);
-		PrintItem(y += h, L"BIGPOCK4POS:",   &s->inv[BIGPOCK4POS]);
-		PrintItem(y += h, L"SMALLPOCK1POS:", &s->inv[SMALLPOCK1POS]);
-		PrintItem(y += h, L"SMALLPOCK2POS:", &s->inv[SMALLPOCK2POS]);
-		PrintItem(y += h, L"SMALLPOCK3POS:", &s->inv[SMALLPOCK3POS]);
-		PrintItem(y += h, L"SMALLPOCK4POS:", &s->inv[SMALLPOCK4POS]);
-		PrintItem(y += h, L"SMALLPOCK5POS:", &s->inv[SMALLPOCK5POS]);
-		PrintItem(y += h, L"SMALLPOCK6POS:", &s->inv[SMALLPOCK6POS]);
-		PrintItem(y += h, L"SMALLPOCK7POS:", &s->inv[SMALLPOCK7POS]);
-		PrintItem(y += h, L"SMALLPOCK8POS:", &s->inv[SMALLPOCK8POS]);
+		PrintItem(y += h, "HELMETPOS:",     &s->inv[HELMETPOS]);
+		PrintItem(y += h, "VESTPOS:",       &s->inv[VESTPOS]);
+		PrintItem(y += h, "LEGPOS:",        &s->inv[LEGPOS]);
+		PrintItem(y += h, "HEAD1POS:",      &s->inv[HEAD1POS]);
+		PrintItem(y += h, "HEAD2POS:",      &s->inv[HEAD2POS]);
+		PrintItem(y += h, "HANDPOS:",       &s->inv[HANDPOS]);
+		PrintItem(y += h, "SECONDHANDPOS:", &s->inv[SECONDHANDPOS]);
+		PrintItem(y += h, "BIGPOCK1POS:",   &s->inv[BIGPOCK1POS]);
+		PrintItem(y += h, "BIGPOCK2POS:",   &s->inv[BIGPOCK2POS]);
+		PrintItem(y += h, "BIGPOCK3POS:",   &s->inv[BIGPOCK3POS]);
+		PrintItem(y += h, "BIGPOCK4POS:",   &s->inv[BIGPOCK4POS]);
+		PrintItem(y += h, "SMALLPOCK1POS:", &s->inv[SMALLPOCK1POS]);
+		PrintItem(y += h, "SMALLPOCK2POS:", &s->inv[SMALLPOCK2POS]);
+		PrintItem(y += h, "SMALLPOCK3POS:", &s->inv[SMALLPOCK3POS]);
+		PrintItem(y += h, "SMALLPOCK4POS:", &s->inv[SMALLPOCK4POS]);
+		PrintItem(y += h, "SMALLPOCK5POS:", &s->inv[SMALLPOCK5POS]);
+		PrintItem(y += h, "SMALLPOCK6POS:", &s->inv[SMALLPOCK6POS]);
+		PrintItem(y += h, "SMALLPOCK7POS:", &s->inv[SMALLPOCK7POS]);
+		PrintItem(y += h, "SMALLPOCK8POS:", &s->inv[SMALLPOCK8POS]);
 	}
 	else
 	{
-		MPageHeader(L"DEBUG LAND PAGE FOUR");
+		MPageHeader("DEBUG LAND PAGE FOUR");
 	}
 }
 
@@ -3254,20 +3265,16 @@ void DebugSoldierPage4()
 // Noise stuff
 //
 
-#define MAX_MOVEMENT_NOISE			9
-
-UINT8 MovementNoise(SOLDIERTYPE* pSoldier) // XXX TODO000B
+UINT8 MovementNoise(SOLDIERTYPE const * const pSoldier)
 {
-	INT32 iStealthSkill, iRoll;
-	UINT8 ubMaxVolume, ubVolume, ubBandaged, ubEffLife;
-	INT8  bInWater = Water( pSoldier->sGridNo );
+	constexpr UINT8 MAX_MOVEMENT_NOISE = 9;
 
 	if ( pSoldier->bTeam == ENEMY_TEAM )
 	{
 		return( (UINT8) (MAX_MOVEMENT_NOISE - PreRandom( 2 )) );
 	}
 
-	iStealthSkill = 20 + 4 * EffectiveExpLevel( pSoldier ) + ((EffectiveDexterity( pSoldier ) * 4) / 10); // 24-100
+	INT32 iStealthSkill = 20 + 4 * EffectiveExpLevel( pSoldier ) + ((EffectiveDexterity( pSoldier ) * 4) / 10); // 24-100
 
 	// big bonus for those "extra stealthy" mercs
 	if ( pSoldier->ubBodyType == BLOODCAT )
@@ -3279,8 +3286,8 @@ UINT8 MovementNoise(SOLDIERTYPE* pSoldier) // XXX TODO000B
 		iStealthSkill += 25 * NUM_SKILL_TRAITS(pSoldier, STEALTHY);
 	}
 
-	ubBandaged = pSoldier->bLifeMax - pSoldier->bLife - pSoldier->bBleeding;
-	ubEffLife = pSoldier->bLife + (ubBandaged / 2);
+	UINT8 const ubBandaged = pSoldier->bLifeMax - pSoldier->bLife - pSoldier->bBleeding;
+	UINT8 const ubEffLife = pSoldier->bLife + (ubBandaged / 2);
 
 	// IF "SNEAKER'S" "EFFECTIVE LIFE" IS AT LESS THAN 50
 	if (ubEffLife < 50)
@@ -3297,45 +3304,37 @@ UINT8 MovementNoise(SOLDIERTYPE* pSoldier) // XXX TODO000B
 	}
 
 	// if sneaker is moving through water
-	if ( bInWater )
+	// DeepWater() must be checked first because Water() matches all types of water
+	if (DeepWater(pSoldier->sGridNo))
 	{
-		iStealthSkill -= 10; // 10% penalty
+		iStealthSkill -= 20;
 	}
-	else if (DeepWater( pSoldier->sGridNo ) )
+	else if (Water(pSoldier->sGridNo))
 	{
-		iStealthSkill -= 20; // 20% penalty
-	}
-
-	if ( pSoldier->bDrugEffect[ DRUG_TYPE_ADRENALINE ] )
-	{
-		// minus 3 percent per bonus AP from adrenaline
-		iStealthSkill -= 3 * pSoldier->bDrugEffect[ DRUG_TYPE_ADRENALINE ];
+		iStealthSkill -= 10;
 	}
 
-	/*
-	// if sneaker is too eager and impatient to "do it right"
-	if ((pSoldier->bTrait == OVER_ENTHUS) || (pSoldier->bAttitude == AGGRESSIVE))
-	{
-		ubStealthSkill -= 10;	// 10% penalty
-	}*/
+	// minus 3 percent per bonus AP from adrenaline
+	iStealthSkill -= 3 * pSoldier->bDrugEffect[ DRUG_TYPE_ADRENALINE ];
 
-	iStealthSkill = __max( iStealthSkill, 0 );
+	iStealthSkill = std::max(iStealthSkill, 0);
 
+	UINT8 ubVolume;
 	if (!pSoldier->bStealthMode)	// REGULAR movement
 	{
-		ubMaxVolume = MAX_MOVEMENT_NOISE - (iStealthSkill / 16); // 9 - (0 to 6) => 3 to 9
+		UINT8 ubMaxVolume = MAX_MOVEMENT_NOISE - (iStealthSkill / 16); // 9 - (0 to 9) => 0 to 9
 
-		if (bInWater)
+		if (Water(pSoldier->sGridNo))
 		{
 			ubMaxVolume++; // in water, can be even louder
 		}
 		switch (pSoldier->usAnimState)
 		{
 			case CRAWLING:
-				ubMaxVolume -= 2;
+				ubMaxVolume = ubMaxVolume <= 2 ? 0 : ubMaxVolume - 2;
 				break;
 			case SWATTING:
-				ubMaxVolume -= 1;
+				ubMaxVolume = ubMaxVolume <= 1 ? 0 : ubMaxVolume - 1;
 				break;
 			case RUNNING:
 				ubMaxVolume += 3;
@@ -3353,7 +3352,7 @@ UINT8 MovementNoise(SOLDIERTYPE* pSoldier) // XXX TODO000B
 	}
 	else // in STEALTH mode
 	{
-		iRoll = (INT32) PreRandom(100);	// roll them bones!
+		INT32 iRoll = (INT32) PreRandom(100);	// roll them bones!
 
 		if (iRoll >= iStealthSkill)   // v1.13 modification: give a second chance!
 		{
@@ -3370,7 +3369,7 @@ UINT8 MovementNoise(SOLDIERTYPE* pSoldier) // XXX TODO000B
 			switch (pSoldier->usAnimState)
 			{
 				case CRAWLING:
-					ubVolume -= 2;
+					ubVolume = ubVolume <= 2 ? 0 : ubVolume - 2;
 					break;
 				case SWATTING:
 					ubVolume -= 1;
@@ -3378,10 +3377,6 @@ UINT8 MovementNoise(SOLDIERTYPE* pSoldier) // XXX TODO000B
 				case RUNNING:
 					ubVolume += 3;
 					break;
-			}
-			if (ubVolume < 1)
-			{
-				ubVolume = 0;
 			}
 		}
 	}
@@ -3432,7 +3427,7 @@ void MakeNoise(SOLDIERTYPE* const noise_maker, INT16 const sGridNo, INT8 const b
 		SNoise.bLevel       = bLevel;
 		SNoise.ubVolume     = ubVolume;
 		SNoise.ubNoiseType  = ubNoiseType;
-		AddGameEvent( S_NOISE, DEMAND_EVENT_DELAY, &SNoise );
+		AddGameEvent(SNoise, DEMAND_EVENT_DELAY);
 	}
 	else
 	{
@@ -3465,7 +3460,7 @@ void OurNoise(SOLDIERTYPE* const noise_maker, INT16 const sGridNo, INT8 const bL
 
 
 static void HearNoise(SOLDIERTYPE* pSoldier, SOLDIERTYPE* noise_maker, UINT16 sGridNo, INT8 bLevel, UINT8 ubVolume, NoiseKind, BOOLEAN* ubSeen);
-static UINT8 CalcEffVolume(const SOLDIERTYPE* pSoldier, INT16 sGridNo, INT8 bLevel, NoiseKind, UINT8 ubBaseVolume, UINT8 bCheckTerrain, UINT8 ubTerrType1, UINT8 ubTerrType2);
+static UINT8 CalcEffVolume(const SOLDIERTYPE* pSoldier, INT16 sGridNo, INT8 bLevel, NoiseKind, UINT8 ubBaseVolume, UINT8 ubTerrType1, UINT8 ubTerrType2);
 static void TellPlayerAboutNoise(SOLDIERTYPE* pSoldier, const SOLDIERTYPE* noise_maker, INT16 sGridNo, INT8 bLevel, UINT8 ubVolume, NoiseKind, UINT8 ubNoiseDir);
 
 
@@ -3473,7 +3468,6 @@ static void ProcessNoise(SOLDIERTYPE* const noise_maker, INT16 const sGridNo, IN
 {
 	UINT8 ubLoudestEffVolume, ubEffVolume;
 	//UINT8 ubPlayVolume;
-	INT8 bCheckTerrain = FALSE;
 	UINT8 ubNoiseDir        = (UINT8)-1; // XXX HACK000E probably ubLoudestNoiseDir should be used
 	UINT8 ubLoudestNoiseDir = (UINT8)-1; // XXX HACK000E
 
@@ -3507,15 +3501,7 @@ static void ProcessNoise(SOLDIERTYPE* const noise_maker, INT16 const sGridNo, IN
 
 
 	// DETERMINE THE TERRAIN TYPE OF THE GRIDNO WHERE NOISE IS COMING FROM
-
 	const UINT8 ubSourceTerrType = gpWorldLevelData[sGridNo].ubTerrainID;
-
-	// if we have now somehow obtained a valid terrain type
-	if ((ubSourceTerrType >= FLAT_GROUND) || (ubSourceTerrType <= DEEP_WATER))
-	{
-		bCheckTerrain = TRUE;
-	}
-	// else give up trying to get terrain type, just assume sound isn't muffled
 
 
 	// DETERMINE THE *PERCEIVED* SOURCE OF THE NOISE
@@ -3616,8 +3602,7 @@ static void ProcessNoise(SOLDIERTYPE* const noise_maker, INT16 const sGridNo, IN
 				default:
 					if (noise_maker->bVisible == TRUE && bTeam == OUR_TEAM)
 					{
-						SLOGD(DEBUG_TAG_OPPLIST,
-							"Handling noise from person not currently seen in player's public opplist");
+						SLOGD("Handling noise from person not currently seen in player's public opplist");
 					}
 					break;
 			}
@@ -3639,7 +3624,7 @@ static void ProcessNoise(SOLDIERTYPE* const noise_maker, INT16 const sGridNo, IN
 		FOR_EACH_IN_TEAM(pSoldier, bTeam)
 		{
 			// if this "listener" is in no condition to care
-			if (!pSoldier->bInSector || pSoldier->uiStatusFlags & SOLDIER_DEAD ||
+			if (!IsSoldierValidForSightings(*pSoldier) ||
 				(pSoldier->bLife < OKLIFE) || pSoldier->ubBodyType == LARVAE_MONSTER)
 			{
 				continue; // skip him!
@@ -3702,7 +3687,7 @@ static void ProcessNoise(SOLDIERTYPE* const noise_maker, INT16 const sGridNo, IN
 						break;
 				}
 
-				if ( gWorldSectorX == 5 && gWorldSectorY == MAP_ROW_N )
+				if (gWorldSector.x == 5 && gWorldSector.y == MAP_ROW_N)
 				{
 					// in the bloodcat arena sector, skip noises between army & bloodcats
 					if (pSoldier->bTeam == ENEMY_TEAM && noise_maker->bTeam == CREATURE_TEAM)
@@ -3734,8 +3719,7 @@ static void ProcessNoise(SOLDIERTYPE* const noise_maker, INT16 const sGridNo, IN
 
 			// Can the listener hear noise of that volume given his circumstances?
 			ubEffVolume = CalcEffVolume(pSoldier, sGridNo, bLevel, ubNoiseType,
-							ubBaseVolume, bCheckTerrain,
-							pSoldier->bOverTerrainType, ubSourceTerrType);
+							ubBaseVolume, pSoldier->bOverTerrainType, ubSourceTerrType);
 
 			if (ubEffVolume > 0)
 			{
@@ -3825,7 +3809,7 @@ static void ProcessNoise(SOLDIERTYPE* const noise_maker, INT16 const sGridNo, IN
 }
 
 
-static UINT8 CalcEffVolume(SOLDIERTYPE const* const pSoldier, INT16 const sGridNo, INT8 const bLevel, NoiseKind const ubNoiseType, UINT8 const ubBaseVolume, UINT8 const bCheckTerrain, UINT8 const ubTerrType1, UINT8 const ubTerrType2)
+static UINT8 CalcEffVolume(SOLDIERTYPE const* const pSoldier, INT16 const sGridNo, INT8 const bLevel, NoiseKind const ubNoiseType, UINT8 const ubBaseVolume, UINT8 const ubTerrType1, UINT8 const ubTerrType2)
 {
 	INT32 iEffVolume, iDistance;
 
@@ -3923,8 +3907,6 @@ static UINT8 CalcEffVolume(SOLDIERTYPE const* const pSoldier, INT16 const sGridN
 	// if we still have a chance of hearing this, and the terrain types are known
 	if (iEffVolume > 0)
 	{
-		if (bCheckTerrain)
-		{
 			// if, between noise and listener, one is outside and one is inside
 
 			// NOTE: This is a pretty dumb way of doing things, since it won't detect
@@ -3937,8 +3919,6 @@ static UINT8 CalcEffVolume(SOLDIERTYPE const* const pSoldier, INT16 const sGridN
 				// sound is muffled, reduce the effective volume of the noise
 				iEffVolume -= 5;
 			}
-		}
-
 	}
 	if (iEffVolume > 0)
 	{
@@ -3960,7 +3940,7 @@ static void HearNoise(SOLDIERTYPE* const pSoldier, SOLDIERTYPE* const noise_make
 	INT8    bDirection;
 	BOOLEAN fMuzzleFlash = FALSE;
 
-	SLOGD(DEBUG_TAG_OPPLIST, "%d hears noise from %d (%d/%d) volume %d",
+	SLOGD("{} hears noise from {} ({}/{}) volume {}",
 		pSoldier->ubID, SOLDIER2ID(noise_maker), sGridNo, bLevel, ubVolume);
 
 
@@ -4179,8 +4159,7 @@ static void HearNoise(SOLDIERTYPE* const pSoldier, SOLDIERTYPE* const noise_make
 					{
 						// he gets a chance to interrupt the noisemaker
 						pSoldier->bInterruptDuelPts = CalcInterruptDuelPts(pSoldier, noise_maker, TRUE);
-						SLOGD(DEBUG_TAG_OPPLIST,
-							"Calculating int duel pts in noise code, %d has %d points",
+						SLOGD("Calculating int duel pts in noise code, {} has {} points",
 							pSoldier->ubID, pSoldier->bInterruptDuelPts);
 					}
 					else
@@ -4269,8 +4248,7 @@ static void HearNoise(SOLDIERTYPE* const pSoldier, SOLDIERTYPE* const noise_make
 				if (StandardInterruptConditionsMet(pSoldier, NULL, FALSE))
 				{
 					pSoldier->bInterruptDuelPts = AUTOMATIC_INTERRUPT; // force automatic interrupt
-					SLOGD(DEBUG_TAG_OPPLIST,
-						"Calculating int duel pts in noise code, %d has %d points",
+					SLOGD("Calculating int duel pts in noise code, {} has {} points",
 						pSoldier->ubID, pSoldier->bInterruptDuelPts);
 				}
 				else
@@ -4295,13 +4273,13 @@ static void TellPlayerAboutNoise(SOLDIERTYPE* const s, SOLDIERTYPE const* const 
 
 	if (noise_maker && s->bTeam == OUR_TEAM && s->bTeam == noise_maker->bTeam)
 	{
-		SLOGE(DEBUG_TAG_OPPLIST, "%ls (%d) heard noise from %ls (%d), noise at %dL%d, type %d",
+		SLOGE("{} ({}) heard noise from {} ({}), noise at {}L{}, type {}",
 			s->name, s->ubID, noise_maker->name, noise_maker->ubID, sGridNo, level, noise_type);
 	}
 
 	// display a message about a noise, e.g. Sidney hears a loud splash from/to?
 	// the north.
-	wchar_t const* const direction =
+	ST::string direction =
 		level      == s->bLevel            ||
 		noise_type == NOISE_EXPLOSION      ||
 		noise_type == NOISE_SCREAM         ||
@@ -4309,7 +4287,7 @@ static void TellPlayerAboutNoise(SOLDIERTYPE* const s, SOLDIERTYPE const* const 
 		noise_type == NOISE_GRENADE_IMPACT ? pDirectionStr[noise_dir] :
 		level      >  s->bLevel            ? gzLateLocalizedString[STR_LATE_06] : // From above
 		gzLateLocalizedString[STR_LATE_07];                                       // From below
-	ScreenMsg(MSG_FONT_YELLOW, MSG_INTERFACE, pNewNoiseStr[noise_type], s->name, pNoiseVolStr[volume_idx], direction);
+	ScreenMsg(MSG_FONT_YELLOW, MSG_INTERFACE, st_format_printf(pNewNoiseStr[noise_type], s->name, pNoiseVolStr[volume_idx], direction));
 
 	// If the sound was faint, say something
 	if (volume_idx == 0 &&
@@ -4335,7 +4313,7 @@ void VerifyAndDecayOpplist(SOLDIERTYPE *pSoldier)
 	// if soldier is unconscious, make sure his opplist is wiped out & bail out
 	if (pSoldier->bLife < OKLIFE)
 	{
-		memset(pSoldier->bOppList,NOT_HEARD_OR_SEEN,sizeof(pSoldier->bOppList));
+		std::fill(std::begin(pSoldier->bOppList), std::end(pSoldier->bOppList), NOT_HEARD_OR_SEEN);
 		pSoldier->bOppCnt = 0;
 		return;
 	}
@@ -4356,7 +4334,7 @@ void VerifyAndDecayOpplist(SOLDIERTYPE *pSoldier)
 	{
 		SOLDIERTYPE* const pOpponent = *i;
 		// if this merc is active, here, and alive
-		if (pOpponent->bLife)
+		if (IsSoldierValidForSightings(*pOpponent))
 		{
 			// if this merc is on the same team, he's no opponent, so skip him
 			if (pSoldier->bTeam == pOpponent->bTeam)
@@ -4373,31 +4351,8 @@ void VerifyAndDecayOpplist(SOLDIERTYPE *pSoldier)
 				ManLooksForMan(pSoldier,pOpponent,VERIFYANDDECAYOPPLIST);
 
 				// decay opplist value if necessary
-				DECAY_OPPLIST_VALUE( *pPersOL );
-				/*
-				// if opponent was SEEN recently but is NOT visible right now
-				if (*pPersOL >= SEEN_THIS_TURN)
-				{
-					(*pPersOL)++; // increment #turns it's been since last seen
-
-					// if it's now been longer than the maximum we care to remember
-					if (*pPersOL > SEEN_2_TURNS_AGO)
-						*pPersOL = 0; // forget that we knew this guy
-				}
-				else
-				{
-					// if opponent was merely HEARD recently, not actually seen
-					if (*pPersOL <= HEARD_THIS_TURN)
-					{
-						(*pPersOL)--; // increment #turns it's been since last heard
-
-						// if it's now been longer than the maximum we care to remember
-						if (*pPersOL < HEARD_2_TURNS_AGO)
-							*pPersOL = 0; // forget that we knew this guy
-					}
-				}*/
+				DecayOppListValue(*pPersOL);
 			}
-
 		}
 	}
 
@@ -4434,7 +4389,7 @@ void DecayIndividualOpplist(SOLDIERTYPE *pSoldier)
 			}
 		}
 
-		memset(pSoldier->bOppList,NOT_HEARD_OR_SEEN,sizeof(pSoldier->bOppList));
+		std::fill(std::begin(pSoldier->bOppList), std::end(pSoldier->bOppList), NOT_HEARD_OR_SEEN);
 		pSoldier->bOppCnt = 0;
 		return;
 	}
@@ -4444,7 +4399,7 @@ void DecayIndividualOpplist(SOLDIERTYPE *pSoldier)
 	{
 		const SOLDIERTYPE* const pOpponent = *i;
 		// if this merc is active, here, and alive
-		if (pOpponent->bLife)
+		if (IsSoldierValidForSightings(*pOpponent))
 		{
 			// if this merc is on the same team, he's no opponent, so skip him
 			if (pSoldier->bTeam == pOpponent->bTeam)
@@ -4494,7 +4449,7 @@ void VerifyPublicOpplistDueToDeath(SOLDIERTYPE *pSoldier)
 		BOOLEAN bOpponentStillSeen = FALSE;
 
 		// if this opponent is active, here, and alive
-		if (pOpponent->bLife)
+		if (IsSoldierValidForSightings(*pOpponent))
 		{
 			// if this opponent is on the same team, he's no opponent, so skip him
 			if (pSoldier->bTeam == pOpponent->bTeam)
@@ -4515,7 +4470,7 @@ void VerifyPublicOpplistDueToDeath(SOLDIERTYPE *pSoldier)
 				{
 					const SOLDIERTYPE* const pTeamMate = *j;
 					// if this teammate is active, here, and alive
-					if (pTeamMate->bLife)
+					if (IsSoldierValidForSightings(*pTeamMate))
 					{
 						// if this opponent is NOT on the same team, then skip him
 						if (pTeamMate->bTeam != pSoldier->bTeam)
@@ -4542,7 +4497,7 @@ void VerifyPublicOpplistDueToDeath(SOLDIERTYPE *pSoldier)
 			// if no witnesses for this opponent, then decay the Public Opplist
 			if ( !bOpponentStillSeen )
 			{
-				DECAY_OPPLIST_VALUE( gbPublicOpplist[pSoldier->bTeam][pOpponent->ubID] );
+				DecayOppListValue(gbPublicOpplist[pSoldier->bTeam][pOpponent->ubID]);
 			}
 		}
 	}
@@ -4554,9 +4509,6 @@ static void DecayWatchedLocs(INT8 bTeam);
 
 void DecayPublicOpplist(INT8 bTeam)
 {
-	INT8 bNoPubliclyKnownOpponents = TRUE;
-	INT8 *pbPublOL;
-
 	// decay the team's public noise volume, forget public noise gridno if <= 0
 	// used to be -1 per turn but that's not fast enough!
 	if (gubPublicNoiseVolume[bTeam] > 0)
@@ -4577,6 +4529,7 @@ void DecayPublicOpplist(INT8 bTeam)
 	}
 
 	// decay the team's Public Opplist
+	bool bNoPubliclyKnownOpponents = true;
 	FOR_EACH_MERC(i)
 	{
 		SOLDIERTYPE* const pSoldier = *i;
@@ -4584,32 +4537,18 @@ void DecayPublicOpplist(INT8 bTeam)
 		if (pSoldier->bLife && pSoldier->bTeam != bTeam)
 		{
 			// hang a pointer to the byte holding team's public opplist for this merc
-			pbPublOL = &gbPublicOpplist[bTeam][pSoldier->ubID];
+			INT8& pbPublOL = gbPublicOpplist[bTeam][pSoldier->ubID];
 
-			if (*pbPublOL == NOT_HEARD_OR_SEEN)
+			if (pbPublOL == NOT_HEARD_OR_SEEN)
 			{
 				continue;
 			}
 
 			// well, that make this a "publicly known opponent", so nuke that flag
-			bNoPubliclyKnownOpponents = FALSE;
-
-			// if this person has been SEEN recently, but is not currently visible
-			if (*pbPublOL >= SEEN_THIS_TURN)
-			{
-				(*pbPublOL)++; // increment how long it's been
-			}
-			else
-			{
-				// if this person has been only HEARD recently
-				if (*pbPublOL <= HEARD_THIS_TURN)
-				{
-					(*pbPublOL)--; // increment how long it's been
-				}
-			}
+			bNoPubliclyKnownOpponents = false;
 
 			// if it's been longer than the maximum we care to remember
-			if ((*pbPublOL > OLDEST_SEEN_VALUE) || (*pbPublOL < OLDEST_HEARD_VALUE))
+			if (DecayOppListValue(pbPublOL))
 			{
 				// forget about him,
 				// and also forget where he was last seen (it's been too long)
@@ -4812,9 +4751,8 @@ void NoticeUnseenAttacker( SOLDIERTYPE * pAttacker, SOLDIERTYPE * pDefender, INT
 
 	if (StandardInterruptConditionsMet(pDefender, pAttacker, bOldOppList))
 	{
-		SLOGD(DEBUG_TAG_OPPLIST,
-			"INTERRUPT: NoticeUnseenAttacker, standard\
-			conditions are met; defender %d, attacker %d\n\
+		SLOGD("INTERRUPT: NoticeUnseenAttacker, standard\
+			conditions are met; defender {}, attacker {}\n\
 			Calculating int duel pts for defender in NUA",
 			pDefender->ubID, pAttacker->ubID);
 
@@ -4834,21 +4772,19 @@ void NoticeUnseenAttacker( SOLDIERTYPE * pAttacker, SOLDIERTYPE * pDefender, INT
 		// this code is basically ResolveInterruptsVs for 1 man only...
 
 		// calculate active soldier's dueling pts for the upcoming interrupt duel
-		SLOGD(DEBUG_TAG_OPPLIST, "Calculating int duel pts for attacker in NUA");
+		SLOGD("Calculating int duel pts for attacker in NUA");
 		pAttacker->bInterruptDuelPts = CalcInterruptDuelPts(pAttacker, pDefender, FALSE);
 		if ( InterruptDuel( pDefender, pAttacker ) )
 		{
-			SLOGD(DEBUG_TAG_OPPLIST,
-				"INTERRUPT: NoticeUnseenAttacker, defender\
-				pts %d, attacker pts %d, defender gets interrupt",
+			SLOGD("INTERRUPT: NoticeUnseenAttacker, defender\
+				pts {}, attacker pts {}, defender gets interrupt",
 				pDefender->bInterruptDuelPts, pAttacker->bInterruptDuelPts);
 			AddToIntList(pAttacker, FALSE, TRUE);
 			AddToIntList(pDefender, TRUE,  TRUE);
 			DoneAddingToIntList();
 		}
 		// either way, clear out both sides' duelPts fields to prepare next duel
-		SLOGD(DEBUG_TAG_OPPLIST, "Resetting int pts for %d and %d in NUA",
-			pDefender->ubID, pAttacker->ubID );
+		SLOGD("Resetting int pts for {} and {} in NUA", pDefender->ubID, pAttacker->ubID);
 		pDefender->bInterruptDuelPts = NO_INTERRUPT;
 		pAttacker->bInterruptDuelPts = NO_INTERRUPT;
 	}
@@ -4862,8 +4798,8 @@ void CheckForAlertWhenEnemyDies(SOLDIERTYPE* pDyingSoldier)
 
 	FOR_EACH_IN_TEAM(pSoldier, pDyingSoldier->bTeam)
 	{
-		if (pSoldier->bInSector && pSoldier != pDyingSoldier && pSoldier->bLife >= OKLIFE &&
-			pSoldier->bAlertStatus < STATUS_RED)
+		if (IsSoldierValidForSightings(*pSoldier) && pSoldier != pDyingSoldier &&
+		    pSoldier->bLife >= OKLIFE && pSoldier->bAlertStatus < STATUS_RED)
 		{
 			// this guy might have seen the man die
 
@@ -4897,8 +4833,8 @@ bool MercSeesCreature(SOLDIERTYPE const& s)
 	CFOR_EACH_IN_TEAM(i, CREATURE_TEAM)
 	{
 		SOLDIERTYPE const& tgt = *i;
-		if (!tgt.uiStatusFlags & SOLDIER_MONSTER) continue;
-		if (!s.bOppList[tgt.ubID])                continue;
+		if (!(tgt.uiStatusFlags & SOLDIER_MONSTER)) continue;
+		if (!s.bOppList[tgt.ubID])                  continue;
 		return true;
 	}
 	return false;
@@ -4961,7 +4897,7 @@ INT8 GetWatchedLocPoints( UINT8 ubID, INT16 sGridNo, INT8 bLevel )
 	{
 		if (gubWatchedLocPoints[ ubID ][ bLoc ] > 1)
 		{
-			SLOGD(DEBUG_TAG_OPPLIST, "Soldier %d getting %d points for interrupt in watched location", ubID, gubWatchedLocPoints[ ubID ][ bLoc ] - 1 );
+			SLOGD("Soldier {} getting {} points for interrupt in watched location", ubID, gubWatchedLocPoints[ ubID ][ bLoc ] - 1);
 		}
 		// one loc point is worth nothing, so return number minus 1
 
@@ -5026,7 +4962,7 @@ static void CommunicateWatchedLoc(const SOLDIERTYPE* const watcher, const INT16 
 	CFOR_EACH_IN_TEAM(s, bTeam)
 	{
 		if (s == watcher) continue;
-		if (!s->bInSector || s->bLife < OKLIFE)
+		if (!IsSoldierValidForSightings(*s) || s->bLife < OKLIFE)
 		{
 			continue;
 		}
@@ -5054,7 +4990,7 @@ static void CommunicateWatchedLoc(const SOLDIERTYPE* const watcher, const INT16 
 		else
 		{
 			// increment to max
-			gubWatchedLocPoints[ ubLoop ][ bLoopPoint ] = __max( gubWatchedLocPoints[ ubLoop ][ bLoopPoint ], ubPoints );
+			gubWatchedLocPoints[ ubLoop ][ bLoopPoint ] = std::max(gubWatchedLocPoints[ ubLoop ][ bLoopPoint ], ubPoints);
 
 			gfWatchedLocReset[ ubLoop ][ bLoopPoint ] = FALSE;
 			gfWatchedLocHasBeenIncremented[ ubLoop ][ bLoopPoint ] = TRUE;
@@ -5180,7 +5116,7 @@ static void MakeBloodcatsHostile(void)
 {
 	FOR_EACH_IN_TEAM(s, CREATURE_TEAM)
 	{
-		if (s->ubBodyType == BLOODCAT && s->bInSector && s->bLife > 0)
+		if (s->ubBodyType == BLOODCAT && IsSoldierValidForSightings(*s))
 		{
 			SetSoldierNonNeutral(s);
 			RecalculateOppCntsDueToNoLongerNeutral(s);

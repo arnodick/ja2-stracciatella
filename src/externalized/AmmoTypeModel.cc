@@ -1,42 +1,38 @@
 #include "AmmoTypeModel.h"
-
-#include <stdexcept>
-
-#include "sgp/StrUtils.h"
-
 #include "JsonObject.h"
+#include <stdint.h>
+#include <stdexcept>
+#include <utility>
+#include <string_theory/format>
 
-AmmoTypeModel::AmmoTypeModel(uint16_t index_,
-				const char* internalName_)
-	:index(index_), internalName(internalName_)
+AmmoTypeModel::AmmoTypeModel(uint16_t index_, ST::string && internalName_)
+	:index(index_), internalName(std::move(internalName_))
 {
 }
 
-// This could be default in C++11
-AmmoTypeModel::~AmmoTypeModel() {}
+AmmoTypeModel::~AmmoTypeModel() = default;
 
 void AmmoTypeModel::serializeTo(JsonObject &obj) const
 {
 	obj.AddMember("index",                index);
-	obj.AddMember("internalName",         internalName.c_str());
+	obj.AddMember("internalName",         internalName);
 }
 
 AmmoTypeModel* AmmoTypeModel::deserialize(JsonObjectReader &obj)
 {
 	int index = obj.GetInt("index");
-	const char *internalName = obj.GetString("internalName");
-	return new AmmoTypeModel(index, internalName);
+	return new AmmoTypeModel(index, obj.GetString("internalName"));
 }
 
 
-const AmmoTypeModel* getAmmoType(const char *ammoTypeName,
-					const std::map<std::string, const AmmoTypeModel*> &ammoTypeMap)
+const AmmoTypeModel* getAmmoType(const ST::string& ammoTypeName,
+					const std::map<ST::string, const AmmoTypeModel*> &ammoTypeMap)
 {
-	std::map<std::string, const AmmoTypeModel*>::const_iterator it = ammoTypeMap.find(ammoTypeName);
+	auto it = ammoTypeMap.find(ammoTypeName);
 	if(it != ammoTypeMap.end())
 	{
 		return it->second;
 	}
 
-	throw std::runtime_error(FormattedString("ammoType '%s' is not found", ammoTypeName));
+	throw std::runtime_error(ST::format("ammoType '{}' is not found", ammoTypeName).to_std_string());
 }

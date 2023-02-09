@@ -3,6 +3,8 @@
 
 #include "Types.h"
 
+#include <string_theory/string>
+
 
 #define NUM_SEC_IN_DAY		86400
 #define NUM_SEC_IN_HOUR		3600
@@ -24,26 +26,24 @@
 
 enum LockPauseReason
 {
-	LOCK_PAUSE_01 =  1,
-	LOCK_PAUSE_02 =  2,
-	LOCK_PAUSE_04 =  4,
-	LOCK_PAUSE_05 =  5,
-	LOCK_PAUSE_06 =  6,
-	LOCK_PAUSE_07 =  7,
-	LOCK_PAUSE_08 =  8,
-	LOCK_PAUSE_09 =  9,
-	LOCK_PAUSE_10 = 10,
-	LOCK_PAUSE_11 = 11,
-	LOCK_PAUSE_12 = 12,
-	LOCK_PAUSE_13 = 13,
-	LOCK_PAUSE_14 = 14,
-	LOCK_PAUSE_15 = 15,
-	LOCK_PAUSE_16 = 16,
-	LOCK_PAUSE_17 = 17,
-	LOCK_PAUSE_18 = 18,
-	LOCK_PAUSE_19 = 19,
-	LOCK_PAUSE_20 = 20,
-	LOCK_PAUSE_21 = 21
+	LOCK_PAUSE_MSGBOX =  1,
+	LOCK_PAUSE_CREATURE_ATTACK =  2,
+	LOCK_PAUSE_DISPLAY_SOLDIER_UPDATE =  4,
+	LOCK_PAUSE_CREATE_SOLDIER_UPDATE =  5,
+	LOCK_PAUSE_MEANWHILE =  6,
+	LOCK_PAUSE_CONTRACT_RENEWAL =  7,
+	LOCK_PAUSE_CONTRACT_ENDING =  8,
+	LOCK_PAUSE_PREBATTLE_CURRENT_SQUAD = 11,
+	LOCK_PAUSE_PREBATTLE = 12,
+	LOCK_PAUSE_SIMULTANEOUS_ARRIVAL = 13,
+	LOCK_PAUSE_ENGAGED_IN_CONV = 14,
+	LOCK_PAUSE_MERC_TALKING = 15,
+	LOCK_PAUSE_LOCKUI_MODE = 16,
+	LOCK_PAUSE_LOCKOURTURN_UI_MODE = 17,
+	LOCK_PAUSE_ITEM_PICKUP = 18,
+	LOCK_PAUSE_DOOR_OPEN = 19,
+	LOCK_PAUSE_START_HELI = 20,
+	LOCK_PAUSE_SECTOR_EXIT = 21
 };
 
 //PAUSE FEATURES
@@ -116,15 +116,16 @@ enum
 void WarpGameTime( UINT32 uiAdjustment, UINT8 ubWarpCode );
 
 
-void AdvanceToNextDay(void);
-
 //This function is called once per cycle in the game loop.  This determine how often the clock should be
 //as well as how much to update the clock by.
 void UpdateClock(void);
 
+// Call this function after modifying guiGameClock.
+void UpdateGameClockGlobals(ST::string const& dayStringToUse);
 
-extern wchar_t gswzWorldTimeStr[ 20 ]; //Day 99, 23:55
+extern ST::string gswzWorldTimeStr; //Day 99, 23:55
 
+extern	UINT32			guiGameClock;
 extern	UINT32			guiDay;
 extern	UINT32			guiHour;
 extern	UINT32			guiMin;
@@ -141,9 +142,6 @@ extern UINT32				guiTimeCurrentSectorWasLastLoaded;
 
 // is the current pause state due to the player?
 extern BOOLEAN gfPauseDueToPlayerGamePause;
-
-// we've just clued up a pause by the player, the tactical screen will need a full one shot refresh to remove a 2 frame update problem
-extern BOOLEAN gfJustFinishedAPause;
 
 extern BOOLEAN gfResetAllPlayerKnowsEnemiesFlags;
 

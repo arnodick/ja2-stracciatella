@@ -5,6 +5,10 @@
 #include "Item_Types.h"
 #include "Types.h"
 
+#include <string_theory/string>
+
+#include <vector>
+
 
 struct KEY
 {
@@ -27,7 +31,7 @@ struct KEY
 #define MAXLOCKDESCLENGTH		40
 struct LOCK
 {
-	UINT8  ubEditorName[ MAXLOCKDESCLENGTH ]; // name to display in editor
+	CHAR8  ubEditorName[ MAXLOCKDESCLENGTH ]; // name to display in editor
 	UINT16 usKeyItem; // key for this door uses which graphic (item #)?
 	UINT8  ubLockType; // regular, padlock, electronic, etc
 	UINT8  ubPickDifficulty; // difficulty to pick such a lock
@@ -57,6 +61,11 @@ struct DOOR
 	INT8    bPerceivedTrapped; // See above, but with respect to traps rather than locked status
 	INT8    bLockDamage; // Damage to the lock
 	INT8    bPadding[4]; // extra bytes // XXX HACK000B
+
+	// Damage the door's lock by the given amount. Removes the door from the door table
+	// and displays a message if the lock was destroyed.
+	// Returns true if the lock was destroyed, false otherwise.
+	bool damageLock(int const additionalDamage);
 };
 
 
@@ -129,15 +138,13 @@ bool SoldierHasKey(SOLDIERTYPE const&, UINT8 key_id);
 //Dynamic array of Doors.  For general game purposes, the doors that are locked and/or trapped
 //are permanently saved within the map, and are loaded and allocated when the map is loaded.  Because
 //the editor allows more doors to be added, or removed, the actual size of the DoorTable may change.
-extern DOOR *DoorTable;
+extern std::vector<DOOR> DoorTable;
 
-//Current number of doors in world.
-extern UINT8 gubNumDoors;
 //File I/O for loading the door information from the map.  This automatically allocates
 //the exact number of slots when loading.
 
 #define FOR_EACH_DOOR(iter) \
-	for (DOOR* iter = DoorTable, * const iter##__end = iter + gubNumDoors; iter != iter##__end; ++iter)
+	for (DOOR& iter : DoorTable)
 
 void LoadDoorTableFromMap(HWFILE);
 
@@ -158,7 +165,7 @@ DOOR * FindDoorInfoAtGridNo( INT32 iMapIndex );
 //Upon world deallocation, the door table needs to be deallocated.
 void TrashDoorTable(void);
 
-wchar_t const* GetTrapName(DOOR const&);
+ST::string GetTrapName(DOOR const&);
 
 BOOLEAN AttemptToUnlockDoor(const SOLDIERTYPE* pSoldier, DOOR* pDoor);
 BOOLEAN AttemptToLockDoor(const SOLDIERTYPE* pSoldier, DOOR* pDoor);
@@ -176,7 +183,7 @@ void UpdateDoorPerceivedValue( DOOR *pDoor );
 
 
 //Saves the Door Table array to the temp file
-void SaveDoorTableToDoorTableTempFile(INT16 sSectorX, INT16 sSectorY, INT8 bSectorZ);
+void SaveDoorTableToDoorTableTempFile(const SGPSector& sector);
 
 //Load the door table from the temp file
 void LoadDoorTableFromDoorTableTempFile(void);
@@ -192,7 +199,7 @@ bool ModifyDoorStatus(GridNo, BOOLEAN is_open, BOOLEAN perceived_open);
 void TrashDoorStatusArray(void);
 
 // Saves the Door Status array to the MapTempfile
-void SaveDoorStatusArrayToDoorStatusTempFile(INT16 sSectorX, INT16 sSectorY, INT8 bSectorZ);
+void SaveDoorStatusArrayToDoorStatusTempFile(const SGPSector& sector);
 
 //Load the door status from the door status temp file
 void LoadDoorStatusArrayFromDoorStatusTempFile();

@@ -1,74 +1,78 @@
 #include "CalibreModel.h"
-
-#include <stdexcept>
-
-#include "game/Utils/Text.h"
-#include "sgp/StrUtils.h"
-#include "sgp/UTF8String.h"
-
-#include "JsonObject.h"
-
 #include "ContentManager.h"
 #include "GameInstance.h"
+#include "JsonObject.h"
+#include "Text.h"
+#include <string_theory/format>
+#include <string_theory/string>
+#include <stdexcept>
+#include <utility>
 
 CalibreModel::CalibreModel(uint16_t index_,
-				const char* internalName_,
-				const char* burstSoundString_,
+				ST::string internalName_,
+				ST::string sound_,
+				ST::string burstSound_,
+				ST::string silencedSound_,
+				ST::string silencedBurstSound_,
 				bool showInHelpText_,
-				bool monsterWeapon_,
-				int silencerSound_)
-	:index(index_), internalName(internalName_),
-	burstSoundString(burstSoundString_),
+				bool monsterWeapon_)
+	:index(index_), internalName(std::move(internalName_)),
+	sound(sound_),
+	burstSound(burstSound_),
+	silencedSound(silencedSound_),
+	silencedBurstSound(silencedBurstSound_),
 	showInHelpText(showInHelpText_),
-	monsterWeapon(monsterWeapon_),
-	silencerSound(silencerSound_)
+	monsterWeapon(monsterWeapon_)
 {
 }
 
-CalibreModel::~CalibreModel() {}
+CalibreModel::~CalibreModel() = default;
 
 void CalibreModel::serializeTo(JsonObject &obj) const
 {
-	obj.AddMember("index",                index);
-	obj.AddMember("internalName",         internalName.c_str());
-	obj.AddMember("burstSoundString",     burstSoundString.c_str());
-	obj.AddMember("showInHelpText",       showInHelpText);
-	obj.AddMember("monsterWeapon",        monsterWeapon);
-	obj.AddMember("silencerSound",        silencerSound);
+	obj.AddMember("index",              index);
+	obj.AddMember("internalName",       internalName);
+	obj.AddMember("sound",              sound);
+	obj.AddMember("burstSound",         burstSound);
+	obj.AddMember("silencedSound",      silencedSound);
+	obj.AddMember("silencedBurstSound", silencedBurstSound);
+	obj.AddMember("showInHelpText",     showInHelpText);
+	obj.AddMember("monsterWeapon",      monsterWeapon);
 }
 
 CalibreModel* CalibreModel::deserialize(JsonObjectReader &obj)
 {
 	int index = obj.GetInt("index");
-	const char *internalName = obj.GetString("internalName");
-	const char *burstSoundString = obj.GetString("burstSoundString");
-	return new CalibreModel(index, internalName, burstSoundString,
+	ST::string internalName = obj.GetString("internalName");
+	ST::string sound = obj.getOptionalString("sound");
+	ST::string burstSound = obj.getOptionalString("burstSound");
+	ST::string silencedSound = obj.getOptionalString("silencedSound");
+	ST::string silencedBurstSound = obj.getOptionalString("silencedBurstSound");
+	return new CalibreModel(index, internalName, sound, burstSound, silencedSound, silencedBurstSound,
 				obj.GetBool("showInHelpText"),
-				obj.GetBool("monsterWeapon"),
-				obj.GetInt("silencerSound")
+				obj.GetBool("monsterWeapon")
 );
 }
 
-const wchar_t* CalibreModel::getName() const
+const ST::string* CalibreModel::getName() const
 {
-	return &GCM->getCalibreName(index)->getWCHAR()[0];
+	return GCM->getCalibreName(index);
 }
 
 const CalibreModel* CalibreModel::getNoCalibreObject()
 {
-	static CalibreModel noCalibre(NOAMMO, "NO CALIBRE", "", false, false, -1);
+	static CalibreModel noCalibre(NOAMMO, "NO CALIBRE", "", "", "", "", false, false);
 	return &noCalibre;
 }
 
-
-const CalibreModel* getCalibre(const char *calibreName,
-				const std::map<std::string, const CalibreModel*> &calibreMap)
+const CalibreModel* getCalibre(const ST::string& calibreName,
+				const std::map<ST::string, const CalibreModel*> &calibreMap)
 {
-	std::map<std::string, const CalibreModel*>::const_iterator it = calibreMap.find(calibreName);
+	auto it = calibreMap.find(calibreName);
 	if(it != calibreMap.end())
 	{
 		return it->second;
 	}
 
-	throw std::runtime_error(FormattedString("calibre '%s' is not found", calibreName));
+	throw std::runtime_error(ST::format("calibre '{}' is not found", calibreName).to_std_string());
 }

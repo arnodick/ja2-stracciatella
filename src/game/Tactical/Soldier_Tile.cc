@@ -4,7 +4,6 @@
 #include "Timer_Control.h"
 #include "Render_Fun.h"
 #include "Debug.h"
-#include "MemMan.h"
 #include "Overhead_Types.h"
 #include "Soldier_Control.h"
 #include "Animation_Cache.h"
@@ -24,6 +23,7 @@
 #include "OppList.h"
 #include "AI.h"
 #include "Faces.h"
+#include "Soldier_Macros.h"
 #include "Soldier_Profile.h"
 #include "Campaign.h"
 #include "Structure_Wrap.h"
@@ -35,7 +35,8 @@
 #include "Message.h"
 #include "Text.h"
 #include "NPC.h"
-#include "slog/slog.h"
+#include "Logger.h"
+#include <algorithm>
 
 #define NEXT_TILE_CHECK_DELAY 700
 
@@ -80,7 +81,7 @@ static void SetFinalTile(SOLDIERTYPE* pSoldier, INT16 sGridNo, BOOLEAN fGivenUp)
 
 	if ( pSoldier->bTeam == OUR_TEAM  && fGivenUp )
 	{
-		ScreenMsg( FONT_MCOLOR_LTYELLOW, MSG_INTERFACE, TacticalStr[ NO_PATH_FOR_MERC ], pSoldier->name );
+		ScreenMsg( FONT_MCOLOR_LTYELLOW, MSG_INTERFACE, st_format_printf(TacticalStr[ NO_PATH_FOR_MERC ], pSoldier->name) );
 	}
 
 	EVENT_StopMerc(pSoldier);
@@ -497,7 +498,7 @@ void HandleNextTileWaiting(SOLDIERTYPE* const pSoldier)
 				if ( sCost > 0 )
 				{
 					// Is the next tile blocked too?
-					sNewGridNo = NewGridNo( (UINT16)pSoldier->sGridNo, DirectionInc( guiPathingData[ 0 ] ) );
+					sNewGridNo = NewGridNo(pSoldier->sGridNo, DirectionInc(guiPathingData[0]));
 
 					bPathBlocked = TileIsClear( pSoldier, guiPathingData[ 0 ], sNewGridNo, pSoldier->bLevel );
 
@@ -510,12 +511,12 @@ void HandleNextTileWaiting(SOLDIERTYPE* const pSoldier)
 							gfPlotPathToExitGrid = TRUE;
 						}
 
-						sCost = (INT16) FindBestPath( pSoldier, sCheckGridNo, pSoldier->bLevel, pSoldier->usUIMovementMode, NO_COPYROUTE, PATH_IGNORE_PERSON_AT_DEST );
+						FindBestPath(pSoldier, sCheckGridNo, pSoldier->bLevel, pSoldier->usUIMovementMode, NO_COPYROUTE, PATH_IGNORE_PERSON_AT_DEST);
 
 						gfPlotPathToExitGrid = FALSE;
 
 						// Is the next tile in this new path blocked too?
-						sNewGridNo = NewGridNo( (UINT16)pSoldier->sGridNo, DirectionInc( guiPathingData[ 0 ] ) );
+						sNewGridNo = NewGridNo(pSoldier->sGridNo, DirectionInc(guiPathingData[0]));
 
 						bPathBlocked = TileIsClear( pSoldier, guiPathingData[ 0 ], sNewGridNo, pSoldier->bLevel );
 
@@ -600,7 +601,10 @@ void HandleNextTileWaiting(SOLDIERTYPE* const pSoldier)
 								// check to see if we're there now!
 								if (pSoldier->sGridNo == pSoldier->sAbsoluteFinalDestination)
 								{
-									NPCReachedDestination(pSoldier, FALSE);
+									if (pSoldier->ubProfile != NO_PROFILE)
+									{
+										NPCReachedDestination(pSoldier, FALSE);
+									}
 									pSoldier->bNextAction = AI_ACTION_WAIT;
 									pSoldier->usNextActionData = 500;
 									return;
@@ -661,26 +665,27 @@ bool TeleportSoldier(SOLDIERTYPE& s, GridNo const gridno, bool const force)
 void SwapMercPositions(SOLDIERTYPE& s1, SOLDIERTYPE& s2)
 {
 	// Save positions
-	GridNo const gridno1 = s1.sGridNo;
-	GridNo const gridno2 = s2.sGridNo;
+	GridNo gridno1 = s1.sGridNo;
+	GridNo gridno2 = s2.sGridNo;
 
 	// Remove each
 	RemoveSoldierFromGridNo(s1);
 	RemoveSoldierFromGridNo(s2);
 
 	// Test OK destination for each
-	if (NewOKDestination(&s1, gridno2, TRUE, 0) && NewOKDestination(&s2, gridno1, TRUE, 0))
+	bool const canSwap = NewOKDestination(&s1, gridno2, TRUE, 0) && NewOKDestination(&s2, gridno1, TRUE, 0);
+	if (canSwap)
 	{
-		// Call teleport function for each
-		TeleportSoldier(s1, gridno2, false);
-		TeleportSoldier(s2, gridno1, false);
+		std::swap(gridno1, gridno2);
 	}
-	else
-	{
-		// Place back
-		TeleportSoldier(s1, gridno1, true);
-		TeleportSoldier(s2, gridno2, true);
-	}
+	// else both soldiers will be reinserted at their old position
+
+	// We must first call EVENT_SetSoldierPosition for one soldier because we currently have
+	// two soldiers at NOWHERE and cannot call HandleSight in TeleportSoldier (#1607)
+	EVENT_SetSoldierPosition(&s2, gridno2, SSP_NONE);
+	TeleportSoldier(s1, gridno1, !canSwap);
+	// Now both soldiers have a valid gridno and we can fully update the status of the second
+	TeleportSoldier(s2, gridno2, !canSwap);
 }
 
 
@@ -699,6 +704,12 @@ BOOLEAN CanExchangePlaces( SOLDIERTYPE *pSoldier1, SOLDIERTYPE *pSoldier2, BOOLE
 			if ( ( gAnimControl[ pSoldier1->usAnimState ].uiFlags & ANIM_MOVING ) && !(gTacticalStatus.uiFlags & INCOMBAT) )
 			{
 				return( FALSE );
+			}
+
+			if (!InternalIsValidStance(pSoldier1, pSoldier2->bDirection, GetStance(*pSoldier2)) ||
+			    !InternalIsValidStance(pSoldier2, pSoldier1->bDirection, GetStance(*pSoldier1)))
+			{
+				return false;
 			}
 
 			if ( pSoldier2->bSide == 0 )
@@ -733,7 +744,7 @@ BOOLEAN CanExchangePlaces( SOLDIERTYPE *pSoldier1, SOLDIERTYPE *pSoldier2, BOOLE
 				else
 				{
 					ScreenMsg(FONT_MCOLOR_LTYELLOW, MSG_UI_FEEDBACK,
-							gzLateLocalizedString[STR_LATE_03], pSoldier2->name);
+							st_format_printf(gzLateLocalizedString[STR_LATE_03], pSoldier2->name));
 				}
 			}
 		}

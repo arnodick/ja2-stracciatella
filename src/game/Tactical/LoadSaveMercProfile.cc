@@ -1,11 +1,13 @@
-#include <stdexcept>
-
 #include "Debug.h"
 #include "FileMan.h"
 #include "LoadSaveData.h"
 #include "LoadSaveMercProfile.h"
 #include "Tactical_Save.h"
-#include "UTF8String.h"
+
+#include <string_theory/string>
+
+#include <stdexcept>
+
 
 /** Calculates soldier profile checksum. */
 UINT32 SoldierProfileChecksum(MERCPROFILESTRUCT const& p)
@@ -36,29 +38,25 @@ UINT32 SoldierProfileChecksum(MERCPROFILESTRUCT const& p)
 void ExtractMercProfile(BYTE const* const Src, MERCPROFILESTRUCT& p, bool stracLinuxFormat, UINT32 *checksum,
 			const IEncodingCorrector *fixer)
 {
-	const BYTE* S = Src;
+	DataReader S{Src};
 
 	if(stracLinuxFormat)
 	{
-		DataReader reader(S);
-		reader.readUTF32(p.zName,     NAME_LENGTH);
-		reader.readUTF32(p.zNickname, NICKNAME_LENGTH);
-		S += reader.getConsumed();
+		p.zName = S.readUTF32(NAME_LENGTH);
+		p.zNickname = S.readUTF32(NICKNAME_LENGTH);
 	}
 	else
 	{
-		DataReader reader(S);
-		reader.readUTF16(p.zName,     NAME_LENGTH,          fixer);
-		reader.readUTF16(p.zNickname, NICKNAME_LENGTH,      fixer);
-		S += reader.getConsumed();
+		p.zName = S.readUTF16(NAME_LENGTH, fixer);
+		p.zNickname = S.readUTF16(NICKNAME_LENGTH, fixer);
 	}
 
 	EXTR_SKIP(S, 28)
 	EXTR_U8(S, p.ubFaceIndex)
-	EXTR_STR(S, p.PANTS, lengthof(p.PANTS))
-	EXTR_STR(S, p.VEST, lengthof(p.VEST))
-	EXTR_STR(S, p.SKIN, lengthof(p.SKIN))
-	EXTR_STR(S, p.HAIR, lengthof(p.HAIR))
+	p.PANTS = S.readUTF8(PaletteRepID_LENGTH, ST::substitute_invalid);
+	p.VEST = S.readUTF8(PaletteRepID_LENGTH, ST::substitute_invalid);
+	p.SKIN = S.readUTF8(PaletteRepID_LENGTH, ST::substitute_invalid);
+	p.HAIR = S.readUTF8(PaletteRepID_LENGTH, ST::substitute_invalid);
 	EXTR_I8(S, p.bSex)
 	EXTR_I8(S, p.bArmourAttractiveness)
 	EXTR_U8(S, p.ubMiscFlags2)
@@ -88,8 +86,8 @@ void ExtractMercProfile(BYTE const* const Src, MERCPROFILESTRUCT& p, bool stracL
 	EXTR_SKIP(S, 10)
 	EXTR_U32(S, p.uiBlinkFrequency)
 	EXTR_U32(S, p.uiExpressionFrequency)
-	EXTR_U16(S, p.sSectorX)
-	EXTR_U16(S, p.sSectorY)
+	EXTR_U16(S, p.sSector.x)
+	EXTR_U16(S, p.sSector.y)
 	EXTR_U32(S, p.uiDayBecomesAvailable)
 	EXTR_I8(S, p.bStrength)
 	EXTR_I8(S, p.bLifeMax)
@@ -186,7 +184,7 @@ void ExtractMercProfile(BYTE const* const Src, MERCPROFILESTRUCT& p, bool stracL
 	EXTR_I8(S, p.bLearnToHateCount)
 	EXTR_U8(S, p.ubLastDateSpokenTo)
 	EXTR_U8(S, p.bLastQuoteSaidWasSpecial)
-	EXTR_I8(S, p.bSectorZ)
+	EXTR_I8(S, p.sSector.z)
 	EXTR_U16(S, p.usStrategicInsertionData)
 	EXTR_I8(S, p.bFriendlyOrDirectDefaultResponseUsedRecently)
 	EXTR_I8(S, p.bRecruitDefaultResponseUsedRecently)
@@ -211,11 +209,11 @@ void ExtractMercProfile(BYTE const* const Src, MERCPROFILESTRUCT& p, bool stracL
 	EXTR_SKIP(S, 4)
 	if(stracLinuxFormat)
 	{
-		Assert(S == Src + MERC_PROFILE_SIZE_STRAC_LINUX);
+		Assert(S.getConsumed() == MERC_PROFILE_SIZE_STRAC_LINUX);
 	}
 	else
 	{
-		Assert(S == Src + MERC_PROFILE_SIZE);
+		Assert(S.getConsumed() == MERC_PROFILE_SIZE);
 	}
 }
 
@@ -224,13 +222,13 @@ void ExtractMercProfile(BYTE const* const Src, MERCPROFILESTRUCT& p, bool stracL
 * If saved checksum is not correct, exception will be thrown. */
 void ExtractImpProfileFromFile(SGPFile *hFile, INT32 *iProfileId, INT32 *iPortraitNumber, MERCPROFILESTRUCT& p)
 {
-	UINT32 fileSize = FileGetSize(hFile);
+	UINT32 fileSize = hFile->size();
 
 	// read in the profile
-	FileRead(hFile, iProfileId, sizeof(INT32));
+	hFile->read(iProfileId, sizeof(INT32));
 
 	// read in the portrait
-	FileRead(hFile, iPortraitNumber, sizeof(INT32));
+	hFile->read(iPortraitNumber, sizeof(INT32));
 
 	// read in the profile
 	// not checking the checksum
@@ -238,13 +236,13 @@ void ExtractImpProfileFromFile(SGPFile *hFile, INT32 *iProfileId, INT32 *iPortra
 	if(fileSize >= MERC_PROFILE_SIZE_STRAC_LINUX)
 	{
 		std::vector<BYTE> data(MERC_PROFILE_SIZE_STRAC_LINUX);
-		FileRead(hFile, data.data(), MERC_PROFILE_SIZE_STRAC_LINUX);
+		hFile->read(data.data(), MERC_PROFILE_SIZE_STRAC_LINUX);
 		ExtractMercProfile(data.data(), p, true, &checksum, NULL);
 	}
 	else
 	{
 		std::vector<BYTE> data(MERC_PROFILE_SIZE);
-		FileRead(hFile, data.data(), MERC_PROFILE_SIZE);
+		hFile->read(data.data(), MERC_PROFILE_SIZE);
 		ExtractMercProfile(data.data(), p, false, &checksum, NULL);
 	}
 }
@@ -252,20 +250,16 @@ void ExtractImpProfileFromFile(SGPFile *hFile, INT32 *iProfileId, INT32 *iPortra
 
 void InjectMercProfile(BYTE* const Dst, MERCPROFILESTRUCT const& p)
 {
-	BYTE* D = Dst;
+	DataWriter D(Dst);
 
-	{
-		DataWriter writer(D);
-		writer.writeStringAsUTF16(p.zName, lengthof(p.zName));
-		writer.writeStringAsUTF16(p.zNickname, lengthof(p.zNickname));
-		D += writer.getConsumed();
-	}
+	D.writeUTF16(p.zName, NAME_LENGTH);
+	D.writeUTF16(p.zNickname, NICKNAME_LENGTH);
 	INJ_SKIP(D, 28)
 	INJ_U8(D, p.ubFaceIndex)
-	INJ_STR(D, p.PANTS, lengthof(p.PANTS))
-	INJ_STR(D, p.VEST, lengthof(p.VEST))
-	INJ_STR(D, p.SKIN, lengthof(p.SKIN))
-	INJ_STR(D, p.HAIR, lengthof(p.HAIR))
+	D.writeUTF8(p.PANTS, PaletteRepID_LENGTH);
+	D.writeUTF8(p.VEST, PaletteRepID_LENGTH);
+	D.writeUTF8(p.SKIN, PaletteRepID_LENGTH);
+	D.writeUTF8(p.HAIR, PaletteRepID_LENGTH);
 	INJ_I8(D, p.bSex)
 	INJ_I8(D, p.bArmourAttractiveness)
 	INJ_U8(D, p.ubMiscFlags2)
@@ -295,8 +289,8 @@ void InjectMercProfile(BYTE* const Dst, MERCPROFILESTRUCT const& p)
 	INJ_SKIP(D, 10)
 	INJ_U32(D, p.uiBlinkFrequency)
 	INJ_U32(D, p.uiExpressionFrequency)
-	INJ_U16(D, p.sSectorX)
-	INJ_U16(D, p.sSectorY)
+	INJ_U16(D, p.sSector.x)
+	INJ_U16(D, p.sSector.y)
 	INJ_U32(D, p.uiDayBecomesAvailable)
 	INJ_I8(D, p.bStrength)
 	INJ_I8(D, p.bLifeMax)
@@ -393,7 +387,7 @@ void InjectMercProfile(BYTE* const Dst, MERCPROFILESTRUCT const& p)
 	INJ_I8(D, p.bLearnToHateCount)
 	INJ_U8(D, p.ubLastDateSpokenTo)
 	INJ_U8(D, p.bLastQuoteSaidWasSpecial)
-	INJ_I8(D, p.bSectorZ)
+	INJ_I8(D, p.sSector.z)
 	INJ_U16(D, p.usStrategicInsertionData)
 	INJ_I8(D, p.bFriendlyOrDirectDefaultResponseUsedRecently)
 	INJ_I8(D, p.bRecruitDefaultResponseUsedRecently)
@@ -417,7 +411,7 @@ void InjectMercProfile(BYTE* const Dst, MERCPROFILESTRUCT const& p)
 	INJ_I32(D, p.iMercMercContractLength)
 	INJ_U32(D, p.uiTotalCostToDate)
 	INJ_SKIP(D, 4)
-	Assert(D == Dst + 716);
+	Assert(D.getConsumed() == 716);
 }
 
 
@@ -425,7 +419,7 @@ void InjectMercProfileIntoFile(HWFILE const f, MERCPROFILESTRUCT const& p)
 {
 	BYTE Data[716];
 	InjectMercProfile(Data, p);
-	FileWrite(f, Data, sizeof(Data));
+	f->write(Data, sizeof(Data));
 }
 
 
@@ -435,7 +429,7 @@ void InjectMercProfileIntoFile(HWFILE const f, MERCPROFILESTRUCT const& p)
 * @param profiles Array for storing profile data */
 void LoadRawMercProfiles(HWFILE const f, int numProfiles, MERCPROFILESTRUCT *profiles, const IEncodingCorrector *fixer)
 {
-	for (UINT32 i = 0; i != numProfiles; ++i)
+	for (int i = 0; i != numProfiles; ++i)
 	{
 		BYTE data[MERC_PROFILE_SIZE];
 		JA2EncryptedFileRead(f, data, sizeof(data));
