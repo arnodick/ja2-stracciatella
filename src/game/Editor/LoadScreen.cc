@@ -3,16 +3,14 @@
 #include "FileMan.h"
 #include "Font.h"
 #include "Font_Control.h"
+#include "GameLoop.h"
 #include "HImage.h"
-#include "Local.h"
 #include "RenderWorld.h"
-#include "Render_Dirty.h"
 #include "LoadScreen.h"
 #include "SelectWin.h"
 #include "EditorDefines.h"
 #include "MessageBox.h"
 #include "Text_Input.h"
-#include "Soldier_Create.h"
 #include "Soldier_Init_List.h"
 #include "EditorBuildings.h"
 #include "Editor_Taskbar_Utils.h"
@@ -32,14 +30,9 @@
 #include "Environment.h"
 #include "Edit_Sys.h"
 #include "EditorItems.h"
-#include "English.h"
-#include "GameLoop.h"
-#include "Message.h"
 #include "Pits.h"
 #include "Item_Statistics.h"
 #include "Scheduling.h"
-#include "Debug.h"
-#include "JAScreens.h"
 #include "MessageBoxScreen.h"
 #include "Timer_Control.h"
 #include "VObject.h"
@@ -47,11 +40,6 @@
 #include "Video.h"
 #include "WorldDef.h"
 #include "UILayout.h"
-#include "GameMode.h"
-#include "GameRes.h"
-
-#include "ContentManager.h"
-#include "GameInstance.h"
 
 #include <string_theory/format>
 #include <string_theory/string>
@@ -362,8 +350,6 @@ ScreenID LoadSaveScreenHandle(void)
 
 	InvalidateScreen();
 
-	ExecuteBaseDirtyRectQueue();
-
 	switch( iFDlgState )
 	{
 		case DIALOG_CANCEL:
@@ -501,7 +487,7 @@ static void CreateFileDialog(const ST::string& zTitle)
 	iFileDlgButtons[FILEDIALOG_TITLE] = CreateLabel(zTitle, FONT16ARIAL, FONT_LTKHAKI, FONT_DKKHAKI, 179, 44, 281, 30, basePriority+1);
 
 	//Background
-	iFileDlgButtons[FILEDIALOG_BACKGROUND] = CreateLabel(ST::null, FONT16ARIAL, 0, 0, 179, 69, 281, 216, basePriority+1);
+	iFileDlgButtons[FILEDIALOG_BACKGROUND] = CreateLabel({}, FONT16ARIAL, 0, 0, 179, 69, 281, 216, basePriority+1);
 
 	//File list window
 	iFileDlgButtons[FILEDIALOG_LIST_BACKGROUND] = CreateHotSpot(179 + 4, 69 + 3 + 24, 179 + 4 + 240, 69 + 120 + 3, basePriority+2, FDlgNamesCallback);
@@ -1075,8 +1061,6 @@ BOOLEAN ExternalLoadMap(const ST::string& szFilename)
 	gFileForIO = szFilename;
 	gbCurrentFileIOStatus = INITIATE_MAP_LOAD;
 	ProcessFileIO(); //always returns loadsave_screen and changes iostatus to loading_map.
-	ExecuteBaseDirtyRectQueue();
-	EndFrameBufferRender();
 	RefreshScreen();
 	if( ProcessFileIO() == EDIT_SCREEN )
 		return TRUE;

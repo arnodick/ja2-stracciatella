@@ -1,17 +1,17 @@
 #pragma once
 
 #include "ContentManager.h"
-#include "JA2Types.h"
+#include "Json.h"
 
+#include <utility>
 #include <vector>
-#include <rapidjson/document.h>
 
 
 // Definition of a Loading Screen
 struct LoadingScreen
 {
 	LoadingScreen(uint8_t index_, ST::string internalName_, ST::string filename_)
-		: index(index_), internalName(internalName_), filename(filename_) {}
+		: index(index_), internalName(std::move(internalName_)), filename(std::move(filename_)) {}
 
 	uint8_t index;
 	ST::string internalName;
@@ -41,8 +41,8 @@ public:
 
 	void validateData(ContentManager* cm) const;
 
-	static LoadingScreenModel* deserialize(const rapidjson::Value& screensList, const rapidjson::Value& screensMapping);
-	
+	static LoadingScreenModel* deserialize(const JsonValue& screensList, const JsonValue& screensMapping);
+
 protected:
 	// list of available loading screens
 	std::vector<LoadingScreen> screensList;

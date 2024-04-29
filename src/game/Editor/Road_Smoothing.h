@@ -1,6 +1,8 @@
 #ifndef __ROAD_SMOOTHING_H
 #define __ROAD_SMOOTHING_H
 
+#include "Types.h"
+
 //There are the 32 macro definitions that make up all of the road pieces.  These enumerations
 //match up exactly to the previous road system order of graphics (FIRSTROAD1 - FIRSTROAD32)
 enum
@@ -51,8 +53,5 @@ void ReplaceObsoleteRoads(void);
 //road system, this function will place the new macro (consisting of multiple road pieces in multiple
 //gridnos).
 void PlaceRoadMacroAtGridNo( INT32 iMapIndex, INT32 iMacroID );
-
-void InitializeRoadMacros(void);
-
 
 #endif

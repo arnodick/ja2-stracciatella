@@ -1,11 +1,8 @@
 #include "Directories.h"
-#include "Local.h"
-#include "Video.h"
 #include "Font.h"
 #include "Font_Control.h"
 #include "MessageBox.h"
 #include "Input.h"
-#include "English.h"
 #include "Button_System.h"
 #include "UILayout.h"
 
@@ -86,9 +83,6 @@ BOOLEAN MessageBoxHandled()
 	}
 	MarkButtonsDirty();
 	RenderButtons( );
-//	InvalidateScreen( );
-//	ExecuteBaseDirtyRectQueue();
-	EndFrameBufferRender( );
 	return gubMessageBoxStatus == MESSAGEBOX_DONE;
 }
 

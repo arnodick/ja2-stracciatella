@@ -24,16 +24,13 @@
 #include "Explosion_Control.h"
 #include "Faces.h"
 #include "Fade_Screen.h"
-#include "FileMan.h"
-#include "Font.h"
-#include "Font_Control.h"
-#include "GameInstance.h"
 #include "GameLoop.h"
+#include "GameInstance.h"
 #include "GamePolicy.h"
 #include "GameScreen.h"
 #include "GameSettings.h"
 #include "Game_Clock.h"
-#include "Game_Events.h"
+#include "Game_Event_Hook.h"
 #include "HImage.h"
 #include "Handle_UI.h"
 #include "History.h"
@@ -47,17 +44,16 @@
 #include "LoadSaveSectorInfo.h"
 #include "LoadSaveStrategicMapElement.h"
 #include "Loading_Screen.h"
-#include "Local.h"
 #include "Logger.h"
 #include "MapScreen.h"
 #include "Map_Edgepoints.h"
 #include "Map_Information.h"
 #include "Map_Screen_Helicopter.h"
+#include "Map_Screen_Interface_Map.h"
 #include "Meanwhile.h"
 #include "Merc_Contract.h"
 #include "Merc_Entering.h"
 #include "Merc_Hiring.h"
-#include "Message.h"
 #include "MessageBoxScreen.h"
 #include "Militia_Control.h"
 #include "MineModel.h"
@@ -67,7 +63,6 @@
 #include "Overhead.h"
 #include "PathAI.h"
 #include "Physics.h"
-#include "Player_Command.h"
 #include "Points.h"
 #include "PreBattle_Interface.h"
 #include "Queen_Command.h"
@@ -75,14 +70,13 @@
 #include "Radar_Screen.h"
 #include "Random.h"
 #include "RenderWorld.h"
-#include "Render_Dirty.h"
+#include "SAM_Sites.h"
 #include "SamSiteModel.h"
 #include "SaveLoadMap.h"
 #include "Scheduling.h"
 #include "ScreenIDs.h"
 #include "Soldier_Add.h"
 #include "Soldier_Control.h"
-#include "Soldier_Create.h"
 #include "Soldier_Init_List.h"
 #include "Soldier_Macros.h"
 #include "Sound_Control.h"
@@ -103,7 +97,6 @@
 #include "Tactical_Turns.h"
 #include "Text.h"
 #include "Timer.h"
-#include "Timer_Control.h"
 #include "TownModel.h"
 #include "Town_Militia.h"
 #include "Types.h"
@@ -1061,7 +1054,7 @@ check_entry:
 			{ /* Strategic insertion failed because it expected to find an entry
 				 * point. This is likely a missing part of the map or possible fault in
 				 * strategic movement costs, traversal logic, etc. */
-				ST::string sector = ST::null;
+				ST::string sector;
 				if (gfWorldLoaded)
 				{
 					if (gWorldSector.z == 0)
@@ -1245,7 +1238,7 @@ ST::string GetSectorIDString(const SGPSector& sector, BOOLEAN detailed)
 {
 	if (!sector.IsValid())
 	{
-		return ST::null;
+		return {};
 	}
 
 	if (sector.z != 0)
@@ -1253,7 +1246,7 @@ ST::string GetSectorIDString(const SGPSector& sector, BOOLEAN detailed)
 		UNDERGROUND_SECTORINFO const* const u = FindUnderGroundSector(sector);
 		if (!u || (!(u->uiFlags & SF_ALREADY_VISITED) && !gfGettingNameFromSaveLoadScreen))
 		{ // Display nothing
-			return ST::null;
+			return {};
 		}
 	}
 

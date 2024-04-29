@@ -4,11 +4,8 @@
 #include "Isometric_Utils.h"
 #include "Interface_Panels.h"
 #include "Soldier_Macros.h"
-#include "StrategicMap.h"
 #include "Strategic.h"
 #include "Animation_Control.h"
-#include "Soldier_Create.h"
-#include "Soldier_Init_List.h"
 #include "Soldier_Add.h"
 #include "Map_Information.h"
 #include "FOV.h"
@@ -311,7 +308,8 @@ UINT16 FindGridNoFromSweetSpotWithStructData( SOLDIERTYPE *pSoldier, UINT16 usAn
 
 							if (uiRange == 0 )
 							{
-								uiRange = 999;
+								// If we don't have a path, this cannot be the best gridno!
+								continue;
 							}
 						}
 						else
@@ -460,7 +458,8 @@ static UINT16 FindGridNoFromSweetSpotWithStructDataUsingGivenDirectionFirst(SOLD
 
 							if (uiRange == 0 )
 							{
-								uiRange = 999;
+								// If we don't have a path, this cannot be the best gridno!
+								continue;
 							}
 						}
 						else

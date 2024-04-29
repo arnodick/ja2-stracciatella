@@ -1,13 +1,14 @@
+#include "Cursors.h"
 #include "Directories.h"
 #include "Font.h"
 #include "Input.h"
-#include "MessageBoxScreen.h"
-#include "PreBattle_Interface.h"
 #include "Button_System.h"
+#include "Map_Screen_Interface_Map.h"
 #include "MouseSystem.h"
 #include "Map_Screen_Interface.h"
 #include "JAScreens.h"
 #include "GameScreen.h"
+#include "PreBattle_Interface.h"
 #include "StrategicMap.h"
 #include "Game_Clock.h"
 #include "Music_Control.h"
@@ -20,8 +21,6 @@
 #include "Strategic_Pathing.h"
 #include "Text.h"
 #include "PopUpBox.h"
-#include "Player_Command.h"
-#include "Cursors.h"
 #include "Auto_Resolve.h"
 #include "Sound_Control.h"
 #include "English.h"
@@ -40,11 +39,12 @@
 #include "Quests.h"
 #include "Map_Screen_Interface_Border.h"
 #include "Cheats.h"
+#include "SAM_Sites.h"
+#include "Soldier_Macros.h"
+#include "Squads.h"
 #include "Strategic_Status.h"
 #include "Strategic_Town_Loyalty.h"
-#include "Squads.h"
 #include "Assignments.h"
-#include "Soldier_Macros.h"
 #include "History.h"
 #include "VObject.h"
 #include "Vehicles.h"
@@ -55,6 +55,7 @@
 #include "VSurface.h"
 #include "UILayout.h"
 #include <optional>
+#include <utility>
 #include <string_theory/format>
 #include <string_theory/string>
 
@@ -145,7 +146,8 @@ BOOLEAN gfUsePersistantPBI;
 
 static void MakeButton(UINT idx, INT16 x, const ST::string& text, GUI_CALLBACK click)
 {
-	GUIButtonRef const btn = QuickCreateButton(iPBButtonImage[idx], x, STD_SCREEN_Y + 54, MSYS_PRIORITY_HIGHEST - 2, click);
+	GUIButtonRef const btn = QuickCreateButton(iPBButtonImage[idx], x,
+		STD_SCREEN_Y + 54, MSYS_PRIORITY_HIGHEST - 2, std::move(click));
 	iPBButton[idx] = btn;
 
 	btn->SpecifyGeneralTextAttributes(text, BLOCKFONT, FONT_BEIGE, 141);
@@ -206,7 +208,7 @@ void InitPreBattleInterface(GROUP* const battle_group, bool const persistent_pbi
 		}
 
 		// Reset the help text for mouse regions
-		gMapStatusBarsRegion.SetFastHelpText(ST::null);
+		gMapStatusBarsRegion.SetFastHelpText({});
 
 		gfDisplayPotentialRetreatPaths = false;
 
@@ -398,27 +400,11 @@ void InitPreBattleInterface(GROUP* const battle_group, bool const persistent_pbi
 		}
 		else
 		{ // Are enemies invading a town, or just encountered the player.
-			UINT8 const sector = sSector.AsByte();
-			if (GetTownIdForSector(sector))
-			{
-				gubEnemyEncounterCode = ENEMY_INVASION_CODE;
-			}
-			else
-			{
-				switch (sector)
-				{
-					case SEC_D2:
-					case SEC_D15:
-					case SEC_G8:
-						// SAM sites not in towns will also be considered to be important
-						gubEnemyEncounterCode = ENEMY_INVASION_CODE;
-						break;
-
-					default:
-						gubEnemyEncounterCode = ENEMY_ENCOUNTER_CODE;
-						break;
-				}
-			}
+		  // SAM sites not in towns will also be considered to be important.
+			gubEnemyEncounterCode =
+				((GetTownIdForSector(sSector) != BLANK_SECTOR)
+				  || IsThisSectorASAMSector(sSector))
+				? ENEMY_INVASION_CODE : ENEMY_ENCOUNTER_CODE;
 		}
 	}
 
@@ -594,7 +580,6 @@ static void DoTransitionFromMapscreenToPreBattleInterface(void)
 	BlitBufferToBuffer( guiEXTRABUFFER, FRAME_BUFFER, STD_SCREEN_X, STD_SCREEN_Y, 261, 359 );
 	PlayJA2SampleFromFile(SOUNDSDIR "/laptop power up (8-11).wav", HIGHVOLUME, 1, MIDDLEPAN);
 	InvalidateScreen();
-	RefreshScreen();
 
 	SGPBox const PBIRect = { STD_SCREEN_X, STD_SCREEN_Y, 261, 359 };
 	while( iPercentage < 100  )
@@ -978,8 +963,6 @@ static void AutoResolveBattleCallback(GUI_BUTTON* btn, UINT32 reason)
 					btn->uiFlags &= ~BUTTON_CLICKED_ON;
 					btn->Draw();
 					InvalidateRegion(btn->X(), btn->Y(), btn->BottomRightX(), btn->BottomRightY());
-					ExecuteBaseDirtyRectQueue();
-					EndFrameBufferRender( );
 					RefreshScreen();
 					KillPreBattleInterface();
 					StopTimeCompression();
@@ -1015,8 +998,6 @@ static void GoToSectorCallback(GUI_BUTTON* btn, UINT32 reason)
 					btn->uiFlags &= ~BUTTON_CLICKED_ON;
 					btn->Draw();
 					InvalidateRegion(btn->X(), btn->Y(), btn->BottomRightX(), btn->BottomRightY());
-					ExecuteBaseDirtyRectQueue();
-					EndFrameBufferRender( );
 					RefreshScreen();
 					KillPreBattleInterface();
 					StopTimeCompression();
@@ -1033,8 +1014,6 @@ static void GoToSectorCallback(GUI_BUTTON* btn, UINT32 reason)
 			btn->uiFlags &= ~BUTTON_CLICKED_ON;
 			btn->Draw();
 			InvalidateRegion(btn->X(), btn->Y(), btn->BottomRightX(), btn->BottomRightY());
-			ExecuteBaseDirtyRectQueue();
-			EndFrameBufferRender( );
 			RefreshScreen();
 			SGPSector sector = gubPBSector;
 			// NOTE: remove this zeroing if we ever want to support underground auto battle resolution
@@ -1091,8 +1070,6 @@ static void RetreatMercsCallback(GUI_BUTTON* btn, UINT32 reason)
 			btn->uiFlags &= ~BUTTON_CLICKED_ON;
 			btn->Draw();
 			InvalidateRegion(btn->X(), btn->Y(), btn->BottomRightX(), btn->BottomRightY());
-			ExecuteBaseDirtyRectQueue();
-			EndFrameBufferRender( );
 			RefreshScreen();
 			KillPreBattleInterface();
 			StopTimeCompression();

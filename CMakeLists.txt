@@ -1,6 +1,6 @@
 # \file CMakeLists.txt
 
-cmake_minimum_required (VERSION 3.4)
+cmake_minimum_required (VERSION 3.18.1)
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 ## Some macros
@@ -85,7 +85,6 @@ set(LOCAL_SDL_LIB "" CACHE STRING "Use local SDL library from this directory")
 # @see CARGO_BUILD_TARGET in dependencies/lib-stracciatella/CMakeLists.txt
 option(BUILD_SDL_LIB "Build SDL from source" OFF)
 option(LOCAL_FLTK_LIB "Build with fltk lib" OFF)
-option(LOCAL_RAPIDJSON_LIB "Build with local rapidjson lib" ON)
 option(LOCAL_GTEST_LIB "Build with local gtest lib" ON)
 # @see LOCAL_STRING_THEORY_LIB in dependencies/lib-string_theory/CMakeLists.txt
 option(WITH_UNITTESTS "Build with unittests" ON)
@@ -96,6 +95,7 @@ option(BUILD_LAUNCHER "Build the ja2 launcher application" ON)
 option(WITH_EDITOR_SLF "Include the latest free editor.slf" OFF)
 option(WITH_RUST_BINARIES "Include rust binaries in build" ON)
 option(WITH_ASAN "Build with address sanitizer" OFF)
+option(ENABLE_PCH "Use precompiled standard library headers during compilation" OFF)
 # @see LOCAL_LUA_LIB in dependencies/lib-lua/CMakeLists.txt
 # @see LOCAL_SOL_LIB in dependencies/lib-sol2/CMakeLists.txt
 # @see LOCAL_MINIAUDIO_LIB in dependencies/lib-miniaudio/CMakeLists.txt
@@ -112,11 +112,9 @@ if(MSVC)
 		CMAKE_C_FLAGS_MINSIZEREL
 		CMAKE_C_FLAGS_RELWITHDEBINFO
 	)
-		# force /MD runtime (future note: cmake 3.15 has CMAKE_MSVC_RUNTIME_LIBRARY)
-		string(REGEX REPLACE "/MDd|/MD|/MTd|/MT|/LDd|/LD" "/MD" _value "${${_var}}")
         # force /Z7 instead of /ZI to include debug information in obj file
-        string(REGEX REPLACE "/Zi|/ZI" "/Z7" _value "${_value}")
-		if(NOT ${_var} STREQUAL _value)
+        string(REGEX REPLACE "/Zi|/ZI" "/Z7" _value ${${_var}})
+		if(NOT ${${_var}} STREQUAL ${_value})
 			set_property(CACHE "${_var}" PROPERTY VALUE "${_value}")
         endif()
 	endforeach()
@@ -125,11 +123,18 @@ endif()
 
 ## Build
 
+# The main target
+if(ANDROID)
+    add_library(${JA2_BINARY} SHARED)
+else()
+    add_executable(${JA2_BINARY})
+endif()
+
 if(MSVC)
 	# set the source and execution charset
 	add_compile_options("/utf-8")
 	# suppress the min and max macro definitions
-	add_definitions("-DNOMINMAX")
+	target_compile_definitions(ja2 PRIVATE NOMINMAX)
 endif()
 
 if(NOT "${WITH_CUSTOM_LOCALE}" STREQUAL "")
@@ -145,17 +150,12 @@ add_definitions(-DINSTALL_LIB_DIR="${INSTALL_LIB_DIR}")
 
 if (WITH_FIXMES)
     message(STATUS "Building with fixme messages" )
-    add_definitions(-DWITH_FIXMES)
+    target_compile_definitions(ja2 PRIVATE WITH_FIXMES)
 endif()
 
 if (WITH_MAEMO)
     message(STATUS "Building with right click mapped to F4 (menu button)" )
-    add_definitions(-DWITH_MAEMO)
-endif()
-
-if (WITH_SOUND_DEBUG)
-    message(STATUS "Building with sound debug" )
-    add_definitions(-DWITH_SOUND_DEBUG)
+    target_compile_definitions(ja2 PRIVATE WITH_MAEMO)
 endif()
 
 if(BUILD_SDL_LIB)
@@ -167,24 +167,17 @@ else()
         message(STATUS "Using local SDL from " "${CMAKE_CURRENT_SOURCE_DIR}/${LOCAL_SDL_LIB}")
         set(ENV{SDL2DIR} "${CMAKE_CURRENT_SOURCE_DIR}/${LOCAL_SDL_LIB}")
     endif()
-    find_package(SDL2 REQUIRED)
+    find_package(SDL2 2.0.5 REQUIRED)
 endif()
 message(STATUS "SDL2 Libraries: ${SDL2_LIBRARY}; SDL2 Include Dir: ${SDL2_INCLUDE_DIR}")
 
-if (NOT LOCAL_RAPIDJSON_LIB)
-    find_package(RapidJSON REQUIRED)
-else()
-    message(STATUS "Compiling with local RapidJSON libraries from ${CMAKE_CURRENT_SOURCE_DIR}/dependencies/lib-rapidjson")
-    set(RAPIDJSON_INCLUDE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/lib-rapidjson/rapidjson-1.1.0/include")
-endif()
-
 if (NOT WITH_MAGICENUM)
     message(STATUS "Compiling without magic_enum. This build will not have enum-gen functionalities")
-    add_compile_definitions(NO_MAGICENUM_LIB)
+    target_compile_definitions(ja2 PRIVATE NO_MAGICENUM_LIB)
 endif()
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug" OR ENABLE_ASSERTS)
-    add_definitions(-DENABLE_ASSERTS)
+    target_compile_definitions(ja2 PRIVATE ENABLE_ASSERTS)
 endif()
 
 if(BUILD_LAUNCHER)
@@ -231,11 +224,9 @@ endif()
 include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${JA2_INCLUDES}
-    ${RAPIDJSON_INCLUDE_DIRS}
     ${SDL2_INCLUDE_DIR}
     ${SOL_INCLUDE_DIR}
     ${LUA_INCLUDE_DIRS}
-    ${CMAKE_CURRENT_SOURCE_DIR}/dependencies/lib-smacker/libsmacker
     ${MINIAUDIO_INCLUDE_DIRS}
     ${MAGICENUM_INCLUDE_DIR}
 )
@@ -264,18 +255,8 @@ if (WITH_UNITTESTS)
     endif()
     message(STATUS "GTest Libraries: ${GTEST_LIBRARIES}")
 
-    include_directories(${GTEST_INCLUDE_DIRS})
-    add_definitions("-DWITH_UNITTESTS")
-endif()
-
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CFLAGS}")
-if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wtype-limits -Wignored-qualifiers")
-    if (LOCAL_RAPIDJSON_LIB)
-        # There has not been an official new RapidJSON release since 2016; some C++ features
-        # it uses have been deprecated since then.
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-deprecated-declarations")
-    endif()
+    target_include_directories(ja2 PRIVATE ${GTEST_INCLUDE_DIRS})
+    target_compile_definitions(ja2 PRIVATE WITH_UNITTESTS)
 endif()
 
 set(
@@ -299,14 +280,11 @@ if (ANDROID)
     LIST(APPEND JA2_LIBRARIES android log)
 endif()
 
-if(ANDROID)
-    add_library(${JA2_BINARY} SHARED ${JA2_SOURCES})
-else()
-    add_executable(${JA2_BINARY} ${JA2_SOURCES})
-endif()
+target_sources(ja2 PRIVATE ${JA2_SOURCES})
 target_link_libraries(${JA2_BINARY} ${JA2_LIBRARIES})
+# target_compile_features(ja2 PRIVATE cxx_std_20)  # not yet...
 
-if (ASAN)
+if (WITH_ASAN)
     target_compile_options(${JA2_BINARY} PRIVATE -fsanitize=address)
     target_link_options(${JA2_BINARY} PRIVATE -fsanitize=address)
 endif()
@@ -314,10 +292,51 @@ endif()
 add_dependencies(${JA2_BINARY} stracciatella)
 set_property(SOURCE ${CMAKE_SOURCE_DIR}/src/game/GameVersion.cc APPEND PROPERTY COMPILE_DEFINITIONS "GAME_VERSION=v${ja2-stracciatella_VERSION}")
 
+function(add_warnings target)
+    if (NOT MSVC)
+        target_compile_options(${target} PRIVATE -Wall -Wtype-limits -Wignored-qualifiers)
+    else()
+        target_compile_options(${target} PRIVATE /W3 /wd4018 /wd4101 /wd4200 /wd4244 /wd4996)
+        # 4018 : example: signed/unsigned mismatch
+        # 4101 : example: unreferenced local variable
+        # 4200 : example: nonstandard extension used : zero-sized array in struct/union
+        # 4244 : example: conversion from 'int' to 'real', possible loss of data
+        # 4996 : example: This function or variable may be unsafe (sscanf)
+    endif()
+endfunction()
+
+add_warnings(${JA2_BINARY})
+
+if(ENABLE_PCH)
+    target_precompile_headers(ja2 PRIVATE
+        <algorithm>
+        <array>
+        <chrono>
+        <cmath>
+        <functional>
+        <map>
+        <memory>
+        <numeric>
+        <optional>
+        <random>
+        <set>
+        <stdexcept>
+        <stdint.h>
+        <stdlib.h>
+        <type_traits>
+        <utility>
+        <vector>
+    )
+endif()
+
 if(BUILD_LAUNCHER)
     add_executable(${LAUNCHER_BINARY} ${LAUNCHER_SOURCES})
     target_link_libraries(${LAUNCHER_BINARY} ${FLTK_LIBRARIES} ${STRACCIATELLA_LIBRARIES} ${LAUNCHER_LIBRARIES})
     add_dependencies(${LAUNCHER_BINARY} stracciatella)
+    add_warnings(${LAUNCHER_BINARY})
+    if (MSVC)
+        target_compile_definitions(${LAUNCHER_BINARY} PRIVATE NOMINMAX)
+    endif()
 endif()
 
 macro(copy_assets_dir_to_ja2_binary_after_build DIR)

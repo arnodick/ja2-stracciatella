@@ -1,7 +1,7 @@
 #include "Debug.h"
-#include "FileMan.h"
 #include "LoadSaveData.h"
 #include "LoadSaveEMail.h"
+#include "SGPFile.h"
 
 
 static void LoadEMailFromFile(HWFILE const File)
@@ -42,6 +42,8 @@ static void LoadEMailFromFile(HWFILE const File)
 void LoadEmailFromSavedGame(HWFILE const File)
 {
 	ShutDownEmailList();
+
+	GameInitEmail();
 
 	UINT32 uiNumOfEmails;
 	File->read(&uiNumOfEmails, sizeof(UINT32));

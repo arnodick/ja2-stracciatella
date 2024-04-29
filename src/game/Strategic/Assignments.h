@@ -3,10 +3,7 @@
 
 // header for assignment manipulation/updating for characters
 
-#include "Types.h"
-struct GROUP;
-struct PopUpBox;
-struct SOLDIERTYPE;
+#include "JA2Types.h"
 
 
 // this distinguishes whether we're only looking for patients healable THIS HOUR (those that have been on their assignment
@@ -28,7 +25,8 @@ struct SOLDIERTYPE;
 
 
 // Assignments Defines
-enum{
+enum Assignments : int8_t
+{
 	SQUAD_1 =0,
 	SQUAD_2,
 	SQUAD_3,
@@ -112,7 +110,7 @@ void BuildSectorsWithSoldiersList( void );
 void InitSectorsWithSoldiersList( void );
 
 // is there a soldier in this sector?..only use after BuildSectorsWithSoldiersList is called
-BOOLEAN IsThereASoldierInThisSector(const SGPSector& sSector);
+bool IsThereASoldierInThisSector(const SGPSector& sSector);
 
 void CheckIfSoldierUnassigned( SOLDIERTYPE *pSoldier );
 
@@ -207,7 +205,7 @@ void ReEvaluateEveryonesNothingToDo(void);
 void SetAssignmentForList( INT8 bAssignment, INT8 bParam );
 
 // function where we actually set someone's assignment so we can trap certain situations
-void ChangeSoldiersAssignment( SOLDIERTYPE *pSoldier, INT8 bAssignment );
+void ChangeSoldiersAssignment(SOLDIERTYPE *, Assignments);
 
 void UnEscortEPC( SOLDIERTYPE *pSoldier );
 

@@ -1,23 +1,22 @@
 #include "InventoryGraphicsModel.h"
+#include <utility>
 
-InventoryGraphicsModel::InventoryGraphicsModel(GraphicModel small_, GraphicModel big_) : small(small_), big(big_) {
+InventoryGraphicsModel::InventoryGraphicsModel(GraphicModel small_,
+                                               GraphicModel big_)
+    : small(std::move(small_)), big(std::move(big_)) {}
+
+InventoryGraphicsModel InventoryGraphicsModel::deserialize(const JsonValue& json) {
+	auto obj = json.toObject();
+	return { GraphicModel::deserialize(obj["small"]), GraphicModel::deserialize(obj["big"]) };
 }
 
-InventoryGraphicsModel InventoryGraphicsModel::deserialize(JsonObjectReader &obj) {
-	auto& smallSource = obj.GetValue("small");
-	auto& bigSource = obj.GetValue("big");
-	JsonObjectReader smallReader(smallSource);
-	JsonObjectReader bigReader(bigSource);
-	return InventoryGraphicsModel(GraphicModel::deserialize(smallReader), GraphicModel::deserialize(bigReader));
-}
+JsonValue InventoryGraphicsModel::serialize() const {
+	JsonObject v;
 
-JsonObject InventoryGraphicsModel::serialize(rapidjson::Document::AllocatorType& allocator) const {
-	JsonObject v(allocator);
+	auto s = small.serialize();
+	auto b = big.serialize();
+	v.set("small", std::move(s));
+	v.set("big", std::move(b));
 
-	auto s = small.serialize(allocator);
-	auto b = big.serialize(allocator);
-	v.AddMember("small", s.getValue());
-	v.AddMember("big", b.getValue());
-
-	return v;
+	return v.toValue();
 }

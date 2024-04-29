@@ -4,7 +4,7 @@
 #include <SDL_events.h>
 #include <SDL_video.h>
 #include "Types.h"
-#include "stracciatella.h"
+#include "RustInterface.h"
 
 
 #define VIDEO_DEFAULT_TO_NO_CURSOR 0xFFFE // VIDEO_DEFAULT_TO_NO_CURSOR is equal to VIDEO_NO_CURSOR unless always_show_cursor_in_tactical is true
@@ -17,11 +17,10 @@ extern SDL_Window* g_game_window;
 using VideoScaleQuality = ScalingQuality;
 
 void         VideoSetFullScreen(BOOLEAN enable);
-void         InitializeVideoManager(VideoScaleQuality quality);
+void         InitializeVideoManager(VideoScaleQuality quality, int32_t targetFPS);
 void         ShutdownVideoManager(void);
 void         InvalidateRegion(INT32 iLeft, INT32 iTop, INT32 iRight, INT32 iBottom);
 void         InvalidateScreen(void);
-void         EndFrameBufferRender(void);
 
 void VideoSetBrightness(float brightness);
 

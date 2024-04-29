@@ -1,13 +1,10 @@
-#include "Buffer.h"
 #include "Directories.h"
-#include "Font_Control.h"
+#include "ItemModel.h"
 #include "LoadSaveRottingCorpse.h"
 #include "MapScreen.h"
 #include "Soldier_Init_List.h"
 #include "Types.h"
-#include "Message.h"
 #include "Item_Types.h"
-#include "Items.h"
 #include "Handle_Items.h"
 #include "StrategicMap.h"
 #include "Tactical_Save.h"
@@ -17,16 +14,11 @@
 #include "Rotting_Corpses.h"
 #include "Overhead.h"
 #include "Keys.h"
-#include "Soldier_Create.h"
 #include "Soldier_Profile.h"
 #include "Isometric_Utils.h"
-#include "Soldier_Add.h"
-#include "NPC.h"
-#include "AI.h"
 #include "Game_Clock.h"
 #include "Animation_Control.h"
 #include "Map_Information.h"
-//#include "PathAI.h"
 #include "SaveLoadMap.h"
 #include "Debug.h"
 #include "Random.h"
@@ -38,7 +30,6 @@
 #include "SmokeEffects.h"
 #include "LightEffects.h"
 #include "PathAI.h"
-#include "GameVersion.h"
 #include "Strategic.h"
 #include "Map_Screen_Interface_Map.h"
 #include "Strategic_Status.h"
@@ -48,7 +39,6 @@
 #include "Queen_Command.h"
 #include "Map_Screen_Interface_Map_Inventory.h"
 #include "ScreenIDs.h"
-#include "FileMan.h"
 
 #include "ContentManager.h"
 #include "GameInstance.h"
@@ -494,25 +484,13 @@ void LoadCurrentSectorsInformationFromTempItemsFile()
 		LoadDoorStatusArrayFromDoorStatusTempFile();
 	}
 
-	// if the save is an older version, use the old way of loading it up
-	if (guiSavedGameVersion < 57)
+	if (flags & SF_ENEMY_PRESERVED_TEMP_FILE_EXISTS)
 	{
-		if (flags & SF_ENEMY_PRESERVED_TEMP_FILE_EXISTS)
-		{
-			LoadEnemySoldiersFromTempFile();
-		}
+		NewWayOfLoadingEnemySoldiersFromTempFile();
 	}
-	else
+	if (flags & SF_CIV_PRESERVED_TEMP_FILE_EXISTS)
 	{
-		// use the new way of loading the enemy and civilian placements
-		if (flags & SF_ENEMY_PRESERVED_TEMP_FILE_EXISTS)
-		{
-			NewWayOfLoadingEnemySoldiersFromTempFile();
-		}
-		if (flags & SF_CIV_PRESERVED_TEMP_FILE_EXISTS)
-		{
-			NewWayOfLoadingCiviliansFromTempFile();
-		}
+		NewWayOfLoadingCiviliansFromTempFile();
 	}
 
 	if (flags & SF_SMOKE_EFFECTS_TEMP_FILE_EXISTS)
@@ -985,7 +963,7 @@ void NewJA2EncryptedFileRead(HWFILE const f, BYTE* const pDest, UINT32 const uiB
 
 void NewJA2EncryptedFileWrite(HWFILE const hFile, BYTE const* const data, UINT32 const uiBytesToWrite)
 {
-	SGP::Buffer<UINT8> buf(uiBytesToWrite);
+	std::vector<UINT8> buf(uiBytesToWrite);
 	const UINT8* const pubRotationArray = GetRotationArray();
 	UINT8              ubArrayIndex     = 0;
 	UINT8              last_byte        = 0;
@@ -996,7 +974,7 @@ void NewJA2EncryptedFileWrite(HWFILE const hFile, BYTE const* const data, UINT32
 		if (++ubArrayIndex >= NEW_ROTATION_ARRAY_SIZE) ubArrayIndex = 0;
 	}
 
-	hFile->write(buf, uiBytesToWrite);
+	hFile->write(buf.data(), uiBytesToWrite);
 }
 
 
@@ -1018,21 +996,6 @@ void JA2EncryptedFileRead(HWFILE const f, BYTE* const pDest, UINT32 const uiByte
 	}
 }
 
-
-void JA2EncryptedFileWrite(HWFILE const hFile, BYTE const* const data, UINT32 const uiBytesToWrite)
-{
-	SGP::Buffer<UINT8> buf(uiBytesToWrite);
-	UINT8              ubArrayIndex = 0;
-	UINT8              last_byte    = 0;
-	for (UINT32 i = 0; i < uiBytesToWrite; ++i)
-	{
-		buf[i] += data[i] + last_byte + ubRotationArray[ubArrayIndex];
-		last_byte = buf[i];
-		if (++ubArrayIndex >= ROTATION_ARRAY_SIZE) ubArrayIndex = 0;
-	}
-
-	hFile->write(buf, uiBytesToWrite);
-}
 
 ST::string GetMapTempFileName(SectorFlags uiType, const SGPSector& sector)
 {
@@ -1076,8 +1039,11 @@ UINT32 GetNumberOfVisibleWorldItemsFromSectorStructureForSector(const SGPSector&
 		n_items = u ? u->uiNumberOfWorldItemsInTempFileThatCanBeSeenByPlayer : 0;
 	}
 
-	// If the requested sector is currently loaded
-	if (gfWorldLoaded && sMap == gWorldSector)
+	// If the requested sector is currently loaded, but not if we are
+	// currently loading the game, because in that case the items were
+	// not yet loaded and added.
+	if (gfWorldLoaded && sMap == gWorldSector &&
+	    !(gTacticalStatus.uiFlags & LOADING_SAVED_GAME))
 	{
 		// Since items might have been added, update
 		n_items = UpdateLoadedSectorsItemInventory(sMap, n_items);
@@ -1106,14 +1072,10 @@ static void SynchronizeItemTempFileVisbleItemsToSectorInfoVisbleItems(const SGPS
 	std::vector<WORLDITEM> pTotalSectorList = LoadWorldItemsFromTempItemFile(sMap);
 
 	UINT32 uiItemCount = 0;
-	if (pTotalSectorList.size() > 0)
+	for (const WORLDITEM& wi : pTotalSectorList)
 	{
-		for (const WORLDITEM& wi : pTotalSectorList)
-		{
-			if (!IsMapScreenWorldItemVisibleInMapInventory(wi)) continue;
-			uiItemCount += wi.o.ubNumberOfObjects;
-		}
-		pTotalSectorList.clear();
+		if (!IsMapScreenWorldItemVisibleInMapInventory(wi)) continue;
+		uiItemCount += wi.o.ubNumberOfObjects;
 	}
 
 	if (check_consistency)

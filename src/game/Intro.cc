@@ -1,24 +1,15 @@
 #include "Cinematics.h"
 #include "Cursor_Control.h"
 #include "Directories.h"
-#include "English.h"
-#include "FileMan.h"
 #include "Game_Init.h"
-#include "GameRes.h"
-#include "GameSettings.h"
 #include "Input.h"
 #include "Cursors.h"
 #include "Intro.h"
-#include "Local.h"
-#include "Line.h"
 #include "MainMenuScreen.h"
 #include "MouseSystem.h"
 #include "Music_Control.h"
 #include "ContentMusic.h"
-#include "Render_Dirty.h"
 #include "Soldier_Profile.h"
-#include "SysUtil.h"
-#include "Text.h"
 #include "VObject.h"
 #include "Video.h"
 #include "VSurface.h"
@@ -111,10 +102,6 @@ ScreenID IntroScreenHandle(void)
 	GetIntroScreenUserInput();
 
 	HandleIntroScreen();
-
-	ExecuteBaseDirtyRectQueue();
-	EndFrameBufferRender();
-
 
 	if( gfIntroScreenExit )
 	{

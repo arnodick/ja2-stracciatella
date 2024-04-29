@@ -3,7 +3,6 @@
 #include "Animation_Cache.h"
 #include "Animation_Control.h"
 #include "Animation_Data.h"
-#include "Arms_Dealer_Init.h"
 #include "Boxing.h"
 #include "Campaign.h"
 #include "Campaign_Types.h"
@@ -16,7 +15,6 @@
 #include "Event_Pump.h"
 #include "Explosion_Control.h"
 #include "Faces.h"
-#include "FileMan.h"
 #include "Font_Control.h"
 #include "GameInstance.h"
 #include "GameSettings.h"
@@ -50,8 +48,6 @@
 #include "RT_Time_Defines.h"
 #include "Random.h"
 #include "RenderWorld.h"
-#include "Render_Dirty.h"
-#include "Render_Fun.h"
 #include "Rotting_Corpses.h"
 #include "ScreenIDs.h"
 #include "SkillCheck.h"
@@ -5035,16 +5031,19 @@ void LoadPaletteData()
 void SetPaletteReplacement(SGPPaletteEntry* p8BPPPalette, const ST::string& aPalRep)
 {
 	UINT32 cnt2;
-	UINT8  ubType;
 
-	const UINT8 ubPalIndex = GetPaletteRepIndexFromID(aPalRep);
+	auto const ubPalIndex = GetPaletteRepIndexFromID(aPalRep);
+	if (!ubPalIndex)
+	{
+		return;
+	}
 
 	// Get range type
-	ubType = gpPalRep[ ubPalIndex ].ubType;
+	auto const ubType = gpPalRep[*ubPalIndex].ubType;
 
 	for ( cnt2 = gpPaletteSubRanges[ ubType ].ubStart; cnt2 <= gpPaletteSubRanges[ ubType ].ubEnd; cnt2++ )
 	{
-		p8BPPPalette[cnt2] = gpPalRep[ubPalIndex].rgb[cnt2 - gpPaletteSubRanges[ubType].ubStart];
+		p8BPPPalette[cnt2] = gpPalRep[*ubPalIndex].rgb[cnt2 - gpPaletteSubRanges[ubType].ubStart];
 	}
 }
 
@@ -5081,7 +5080,7 @@ void DeletePaletteData()
 }
 
 
-UINT8 GetPaletteRepIndexFromID(const ST::string& pal_rep)
+std::optional<UINT8> GetPaletteRepIndexFromID(const ST::string& pal_rep)
 {
 	// Check if type exists
 	for (UINT32 i = 0; i < guiNumReplacements; ++i)
@@ -5089,7 +5088,7 @@ UINT8 GetPaletteRepIndexFromID(const ST::string& pal_rep)
 		if (pal_rep.compare(gpPalRep[i].ID) == 0) return i;
 	}
 
-	throw std::logic_error("Invalid Palette Replacement ID given");
+	return {};
 }
 
 
@@ -6664,7 +6663,7 @@ void EVENT_SoldierBeginBladeAttack( SOLDIERTYPE *pSoldier, INT16 sGridNo, UINT8 
 					else
 					{
 						// WE ARE SEEN
-						if ( Random( 50 ) > 25 )
+						if (CoinToss())
 						{
 							EVENT_InitNewSoldierAnim( pSoldier, STAB, 0 , FALSE );
 						}

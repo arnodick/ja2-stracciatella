@@ -34,6 +34,7 @@
 #include "SkillCheck.h"
 #include "Soldier_Macros.h"
 #include "Strategic.h"
+#include "StrategicMap.h"
 #include "Strategic_AI.h"
 #include "Strategic_Merc_Handler.h"
 #include "Strategic_Status.h"
@@ -50,6 +51,7 @@
 #include "VObject_Blitters.h"
 #include "VSurface.h"
 #include "WeaponModels.h"
+#include "Weapons.h"
 #include "WordWrap.h"
 #include <stdexcept>
 #include <string_theory/format>
@@ -513,8 +515,6 @@ ScreenID AutoResolveScreenHandle()
 	SaveBackgroundRects();
 	RenderButtons();
 	RenderFastHelp();
-	ExecuteBaseDirtyRectQueue();
-	EndFrameBufferRender();
 	return AUTORESOLVE_SCREEN;
 }
 
@@ -1425,7 +1425,7 @@ static void MakeButton(UINT idx, INT16 x, INT16 y, GUI_CALLBACK click, BOOLEAN h
 {
 	GUIButtonRef const btn = QuickCreateButton(gpAR->iButtonImage[idx], x, y, MSYS_PRIORITY_HIGH, click);
 	gpAR->iButton[idx] = btn;
-	if (text != NULL) btn->SpecifyGeneralTextAttributes(text, BLOCKFONT2, 169, FONT_NEARBLACK);
+	if (!text.empty()) btn->SpecifyGeneralTextAttributes(text, BLOCKFONT2, 169, FONT_NEARBLACK);
 	if (hide) btn->Hide();
 }
 
@@ -1608,18 +1608,18 @@ static void CreateAutoResolveInterface(void)
 	const INT16 dy = ar->bVerticalOffset + SCREEN_HEIGHT / 2;
 
 	// Create the buttons -- subject to relocation
-	MakeButton(PLAY_BUTTON,     dx + 11, dy,      PlayButtonCallback,      FALSE, ST::null);
-	MakeButton(FAST_BUTTON,     dx + 51, dy,      FastButtonCallback,      FALSE, ST::null);
-	MakeButton(FINISH_BUTTON,   dx + 91, dy,      FinishButtonCallback,    FALSE, ST::null);
-	MakeButton(PAUSE_BUTTON,    dx + 11, dy + 34, PauseButtonCallback,     FALSE, ST::null);
+	MakeButton(PLAY_BUTTON,     dx + 11, dy,      PlayButtonCallback,      FALSE, {});
+	MakeButton(FAST_BUTTON,     dx + 51, dy,      FastButtonCallback,      FALSE, {});
+	MakeButton(FINISH_BUTTON,   dx + 91, dy,      FinishButtonCallback,    FALSE, {});
+	MakeButton(PAUSE_BUTTON,    dx + 11, dy + 34, PauseButtonCallback,     FALSE, {});
 	MakeButton(RETREAT_BUTTON,  dx + 51, dy + 34, RetreatButtonCallback,   FALSE, gpStrategicString[STR_AR_RETREAT_BUTTON]);
 	if (!ar->ubMercs) DisableButton(ar->iButton[RETREAT_BUTTON]);
 
-	MakeButton(BANDAGE_BUTTON,  dx + 11, dy +  5, BandageButtonCallback,   TRUE,  ST::null);
+	MakeButton(BANDAGE_BUTTON,  dx + 11, dy +  5, BandageButtonCallback,   TRUE,  {});
 	MakeButton(DONEWIN_BUTTON,  dx + 51, dy +  5, DoneButtonCallback,      TRUE,  gpStrategicString[STR_AR_DONE_BUTTON]);
 	MakeButton(DONELOSE_BUTTON, dx + 25, dy +  5, DoneButtonCallback,      TRUE,  gpStrategicString[STR_AR_DONE_BUTTON]);
-	MakeButton(YES_BUTTON,      dx + 21, dy + 17, AcceptSurrenderCallback, TRUE,  ST::null);
-	MakeButton(NO_BUTTON,       dx + 81, dy + 17, RejectSurrenderCallback, TRUE,  ST::null);
+	MakeButton(YES_BUTTON,      dx + 21, dy + 17, AcceptSurrenderCallback, TRUE,  {});
+	MakeButton(NO_BUTTON,       dx + 81, dy + 17, RejectSurrenderCallback, TRUE,  {});
 	ar->iButton[PLAY_BUTTON]->uiFlags |= BUTTON_CLICKED_ON;
 }
 
@@ -1752,12 +1752,14 @@ static void RemoveAutoResolveInterface(bool const delete_for_good)
 	{
 		if (!gpCivs[i].pSoldier) continue;
 		SOLDIERTYPE& s = *gpCivs[i].pSoldier;
+		// The soldiers in the gpCivs array should all be regular militia
+		// members. Thr might get promoted before they're removed.
+		auto const rank = SoldierClassToMilitiaRank(s.ubSoldierClass);
 
-		UINT8 current_rank = SoldierClassToMilitiaRank(s.ubSoldierClass);
-		if (current_rank >= MAX_MILITIA_LEVELS) throw std::runtime_error(ST::format("Removing autoresolve militia with invalid ubSoldierClass {}.", s.ubSoldierClass).to_std_string());
-
-		if (delete_for_good)
+		if (rank && delete_for_good)
 		{
+			auto current_rank = *rank;
+
 			if (s.bLife < OKLIFE / 2)
 			{
 				AddDeadSoldierToUnLoadedSector(arSector, &s, RandomGridNo(), ADD_DEAD_SOLDIER_TO_SWEETSPOT);
@@ -1919,7 +1921,7 @@ static void FinishButtonCallback(GUI_BUTTON* btn, UINT32 reason)
 		DepressAutoButton(FINISH_BUTTON);
 		gpAR->uiTimeSlice = 0xffffffff;
 		gpAR->fSound = FALSE;
-		PlayJA2StreamingSample(AUTORESOLVE_FINISHFX, HIGHVOLUME, 1, MIDDLEPAN);
+		PlayJA2Sample(AUTORESOLVE_FINISHFX, HIGHVOLUME, 1, MIDDLEPAN);
 	}
 }
 

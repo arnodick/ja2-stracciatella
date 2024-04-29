@@ -3,7 +3,6 @@
 #include "English.h"
 #include "Timer.h"
 #include "Video.h"
-#include "Local.h"
 #include "UILayout.h"
 
 #include <string_theory/string>
@@ -332,6 +331,28 @@ static void KeyChange(SDL_Keysym const* const key_sym, bool const pressed)
 	SDL_Keycode      key = key_sym->sym;
 	SDL_Keymod const mod = (SDL_Keymod) key_sym->mod;
 	bool   const num = mod & KMOD_NUM;
+
+	// Special handling for some keys which often are used for different
+	// purposes for many keyboard layouts compared to the US keyboard layout
+	// and which otherwise wouldn't be usable as hotkeys in tactical mode.
+	//
+	// Note: it is still possible to use the key as intended by its
+	// keyboard layout when entering text like a save game description or
+	// the IMP name because we are using SDL_TextInput events for those,
+	// which are not affected by the KeyChange function. (Issue #1844)
+	// Checked if neither alt, altgr, control, shift or the 'OS' key is
+	// pressed. Num lock, caps lock and scroll lock can be active.
+	if ((mod & (KMOD_ALT | KMOD_CTRL | KMOD_GUI | KMOD_MODE | KMOD_SHIFT)) == KMOD_NONE)
+	{
+		switch (key_sym->scancode)
+		{
+			case SDL_SCANCODE_EQUALS:      key = SDLK_EQUALS;           break;
+			case SDL_SCANCODE_SLASH:       key = SDLK_SLASH;            break;
+			case SDL_SCANCODE_GRAVE:       key = SDLK_BACKQUOTE;        break;
+			default:                                                    break;
+		}
+	}
+
 	switch (key)
 	{
 #if defined WITH_MAEMO
@@ -377,7 +398,7 @@ static void KeyChange(SDL_Keysym const* const key_sym, bool const pressed)
 	}
 	gfKeyState[RemapKeycode(key)] = pressed;
 
-	QueueKeyEvent(event_type, key, mod, ST::null);
+	QueueKeyEvent(event_type, key, mod, {});
 }
 
 
@@ -397,6 +418,7 @@ void KeyDown(const SDL_Keysym* KeySym)
 
 		case SDLK_LALT:
 		case SDLK_RALT:
+		case SDLK_MODE:
 			gfKeyState.set(ALT);
 			break;
 
@@ -427,6 +449,7 @@ void KeyUp(const SDL_Keysym* KeySym)
 
 		case SDLK_LALT:
 		case SDLK_RALT:
+		case SDLK_MODE:
 			gfKeyState.reset(ALT);
 			break;
 

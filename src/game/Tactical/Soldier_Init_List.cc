@@ -9,19 +9,14 @@
 #include "Soldier_Add.h"
 #include "Soldier_Create.h"
 #include "Soldier_Init_List.h"
-#include "Debug.h"
 #include "Random.h"
-#include "Items.h"
 #include "Map_Information.h"
 #include "Soldier_Profile.h"
 #include "Sys_Globals.h"
 #include "EditorMercs.h"
 #include "Animation_Data.h"
-#include "Message.h"
-#include "Font_Control.h"
 #include "Sound_Control.h"
 #include "Quests.h"
-#include "Render_Fun.h"
 #include "Meanwhile.h"
 #include "Strategic_AI.h"
 #include "Map_Screen_Interface_Map.h"
@@ -30,7 +25,6 @@
 #include "AI.h"
 #include "NPC.h"
 #include "Scheduling.h"
-#include "FileMan.h"
 #include "Logger.h"
 #include "MercProfile.h"
 
@@ -425,8 +419,7 @@ static void SortSoldierInitList(void)
 
 bool AddPlacementToWorld(SOLDIERINITNODE* const init)
 {
-	SOLDIERCREATE_STRUCT dp;
-	dp = SOLDIERCREATE_STRUCT{};
+	SOLDIERCREATE_STRUCT dp{};
 
 	// First check if this guy has a profile and if so check his location such that it matches
 	if (SOLDIERCREATE_STRUCT* const init_dp = init->pDetailedPlacement)
@@ -480,12 +473,17 @@ bool AddPlacementToWorld(SOLDIERINITNODE* const init)
 					gubQuest[QUEST_KINGPIN_MONEY] == QUESTINPROGRESS &&
 					CheckFact(FACT_KINGPIN_CAN_SEND_ASSASSINS, KINGPIN))))
 				{
+					// Pick a gridno in a square around the door to Hans' shop
+					auto const PickGridNo = [](INT16 const apothem) -> GridNo
+					{
+						std::uniform_int_distribution<INT16> uid(-apothem, apothem);
+						return 13531 + uid(gRandomEngine) + uid(gRandomEngine) * WORLD_COLS;
+					};
+
 					if (dp.ubProfile == NO_PROFILE)
 					{
 						// These guys should be guarding Tony
-						dp.sInsertionGridNo = 13531 +
-							PreRandom(8) * (PreRandom(1) ? -1 : 1) +
-							PreRandom(8) * (PreRandom(1) ? -1 : 1) * WORLD_ROWS;
+						dp.sInsertionGridNo = PickGridNo(7);
 
 						switch (PreRandom(3))
 						{
@@ -497,25 +495,13 @@ bool AddPlacementToWorld(SOLDIERINITNODE* const init)
 					else if (dp.ubProfile == BILLY)
 					{
 						// Billy should now be able to roam around
-						dp.sInsertionGridNo = 13531 +
-							PreRandom(30) * (PreRandom(1) ? -1 : 1) +
-							PreRandom(30) * (PreRandom(1) ? -1 : 1) * WORLD_ROWS;
+						dp.sInsertionGridNo = PickGridNo(29);
 						dp.bOrders = SEEKENEMY;
 					}
 					else if (dp.ubProfile == MADAME)
 					{
 						// She shouldn't be here
 						return true;
-					}
-					else if (dp.ubProfile == NO_PROFILE)
-					{
-						// XXX unreachable due to same condition above
-						UINT8 const room = GetRoom(dp.sInsertionGridNo);
-						if (IN_BROTHEL(room))
-						{
-							// Must be a hooker, shouldn't be here
-							return true;
-						}
 					}
 				}
 			}
@@ -1427,14 +1413,14 @@ void AddSoldierInitListCreatures(BOOLEAN fQueen, UINT8 ubNumLarvae, UINT8 ubNumI
 }
 
 
-SOLDIERINITNODE* FindSoldierInitNodeWithID( UINT16 usID )
+SOLDIERINITNODE* FindSoldierInitNodeWithID(SoldierID const soldierID)
 {
 	FOR_EACH_SOLDIERINITNODE(curr)
 	{
-		if( curr->pSoldier->ubID == usID )
+		if (curr->pSoldier && curr->pSoldier->ubID == soldierID)
 			return curr;
 	}
-	return NULL;
+	return nullptr;
 }
 
 
@@ -1444,7 +1430,7 @@ SOLDIERINITNODE* FindSoldierInitNodeBySoldier(SOLDIERTYPE const& s)
 	{
 		if (i->pSoldier == &s) return i;
 	}
-	return 0;
+	return nullptr;
 }
 
 

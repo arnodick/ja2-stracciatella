@@ -1,10 +1,11 @@
 #include "Font.h"
+#include "ItemModel.h"
 #include "Items.h"
 #include "Action_Items.h"
 #include "Handle_Items.h"
-#include "Local.h"
 #include "MapScreen.h"
 #include "Overhead.h"
+#include "PathAI.h"
 #include "Soldier_Find.h"
 #include "Structure.h"
 #include "VObject.h"
@@ -32,10 +33,7 @@
 #include "AI.h"
 #include "Soldier_Macros.h"
 #include "Interface_Panels.h"
-#include "Strategic_Town_Loyalty.h"
 #include "Soldier_Functions.h"
-#include "Map_Screen_Helicopter.h"
-#include "PathAI.h"
 #include "FOV.h"
 #include "MessageBoxScreen.h"
 #include "Explosion_Control.h"
@@ -49,13 +47,10 @@
 #include "Arms_Dealer_Init.h"
 #include "Soldier_Add.h"
 #include "Sound_Control.h"
-#include "Squads.h"
-#include "Rotting_Corpses.h"
 #include "Soldier_Ani.h"
 #include "OppList.h"
 #include "QArray.h"
 #include "Render_Fun.h"
-#include "Environment.h"
 #include "Map_Information.h"
 #include "GameSettings.h"
 #include "StrategicMap.h"
@@ -1308,7 +1303,7 @@ void SoldierGetItemFromWorld(SOLDIERTYPE* const s, const INT32 iItemIndex, const
 
 	gpTempSoldier = s;
 	gsTempGridno  = sGridNo;
-	SetCustomizableTimerCallbackAndDelay(1000, CheckForPickedOwnership, TRUE);
+	SetCustomizableTimerCallbackAndDelay(1s, CheckForPickedOwnership, true);
 }
 
 
@@ -2167,7 +2162,6 @@ void HandleFlashingItems()
 {
 	if (!COUNTERDONE(CYCLERENDERITEMCOLOR))
 		return;
-	RESETCOUNTER(CYCLERENDERITEMCOLOR);
 
 	for (ITEM_POOL_LOCATOR* l = FlashItemSlots; l != FlashItemSlots + guiNumFlashItemSlots; ++l)
 	{

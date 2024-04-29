@@ -7,13 +7,11 @@
 #include "VObject.h"
 #include "WordWrap.h"
 #include "Soldier_Profile.h"
-#include "Game_Clock.h"
 #include "Text.h"
 #include "GameRes.h"
 #include "Button_System.h"
 #include "Video.h"
 #include "VSurface.h"
-#include "Debug.h"
 #include "Font_Control.h"
 
 
@@ -87,7 +85,7 @@ static void SelectMedicalBoxRegionCallBack(   MOUSE_REGION* pRegion, UINT32 iRea
 static void SelectPriceBoxRegionCallBack(     MOUSE_REGION* pRegion, UINT32 iReason);
 
 
-static AIMSortInfo g_aim_sort_info[str_aim_sort_list_SIZE] =
+static AIMSortInfo g_aim_sort_info[L10n::str_aim_sort_list_SIZE]
 {
 	{   9, 34, LEFT_JUSTIFIED,  0, SelectPriceBoxRegionCallBack      },
 	{   9, 47, LEFT_JUSTIFIED,  1, SelectExpBoxRegionCallBack        },

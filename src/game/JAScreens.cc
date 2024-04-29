@@ -1,7 +1,5 @@
 #include "Directories.h"
 #include "Handle_UI.h"
-#include "Local.h"
-#include "SGP.h"
 #include "GameLoop.h"
 #include "HImage.h"
 #include "VObject.h"
@@ -9,35 +7,25 @@
 #include "Input.h"
 #include "Font.h"
 #include "Debug_Pages.h"
-#include "MouseSystem.h"
 #include "Screens.h"
 #include "Font_Control.h"
-#include "SysUtil.h"
 #include "RenderWorld.h"
-#include "WorldDef.h"
-#include "EditScreen.h"
 #include "Timer_Control.h"
 #include "Sys_Globals.h"
 #include "Overhead.h"
 #include "Utilities.h"
 #include "Render_Dirty.h"
 #include "JAScreens.h"
-#include "Environment.h"
-#include "Animation_Cache.h"
 #include "Sound_Control.h"
 #include "MainMenuScreen.h"
 #include "Game_Init.h"
 #include "Init.h"
 #include "Cursor_Control.h"
-#include "GameVersion.h"
 #include "Game_Clock.h"
 #include "GameScreen.h"
-#include "English.h"
 #include "Random.h"
 #include "GameRes.h"
-#include "Text.h"
 #include "Video.h"
-#include "Debug.h"
 #include "UILayout.h"
 #include "Timer.h"
 #include "Logger.h"
@@ -75,34 +63,6 @@ RENDER_HOOK				gDebugRenderOverride[ MAX_DEBUG_PAGES ] =
 	DefaultDebugPage3,
 	DefaultDebugPage4
 };
-
-
-void DisplayFrameRate( )
-{
-	static UINT32		uiFPS = 0;
-	static UINT32		uiFrameCount = 0;
-
-	// Increment frame count
-	uiFrameCount++;
-
-	if ( COUNTERDONE( FPSCOUNTER ) )
-	{
-		// Reset counter
-		RESETCOUNTER( FPSCOUNTER );
-
-		uiFPS = uiFrameCount;
-		uiFrameCount = 0;
-	}
-
-	if ( gbFPSDisplay == SHOW_FULL_FPS )
-	{
-		// FRAME RATE
-		SetVideoOverlayText(g_fps_overlay, ST::format("FPS: {}", std::min(uiFPS, 1000U)));
-
-		// TIMER COUNTER
-		SetVideoOverlayText(g_counter_period_overlay, ST::format("Game Loop Time: {}", std::min(guiTimerDiag, 1000U)));
-	}
-}
 
 
 static ST::string gubErrorText;
@@ -282,7 +242,13 @@ static void PalEditRenderHook(void)
 
 static void CyclePaletteReplacement(SOLDIERTYPE& s, ST::string& pal)
 {
-	UINT8 ubPaletteRep = GetPaletteRepIndexFromID(pal);
+	auto const paletteRep = GetPaletteRepIndexFromID(pal);
+	if (!paletteRep)
+	{
+		return;
+	}
+
+	auto ubPaletteRep = *paletteRep;
 	const UINT8 ubType = gpPalRep[ubPaletteRep].ubType;
 
 	ubPaletteRep++;

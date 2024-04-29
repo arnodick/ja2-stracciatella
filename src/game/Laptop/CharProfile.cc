@@ -25,7 +25,6 @@
 #include "Debug.h"
 #include "Font_Control.h"
 #include "Text.h"
-#include "Soldier_Profile_Type.h"
 
 #include <string_theory/string>
 
@@ -488,8 +487,8 @@ void ResetCharacterStats( void )
 	iAttitude = 0;
 
 	// names
-	pFullName = ST::null;
-	pNickName = ST::null;
+	pFullName.clear();
+	pNickName.clear();
 }
 
 

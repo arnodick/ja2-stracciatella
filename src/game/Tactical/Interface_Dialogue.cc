@@ -36,17 +36,16 @@
 #include "Handle_UI.h"
 #include "History.h"
 #include "Interactive_Tiles.h"
-#include "Interface.h"
 #include "Interface_Control.h"
 #include "Interface_Panels.h"
 #include "Isometric_Utils.h"
+#include "ItemModel.h"
 #include "Items.h"
 #include "Keys.h"
 #include "Local.h"
 #include "Logger.h"
 #include "MapScreen.h"
 #include "Map_Screen_Helicopter.h"
-#include "Map_Screen_Interface.h"
 #include "Meanwhile.h"
 #include "MercTextBox.h"
 #include "Message.h"
@@ -61,8 +60,8 @@
 #include "Queen_Command.h"
 #include "Quests.h"
 #include "RenderWorld.h"
-#include "Render_Dirty.h"
 #include "Render_Fun.h"
+#include "SAM_Sites.h"
 #include "SaveLoadMap.h"
 #include "ScreenIDs.h"
 #include "ShopKeeper_Interface.h"
@@ -75,12 +74,10 @@
 #include "Strategic.h"
 #include "StrategicMap.h"
 #include "StrategicMap_Secrets.h"
-#include "Strategic_AI.h"
 #include "Strategic_Mines.h"
 #include "Strategic_Movement.h"
 #include "Strategic_Town_Loyalty.h"
 #include "Structure.h"
-#include "SysUtil.h"
 #include "Tactical_Save.h"
 #include "Text.h"
 #include "TileDat.h"
@@ -89,7 +86,6 @@
 #include "VObject.h"
 #include "VSurface.h"
 #include "Video.h"
-#include "WCheck.h"
 #include "WorldMan.h"
 
 #include <string_theory/format>
@@ -2681,11 +2677,14 @@ void HandleNPCDoAction( UINT8 ubTargetNPC, UINT16 usActionCode, UINT8 ubQuoteNum
 				gMercProfiles[ ubTargetNPC ].ubMiscFlags2 |= PROFILE_MISC_FLAG2_LEFT_COUNTRY;
 				// fall through!
 			case NPC_ACTION_CARMEN_LEAVES_FOR_C13:
+			{
 				// set "don't add to sector" cause he'll only appear after an event...
 				gMercProfiles[ ubTargetNPC ].ubMiscFlags2 |= PROFILE_MISC_FLAG2_DONT_ADD_TO_SECTOR;
 
-				SetCustomizableTimerCallbackAndDelay(params->getAmount(10000), CarmenLeavesSectorCallback, TRUE );
+				milliseconds const carmenLeavesDelay{params->getAmount(10000)};
+				SetCustomizableTimerCallbackAndDelay(carmenLeavesDelay, CarmenLeavesSectorCallback, true);
 				break;
+			}
 
 			case NPC_ACTION_CARMEN_LEAVES_ON_NEXT_SECTOR_LOAD:
 				if (gMercProfiles[ CARMEN ].bNPCData == 0)
@@ -4527,25 +4526,16 @@ static void DoneFadeOutActionBasement(void)
 
 static void DoneFadeInActionBasement(void)
 {
-	// Start conversation, etc
+	// Another thing that should be externalized some day:
+	// what happens after we've entered the rebel basement.
 
-	// Look for someone to talk to
-	CFOR_EACH_IN_TEAM(s, OUR_TEAM)
+	// For now, this hardcodes vanilla's behavior:
+	// Carlos starts his record #1, if he is present in the sector.
+
+	if (FindSoldierByProfileID(CARLOS))
 	{
-		// Are we in this sector, On the current squad?
-		if (s->bLife >= OKLIFE && s->bInSector && s->bAssignment == CurrentSquad())
-		{
-			break;
-		}
+		TriggerNPCRecordImmediately(CARLOS, 1);
 	}
-
-	const SOLDIERTYPE* const pNPCSoldier = FindSoldierByProfileID(CARLOS);
-	if ( !pNPCSoldier )
-	{
-		return;
-	}
-
-	TriggerNPCRecordImmediately( pNPCSoldier->ubProfile, 1 );
 }
 
 

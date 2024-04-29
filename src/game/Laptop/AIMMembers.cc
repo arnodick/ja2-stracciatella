@@ -3,7 +3,7 @@
 #include "EMail.h"
 #include "Font.h"
 #include "HImage.h"
-#include "Input.h"
+#include "ItemModel.h"
 #include "Laptop.h"
 #include "AIMMembers.h"
 #include "AIM.h"
@@ -15,7 +15,6 @@
 #include "Soldier_Profile.h"
 #include "Soldier_Control.h"
 #include "Interface_Items.h"
-#include "Overhead.h"
 #include "WordWrap.h"
 #include "Finances.h"
 #include "VSurface.h"
@@ -33,12 +32,10 @@
 #include "Strategic.h"
 #include "AIMFacialIndex.h"
 #include "LaptopSave.h"
-#include "English.h"
 #include "GameSettings.h"
 #include "Random.h"
 #include "Strategic_Status.h"
 #include "Merc_Contract.h"
-#include "Strategic_Merc_Handler.h"
 #include "Assignments.h"
 #include "StrategicMap.h"
 #include "Sound_Control.h"
@@ -48,7 +45,6 @@
 #include "SoundMan.h"
 #include "ScreenIDs.h"
 #include "Font_Control.h"
-#include "Strategic_Town_Loyalty.h"
 
 #include "game/GameRes.h"
 #include "ContentManager.h"
@@ -1020,7 +1016,7 @@ try
 	else
 	{
 		shaded = FALSE;
-		text   = ST::null;
+		text.clear();
 	}
 
 	BltVideoObject(FRAME_BUFFER, face.get(), 0, FACE_X, FACE_Y);
@@ -1030,7 +1026,7 @@ try
 		FRAME_BUFFER->ShadowRect(FACE_X, FACE_Y, FACE_X + FACE_WIDTH, FACE_Y + FACE_HEIGHT);
 	}
 
-	if (text != NULL)
+	if (!text.empty())
 	{
 		DrawTextToScreen(text, FACE_X + 1, FACE_Y + 107, FACE_WIDTH, FONT14ARIAL, 145, FONT_MCOLOR_BLACK, CENTER_JUSTIFIED);
 	}
@@ -1159,7 +1155,7 @@ static void BtnAuthorizeButtonCallback(GUI_BUTTON *btn, UINT32 reason)
 				if (AimMemberHireMerc())
 				{
 					// if merc was hired
-					CreateAimPopUpBox(AimPopUpText[AIM_MEMBER_FUNDS_TRANSFER_SUCCESFUL], ST::null, AIM_POPUP_BOX_X, AIM_POPUP_BOX_Y, AIM_POPUP_BOX_SUCCESS);
+					CreateAimPopUpBox(AimPopUpText[AIM_MEMBER_FUNDS_TRANSFER_SUCCESFUL], {}, AIM_POPUP_BOX_X, AIM_POPUP_BOX_Y, AIM_POPUP_BOX_SUCCESS);
 					DelayMercSpeech( gbCurrentSoldier, QUOTE_CONTRACT_ACCEPTANCE, 750, TRUE, FALSE );
 
 					//Disable the buttons behind the message box

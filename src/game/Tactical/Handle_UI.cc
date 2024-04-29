@@ -1,14 +1,13 @@
-#include "FileMan.h"
 #include "Font_Control.h"
 #include "Handle_Doors.h"
+#include "ItemModel.h"
 #include "Items.h"
-#include "Local.h"
 #include "Merc_Hiring.h"
+#include "NPC.h"
 #include "Real_Time_Input.h"
 #include "Turn_Based_Input.h"
 #include "Touch_UI.h"
 #include "Soldier_Find.h"
-#include "Debug.h"
 #include "JAScreens.h"
 #include "PathAI.h"
 #include "Soldier_Control.h"
@@ -41,12 +40,10 @@
 #include "Soldier_Profile.h"
 #include "Soldier_Create.h"
 #include "Soldier_Add.h"
-#include "Interface_Dialogue.h"
 #include "Soldier_Macros.h"
 #include "Soldier_Functions.h"
 #include "Assignments.h"
 #include "Squads.h"
-#include "Strategic_Pathing.h"
 #include "Strategic_Movement.h"
 #include "Strategic.h"
 #include "Exit_Grids.h"
@@ -57,8 +54,6 @@
 #include "MessageBoxScreen.h"
 #include "Text.h"
 #include "Dialogue_Control.h"
-#include "Line.h"
-#include "Render_Dirty.h"
 #include "GameSettings.h"
 #include "LOS.h"
 #include "Campaign_Types.h"
@@ -390,10 +385,10 @@ ScreenID HandleTacticalUI(void)
 	gfUIHandleSelection = NO_GUY_SELECTION;
 	gSelectedGuy = NULL;
 	guiShowUPDownArrows = ARROWS_HIDE_UP | ARROWS_HIDE_DOWN;
-	SetHitLocationText(ST::null);
-	SetIntTileLocationText(ST::null);
-	SetIntTileLocation2Text(ST::null);
-	SetChanceToHitText(ST::null);
+	SetHitLocationText({});
+	SetIntTileLocationText({});
+	SetIntTileLocation2Text({});
+	SetChanceToHitText({});
 	//gfUIForceReExamineCursorData = FALSE;
 	gfUINewStateForIntTile = FALSE;
 	gfUIShowExitExitGrid = FALSE;
@@ -645,7 +640,7 @@ void TacticalViewPortMovementCallback(MOUSE_REGION* region, UINT32 reason) {
 		gUIFingersDown = 0;
 		if (!IsPointerOnTacticalTouchUI()) {
 			if (gCurrentUIMode == PAN_MODE) {
-				guiPendingOverrideEvent = A_CHANGE_TO_MOVE;
+				TogglePanMode();
 			}
 			ResetCurrentCursorTarget();
 		} else {
@@ -906,6 +901,9 @@ static void SetUIMouseCursor(void)
 				guiCurrentUICursor = guiNewUICursor;
 			}
 		}
+	}
+	if ( gCurrentUIMode == CONFIRM_ACTION_MODE || gCurrentUIMode == LOCKOURTURN_UI_MODE ) {
+		RefreshMouseRegions();
 	}
 }
 
@@ -2615,6 +2613,17 @@ void ToggleLookCursorMode()
 	HandleTacticalUI();
 }
 
+void TogglePanMode()
+{
+	gsScrollXOffset = 0;
+	gsScrollYOffset = 0;
+	if (gCurrentUIMode == PAN_MODE) {
+		guiPendingOverrideEvent = A_CHANGE_TO_MOVE;
+	} else {
+		guiPendingOverrideEvent = P_PANMODE;
+	}
+}
+
 
 BOOLEAN UIHandleOnMerc( BOOLEAN fMovementMode )
 {
@@ -2711,6 +2720,7 @@ BOOLEAN UIHandleOnMerc( BOOLEAN fMovementMode )
 						gUIActionModeChangeDueToMouseOver = TRUE;
 
 						guiPendingOverrideEvent = M_CHANGE_TO_ACTION;
+						gfUIForceReExamineCursorData = TRUE;
 						// Return FALSE
 						return( FALSE );
 					}
@@ -3025,9 +3035,6 @@ BOOLEAN HandleUIMovementCursor(SOLDIERTYPE* const pSoldier, MouseMoveState const
 			// ONLY DIPSLAY PATH AFTER A DELAY
 			if ( COUNTERDONE( PATHFINDCOUNTER ) )
 			{
-				// Reset counter
-				RESETCOUNTER( PATHFINDCOUNTER );
-
 				if ( gfPlotNewMovement  )
 				{
 					DrawUIMovementPath( pSoldier, usMapPos,  uiFlags );
@@ -4505,7 +4512,7 @@ static ScreenID UIHandlePPanMode(UI_EVENT* pUIEvent) {
 	}
 
 	HideTacticalTouchUI();
-	guiNewUICursor = NO_UICURSOR;
+	guiNewUICursor = gfIsUsingTouch ? NO_UICURSOR : FLOATING_X_UICURSOR;
 
 	if (lastPointerXPos != -1 && lastPointerYPos != -1) {
 		auto diffX = gusMouseXPos - lastPointerXPos;

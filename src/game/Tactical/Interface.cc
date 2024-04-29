@@ -1,6 +1,7 @@
 #include "Directories.h"
 #include "Font.h"
 #include "Isometric_Utils.h"
+#include "ItemModel.h"
 #include "Local.h"
 #include "HImage.h"
 #include "MapScreen.h"
@@ -21,6 +22,7 @@
 #include "RenderWorld.h"
 #include "Cursors.h"
 #include "Radar_Screen.h"
+#include "Video.h"
 #include "WorldMan.h"
 #include "Font_Control.h"
 #include "Render_Dirty.h"
@@ -31,7 +33,6 @@
 #include "Faces.h"
 #include "Interface_Control.h"
 #include "Interface_Items.h"
-#include "Soldier_Profile.h"
 #include "MercTextBox.h"
 #include "Soldier_Functions.h"
 #include "Cursor_Control.h"
@@ -46,9 +47,6 @@
 #include "Vehicles.h"
 #include "GameSettings.h"
 #include "Squads.h"
-#include "Message.h"
-#include "Debug.h"
-#include "Video.h"
 #include "Items.h"
 #include "GameScreen.h"
 #include "MercProfile.h"
@@ -997,10 +995,8 @@ void DrawSelectedUIAboveGuy(SOLDIERTYPE& s)
 		}
 		else
 		{
-			if (TIMECOUNTERDONE(s.BlinkSelCounter, 80))
+			if (TIMECOUNTERDONE(s.BlinkSelCounter, 80ms))
 			{
-				RESETTIMECOUNTER(s.BlinkSelCounter, 80);
-
 				s.fShowLocator = TRUE;
 				if (++s.sLocatorFrame == 5)
 				{
@@ -1883,10 +1879,8 @@ void HandleTopMessages(void)
 		case MILITIA_INTERRUPT_MESSAGE:
 		case AIR_RAID_TURN_MESSAGE:
 			// OK, update timer.....
-			if (TIMECOUNTERDONE(giTimerTeamTurnUpdate, PLAYER_TEAM_TIMER_SEC_PER_TICKS))
+			if (COUNTERDONE(TEAMTURNUPDATE))
 			{
-				RESETTIMECOUNTER(giTimerTeamTurnUpdate, PLAYER_TEAM_TIMER_SEC_PER_TICKS);
-
 				// Update counter....
 				if (ts->usTactialTurnLimitCounter < ts->usTactialTurnLimitMax)
 				{
@@ -1912,10 +1906,8 @@ void HandleTopMessages(void)
 			{
 				ts->uiTactialTurnLimitClock = 0;
 
-				if (TIMECOUNTERDONE(giTimerTeamTurnUpdate, PLAYER_TEAM_TIMER_SEC_PER_TICKS))
+				if (COUNTERDONE(TEAMTURNUPDATE))
 				{
-					RESETTIMECOUNTER(giTimerTeamTurnUpdate, PLAYER_TEAM_TIMER_SEC_PER_TICKS);
-
 					if (ts->fTactialTurnLimitStartedBeep)
 					{
 						if (GetJA2Clock() - gTopMessage.uiTimeSinceLastBeep > PLAYER_TEAM_TIMER_TIME_BETWEEN_BEEPS)
@@ -2056,8 +2048,7 @@ void InitPlayerUIBar( BOOLEAN fInterrupt )
 	gTacticalStatus.fTactialTurnLimitStartedBeep = FALSE;
 
 	// RESET COIUNTER...
-	RESETTIMECOUNTER( giTimerTeamTurnUpdate, PLAYER_TEAM_TIMER_SEC_PER_TICKS );
-
+	RESETCOUNTER(TEAMTURNUPDATE);
 
 	// OK, set value
 	AddTopMessage(fInterrupt != TRUE ? PLAYER_TURN_MESSAGE : PLAYER_INTERRUPT_MESSAGE);

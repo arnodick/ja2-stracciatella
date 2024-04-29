@@ -4,23 +4,19 @@
 #include "Laptop.h"
 #include "LoadSaveData.h"
 #include "History.h"
-#include "Game_Clock.h"
 #include "Quests.h"
 #include "Soldier_Control.h"
 #include "VObject.h"
 #include "Debug.h"
 #include "WordWrap.h"
-#include "Render_Dirty.h"
 #include "Cursors.h"
 #include "Soldier_Profile.h"
 #include "StrategicMap.h"
-#include "QuestText.h"
 #include "Text.h"
 #include "Message.h"
 #include "LaptopSave.h"
 #include "Button_System.h"
 #include "VSurface.h"
-#include "FileMan.h"
 
 #include "ContentManager.h"
 #include "GameInstance.h"
@@ -656,7 +652,7 @@ static ST::string ProcessHistoryTransactionString(const HistoryUnit* h)
 		case HISTORY_WONBATTLE:
 			return pHistoryStrings[code];
 	}
-	return ST::null;
+	return {};
 }
 
 

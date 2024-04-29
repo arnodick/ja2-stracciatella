@@ -1,16 +1,11 @@
 #ifndef __WORLDDEF_H
 #define __WORLDDEF_H
 
-#include "Types.h"
+#include "JA2Types.h"
 #include "World_Tileset_Enums.h"
 
 #include <string_theory/string>
 
-struct ANITILE;
-struct ITEM_POOL;
-struct LIGHT_SPRITE;
-struct SOLDIERTYPE;
-struct STRUCTURE;
 
 #define WORLD_TILE_X		40
 #define WORLD_TILE_Y		20
@@ -237,7 +232,7 @@ struct TILE_SURFACE_RESOURCE
 };
 
 // World Data
-extern MAP_ELEMENT* gpWorldLevelData;
+inline MAP_ELEMENT gpWorldLevelData[WORLD_MAX];
 
 #define FOR_EACH_WORLD_TILE(iter) \
 	for (MAP_ELEMENT* iter = gpWorldLevelData, * const iter##__end = gpWorldLevelData + WORLD_MAX; iter != iter##__end; ++iter)

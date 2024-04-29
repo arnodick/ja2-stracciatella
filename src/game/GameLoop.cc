@@ -1,6 +1,6 @@
 #include "GameLoop.h"
 #include "GameVersion.h"
-#include "Local.h"
+#include "Input.h"
 #include "SGP.h"
 #include "Screens.h"
 #include "ShopKeeper_Interface.h"
@@ -12,25 +12,21 @@
 #include "Laptop.h"
 #include "MapScreen.h"
 #include "Game_Clock.h"
-#include "Overhead.h"
 #include "Map_Screen_Interface.h"
 #include "Tactical_Save.h"
-#include "Interface.h"
 #include "GameSettings.h"
 #include "GameInstance.h"
 #include "ContentManager.h"
 #include "Text.h"
 #include "HelpScreen.h"
 #include "SaveLoadGame.h"
-#include "Finances.h"
 #include "Options_Screen.h"
-#include "Debug.h"
 #include "Video.h"
 #include "Button_System.h"
 #include "Font_Control.h"
 #include "UILayout.h"
 #include "GameMode.h"
-#include "sgp/FileMan.h"
+#include "FPS.h"
 #include "Logger.h"
 
 #include <string_theory/format>
@@ -58,6 +54,8 @@ void InitializeGame(void)
 
 	// Init Fonts
 	InitializeFonts();
+
+	FPS::Init(GameLoop, gp10PointArial);
 
 	InitTacticalSave();
 

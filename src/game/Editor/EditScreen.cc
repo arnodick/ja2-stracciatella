@@ -2,10 +2,9 @@
 #include "Font.h"
 #include "Font_Control.h"
 #include "HImage.h"
-#include "Local.h"
 #include "SGP.h"
 #include "Button_System.h"
-#include "Structure.h"
+#include "Structure_Internals.h"
 #include "TileDef.h"
 #include "Timer_Control.h"
 #include "VObject.h"
@@ -27,7 +26,6 @@
 #include "Soldier_Control.h"
 #include "Handle_UI.h"
 #include "Event_Pump.h"
-#include "World_Items.h"
 #include "LoadScreen.h"
 #include "Render_Dirty.h"
 #include "Isometric_Utils.h"
@@ -44,7 +42,6 @@
 #include "NewSmooth.h"
 #include "Smoothing_Utils.h"
 #include "MessageBox.h"
-#include "Soldier_Create.h"
 #include "Soldier_Init_List.h"
 #include "Text_Input.h"
 #include "Cursor_Modes.h"
@@ -59,9 +56,7 @@
 #include "Game_Init.h"
 #include "Environment.h"
 #include "Simple_Render_Utils.h"
-#include "Map_Edgepoints.h"
 #include "Line.h"
-#include "English.h"
 #include "Random.h"
 #include "Scheduling.h"
 #include "Road_Smoothing.h"
@@ -71,9 +66,7 @@
 #include "Music_Control.h"
 #include "Soldier_Profile.h"
 #include "GameSettings.h"
-#include "JAScreens.h"
 #include "Shading.h"
-#include "Debug.h"
 #include "Video.h"
 #include "VObject_Blitters.h"
 #include "UILayout.h"
@@ -193,8 +186,6 @@ void EditScreenInit(void)
 	gusEditorTaskbarColor   = Get16BPPColor( FROMRGB(  65,  79,  94 ) );
 	gusEditorTaskbarHiColor = Get16BPPColor( FROMRGB( 122, 124, 121 ) );
 	gusEditorTaskbarLoColor = Get16BPPColor( FROMRGB(  22,  55,  73 ) );
-
-	InitializeRoadMacros();
 
 	InitArmyGunTypes();
 }
@@ -425,7 +416,6 @@ static BOOLEAN EditModeShutdown(void)
 	}
 
 	InvalidateScreen( );
-	ExecuteBaseDirtyRectQueue();
 
 	gRadarRegion.Enable();
 	CreateCurrentTacticalPanelButtons( );
@@ -1211,7 +1201,7 @@ static void HandleKeyboardShortcuts(void)
 				switch( EditorInputEvent.usParam )
 				{
 					case SDLK_ESCAPE:
-						SetInputFieldString( 0, ST::null );
+						SetInputFieldString( 0, {} );
 						RemoveGotoGridNoUI();
 						break;
 
@@ -1220,7 +1210,7 @@ static void HandleKeyboardShortcuts(void)
 					case 'x':
 						if( EditorInputEvent.usKeyState & ALT_DOWN )
 						{
-							SetInputFieldString( 0, ST::null );
+							SetInputFieldString( 0, {} );
 							RemoveGotoGridNoUI();
 							iCurrentAction = ACTION_QUIT_GAME;
 						}
@@ -1594,10 +1584,6 @@ static void HandleKeyboardShortcuts(void)
 								break;
 						}
 					}
-					break;
-				case 'f':
-					gbFPSDisplay = !gbFPSDisplay;
-					EnableFPSOverlay(gbFPSDisplay);
 					break;
 				case 'g':	// ground
 					if( EditorInputEvent.usKeyState & CTRL_DOWN )
@@ -2381,7 +2367,6 @@ static ScreenID WaitForHelpScreenResponse(void)
 	}
 
 	InvalidateScreen( );
-	ExecuteBaseDirtyRectQueue();
 
 	return( EDIT_SCREEN );
 }
@@ -2428,13 +2413,11 @@ static ScreenID WaitForSelectionWindowResponse(void)
 				iDrawMode = DRAW_MODE_SLANTED_ROOF;
 		}
 		InvalidateScreen( );
-		ExecuteBaseDirtyRectQueue();
 	}
 	else
 	{
 		DisplaySelectionWindowGraphicalInformation();
 		InvalidateScreen( );
-		ExecuteBaseDirtyRectQueue();
 	}
 
 	return( EDIT_SCREEN );
@@ -3343,9 +3326,6 @@ ScreenID EditScreenHandle(void)
 	ScreenID const uiRetVal = PerformSelectedAction();
 	if (uiRetVal != EDIT_SCREEN) return uiRetVal;
 
-	// Display Framerate
-	DisplayFrameRate( );
-
 	// Handle video overlays, for FPS and screen message stuff
 	if ( gfScrollPending )
 	{
@@ -3355,9 +3335,6 @@ ScreenID EditScreenHandle(void)
 	ExecuteVideoOverlays( );
 
 	ScrollString( );
-
-	ExecuteBaseDirtyRectQueue();
-	EndFrameBufferRender( );
 
 	return EDIT_SCREEN;
 }
@@ -3375,7 +3352,7 @@ static void CreateGotoGridNoUI(void)
 	MSYS_DefineRegion(&GotoGridNoUIRegion, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, MSYS_PRIORITY_NORMAL + 1, 0, MSYS_NO_CALLBACK, MSYS_NO_CALLBACK);
 	//Init a text input field.
 	InitTextInputModeWithScheme( DEFAULT_SCHEME );
-	AddTextInputField( 300, 180, 40, 18, MSYS_PRIORITY_HIGH, ST::null, 6, INPUTTYPE_NUMERICSTRICT );
+	AddTextInputField( 300, 180, 40, 18, MSYS_PRIORITY_HIGH, {}, 6, INPUTTYPE_NUMERICSTRICT );
 }
 
 

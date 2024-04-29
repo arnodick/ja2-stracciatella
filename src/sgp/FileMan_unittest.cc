@@ -1,8 +1,7 @@
 #include "gtest/gtest.h"
-
 #include "FileMan.h"
-
-#include "externalized/TestUtils.h"
+#include "TestUtils.h"
+#include <utility>
 
 TEST(FileManTest, joinPaths)
 {
@@ -47,7 +46,7 @@ TEST(FileManTest, joinPathsMultiple)
 		ST::string result;
 
 		result = FileMan::joinPaths({});
-		EXPECT_EQ(result, ST::null);
+		EXPECT_TRUE(result.empty());
 
 		result = FileMan::joinPaths({ "foo" });
 		EXPECT_EQ(result, "foo");
@@ -125,9 +124,9 @@ TEST(FileManTest, RemoveAllFilesInDir)
 	ST::string pathA = FileMan::joinPaths(tempPath.get(), "foo.txt");
 	ST::string pathB = FileMan::joinPaths(tempPath.get(), "bar.txt");
 
-	SGPFile* fileA = FileMan::openForWriting(pathA);
+	SGPFile* fileA = FileMan::openForWriting(std::move(pathA));
 	ASSERT_NE(fileA, nullptr);
-	SGPFile* fileB = FileMan::openForWriting(pathB);
+	SGPFile* fileB = FileMan::openForWriting(std::move(pathB));
 	ASSERT_NE(fileB, nullptr);
 
 	fileA->write("foo", 3);

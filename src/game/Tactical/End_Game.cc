@@ -1,18 +1,12 @@
 #include "Soldier_Control.h"
 #include "Overhead.h"
-#include "Boxing.h"
-#include "Render_Fun.h"
-#include "Random.h"
 #include "TileDef.h"
 #include "Timer_Control.h"
 #include "WorldMan.h"
 #include "Soldier_Profile.h"
 #include "NPC.h"
 #include "OppList.h"
-#include "AI.h"
 #include "Dialogue_Control.h"
-#include "Handle_UI.h"
-#include "Points.h"
 #include "End_Game.h"
 #include "Intro.h"
 #include "Exit_Grids.h"
@@ -155,7 +149,7 @@ void BeginHandleDeidrannaDeath( SOLDIERTYPE *pKillerSoldier, INT16 sGridNo, INT8
 
 	gTacticalStatus.uiFlags |= IN_DEIDRANNA_ENDGAME;
 
-	SetCustomizableTimerCallbackAndDelay( 2000, DeidrannaTimerCallback, FALSE );
+	SetCustomizableTimerCallbackAndDelay(2s, DeidrannaTimerCallback, false);
 
 }
 
@@ -394,8 +388,7 @@ void BeginHandleQueenBitchDeath( SOLDIERTYPE *pKillerSoldier, INT16 sGridNo, INT
 
 	// gTacticalStatus.uiFlags |= IN_DEIDRANNA_ENDGAME;
 
-	SetCustomizableTimerCallbackAndDelay( 3000, QueenBitchTimerCallback, FALSE );
-
+	SetCustomizableTimerCallbackAndDelay(3s, QueenBitchTimerCallback, false);
 
 	// Kill all enemies in creature team.....
 	FOR_EACH_IN_TEAM(s, CREATURE_TEAM)

@@ -1,5 +1,6 @@
 package io.github.ja2stracciatella
 
+import android.app.AlertDialog
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
@@ -116,21 +117,29 @@ class LauncherActivity : AppCompatActivity() {
 
         if (configurationModel.scalingQuality.value == ScalingQuality.PERFECT) {
             val scalingInt = scaling.toInt()
-            val width = Resolution.DEFAULT.width + ((screenWidth - Resolution.DEFAULT.width.toInt() * scalingInt) / scalingInt).toUInt()
-            val height = Resolution.DEFAULT.height + ((screenHeight - Resolution.DEFAULT.height.toInt() * scalingInt) / scalingInt).toUInt()
+            val width =
+                Resolution.DEFAULT.width + ((screenWidth - Resolution.DEFAULT.width.toInt() * scalingInt) / scalingInt).toUInt()
+            val height =
+                Resolution.DEFAULT.height + ((screenHeight - Resolution.DEFAULT.height.toInt() * scalingInt) / scalingInt).toUInt()
             return Resolution(width - (width % 2u), height - (height % 2u))
         }
-        val width = Resolution.DEFAULT.width + ((screenWidth - Resolution.DEFAULT.width.toInt() * scaling) / scaling).toUInt()
+        val width =
+            Resolution.DEFAULT.width + ((screenWidth - Resolution.DEFAULT.width.toInt() * scaling) / scaling).toUInt()
         return Resolution(width - (width % 2u), Resolution.DEFAULT.height)
     }
 
     private fun startGame() {
         try {
             getPermissionsIfNecessaryForAction {
-                saveJA2Json()
-                NativeExceptionContainer.resetException()
-                val intent = Intent(this@LauncherActivity, StracciatellaActivity::class.java)
-                startActivity(intent)
+                GameDir.checkGameDirectoryForCommonMistakes(
+                    this,
+                    configurationModel.vanillaGameDir.value
+                ) {
+                    saveJA2Json()
+                    NativeExceptionContainer.resetException()
+                    val intent = Intent(this@LauncherActivity, StracciatellaActivity::class.java)
+                    startActivity(intent)
+                }
             }
         } catch (e: IOException) {
             val message = "Could not write ${ja2JsonPath}: ${e.message}"
@@ -167,6 +176,11 @@ class LauncherActivity : AppCompatActivity() {
             } else {
                 configurationModel.setResolution(getRecommendedResolution())
             }
+            if (json.debug != null) {
+                configurationModel.setDebug(json.debug)
+            } else {
+                configurationModel.setDebug(false)
+            }
         } catch (e: SerializationException) {
             Log.w(activityLogTag, "Could not decode ja2.json: ${e.message}")
             configurationModel.setVanillaGameVersion(VanillaVersion.ENGLISH)
@@ -186,7 +200,8 @@ class LauncherActivity : AppCompatActivity() {
             configurationModel.vanillaGameVersion.value,
             configurationModel.saveGameDir.value,
             configurationModel.resolution.value,
-            configurationModel.scalingQuality.value
+            configurationModel.scalingQuality.value,
+            configurationModel.debug.value
         )
         val parentDir = File(ja2JsonPath).parentFile
         if (parentDir?.exists() != true) {

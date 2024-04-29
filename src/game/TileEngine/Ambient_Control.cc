@@ -1,10 +1,10 @@
 #include "Ambient_Types.h"
 #include "Directories.h"
-#include "FileMan.h"
 #include "Environment.h"
+#include "Game_Event_Hook.h"
 #include "Sound_Control.h"
-#include "Game_Events.h"
 #include "Ambient_Control.h"
+#include "SGPFile.h"
 #include "SoundMan.h"
 #include "Debug.h"
 
@@ -18,8 +18,8 @@
 static BOOLEAN LoadAmbientControlFile(UINT8 ubAmbientID)
 try
 {
-	ST::string zFilename = ST::format("{}/{}.bad", AMBIENTDIR, ubAmbientID);
-	AutoSGPFile hFile(GCM->openGameResForReading(zFilename));
+	AutoSGPFile hFile{GCM->openGameResForReading(
+		ST::format("{}/{}.bad", AMBIENTDIR, ubAmbientID))};
 
 	// READ #
 	hFile->read(&gsNumAmbData, sizeof(INT16));

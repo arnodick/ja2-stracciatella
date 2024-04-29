@@ -6,7 +6,6 @@
 
 typedef INT16 GridNo;
 typedef UINT8 ProfileID;
-typedef INT32 TIMECOUNTER;
 
 struct ANIM_PROF;
 struct ANITILE;
@@ -33,5 +32,7 @@ struct STRUCTURE_FILE_REF;
 struct TILE_IMAGERY;
 struct VEHICLETYPE;
 struct VIDEO_OVERLAY;
+
+using grams = int;
 
 #endif

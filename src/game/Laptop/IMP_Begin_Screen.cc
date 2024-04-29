@@ -2,7 +2,6 @@
 #include "ContentManager.h"
 #include "Cursors.h"
 #include "Directories.h"
-#include "FileMan.h"
 #include "Font_Control.h"
 #include "Font.h"
 #include "GameInstance.h"
@@ -13,15 +12,11 @@
 #include "Laptop.h"
 #include "LaptopSave.h"
 #include "Line.h"
-#include "Render_Dirty.h"
 #include "SaveLoadGame.h"
-#include "SGPStrings.h"
-#include "Soldier_Control.h"
 #include "Soldier_Profile_Type.h"
 #include "Soldier_Profile.h"
 #include "IMP_Attribute_Selection.h"
 #include "IMP_Compile_Character.h"
-#include "IMP_Finish.h"
 #include "IMP_Portraits.h"
 #include "Text_Input.h"
 #include "Text.h"
@@ -47,7 +42,7 @@
 #define MALE_BOX_WIDTH 24 - 2
 #define MALE_BOX_HEIGHT 24 - 2
 #define FEMALE_BOX_X  2 + 302 + LAPTOP_SCREEN_UL_X
-
+constexpr std::size_t MAX_NICKNAME_LENGTH = 8;
 
 // genders
 enum {
@@ -127,7 +122,7 @@ void InitImpBeginScreeenTextInputBoxes() {
 		NAMES_INPUT_HEIGHT,
 		MSYS_PRIORITY_HIGH + 2,
 		pNickName,
-		8,
+		MAX_NICKNAME_LENGTH,
 		INPUTTYPE_FULL_TEXT
 	);
 
@@ -266,9 +261,6 @@ static void RemoveIMPBeginScreenButtons(void)
 }
 
 
-static void CopyFirstNameIntoNickName(void);
-
-
 static void BtnIMPBeginScreenDoneCallback(GUI_BUTTON *btn, UINT32 reason)
 {
 	if (reason & MSYS_CALLBACK_REASON_POINTER_UP)
@@ -285,7 +277,7 @@ static void BtnIMPBeginScreenDoneCallback(GUI_BUTTON *btn, UINT32 reason)
 			{
 				// no nick name
 				// copy first name to nick name
-				CopyFirstNameIntoNickName();
+				pNickNameString = pFullNameString.before_first(' ').left(MAX_NICKNAME_LENGTH);
 			}
 			// ok, now set back to main page, and set the fact we have completed part 1
 			if (iCurrentProfileMode < 1 && bGenderFlag != -1)
@@ -369,21 +361,6 @@ static void DisplayFemaleCheckboxFocus(void)
 	DisplayCheckboxFocus(FEMALE_BOX_X);
 }
 
-
-static void CopyFirstNameIntoNickName(void)
-{
-	// this procedure will copy the characters first name in to the nickname for the character
-	// FIXME it should only copy NICKNAME_LENGTH, but which type? (char/char16_t/char32_t)
-	auto i = pFullNameString.find(' ');
-	if (i == -1)
-	{
-		pNickNameString = pFullNameString;
-	}
-	else
-	{
-		pNickNameString = pFullNameString.substr(0, i);
-	}
-}
 
 static void SelectFemaleRegionCallBack(MOUSE_REGION* pRegion, UINT32 iReason);
 static void SelectMaleRegionCallBack(MOUSE_REGION* pRegion, UINT32 iReason);

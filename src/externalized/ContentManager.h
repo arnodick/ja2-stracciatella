@@ -1,7 +1,5 @@
 #pragma once
 
-/* XXX */
-#include "ItemModel.h"
 #include "ContentMusic.h"
 
 #include "Facts.h"
@@ -58,7 +56,7 @@ struct GARRISON_GROUP;
 class ContentManager : public ItemSystem, public MercSystem
 {
 public:
-	virtual ~ContentManager() noexcept(false) {};
+	virtual ~ContentManager() = default;
 
 	virtual void logConfiguration() const = 0;
 
@@ -81,7 +79,8 @@ public:
 	virtual SGPFile* openMapForReading(const ST::string& mapName) const = 0;
 
 	/* Open a game resource file for reading. */
-	virtual SGPFile* openGameResForReading(const ST::string& filename) const = 0;
+	/* Note: filename is passed by value here, it will be moved to SGPFile. */
+	virtual SGPFile* openGameResForReading(ST::string filename) const = 0;
 
 	/* Checks if a game resource exists. */
 	virtual bool doesGameResExists(const ST::string& filename) const = 0;
@@ -122,7 +121,7 @@ public:
 	virtual const std::vector<ARMY_COMPOSITION>& getArmyCompositions() const = 0;
 
 	virtual const DealerModel* getDealer(uint8_t dealerID) const = 0;
-	virtual const std::vector<const DealerModel*> getDealers() const = 0;
+	virtual const std::vector<const DealerModel*>& getDealers() const = 0;
 
 	virtual const DealerInventory* getDealerInventory(int dealerId) const = 0;
 	virtual const DealerInventory* getBobbyRayNewInventory() const = 0;

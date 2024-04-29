@@ -1,8 +1,9 @@
 #include "Directories.h"
+#include "EditScreen.h"
 #include "HImage.h"
+#include "ItemModel.h"
 #include "LoadSaveBasicSoldierCreateStruct.h"
 #include "LoadSaveSoldierCreate.h"
-#include "Local.h"
 #include "Font.h"
 #include "Overhead_Map.h"
 #include "Types.h"
@@ -21,17 +22,11 @@
 #include "MouseSystem.h"
 #include "StrategicMap.h"
 #include "FileMan.h"
-#include "Exit_Grids.h"
 #include "Map_Information.h"
 #include "Summary_Info.h"
 #include "Animated_ProgressBar.h"
-#include "WorldDef.h"
 #include "WorldDat.h"
-#include "EditorDefines.h"
-#include "EditScreen.h"
-#include "English.h"
 #include "World_Items.h"
-#include "Text.h"
 #include "Debug.h"
 #include "Soldier_Create.h"
 #include "Video.h"
@@ -266,7 +261,7 @@ void CreateSummaryWindow()
 	gfDeniedSummaryCreation = FALSE;
 	gfRenderSummary = TRUE;
 	//Create all of the buttons here
-	iSummaryButton[SUMMARY_BACKGROUND] = CreateLabel(ST::null, 0, 0, 0, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT - EDITOR_TASKBAR_HEIGHT, MSYS_PRIORITY_HIGH - 1);
+	iSummaryButton[SUMMARY_BACKGROUND] = CreateLabel({}, 0, 0, 0, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT - EDITOR_TASKBAR_HEIGHT, MSYS_PRIORITY_HIGH - 1);
 
 	iSummaryButton[SUMMARY_OKAY] = CreateTextButton("Okay", FONT12POINT1, FONT_BLACK, FONT_BLACK, 585, 325, 50, 30, MSYS_PRIORITY_HIGH, SummaryOkayCallback);
 
@@ -317,7 +312,7 @@ void CreateSummaryWindow()
 	//Init the textinput field.
 	InitTextInputModeWithScheme( DEFAULT_SCHEME );
 	AddUserInputField( NULL );  //just so we can use short cut keys while not typing.
-	AddTextInputField(MAP_LEFT + 112, MAP_BOTTOM + 75, 100, 18, MSYS_PRIORITY_HIGH, ST::null, 20, INPUTTYPE_DOSFILENAME);
+	AddTextInputField(MAP_LEFT + 112, MAP_BOTTOM + 75, 100, 18, MSYS_PRIORITY_HIGH, {}, 20, INPUTTYPE_DOSFILENAME);
 
 	for( i = 1; i < NUM_SUMMARY_BUTTONS; i++ )
 		iSummaryButton[i]->Hide();
@@ -879,7 +874,7 @@ void RenderSummaryWindow()
 	if( (GetActiveFieldID() == 1 ) != gfTempFile )
 	{
 		gfTempFile ^= 1;
-		SetInputFieldString( 1, ST::null );
+		SetInputFieldString( 1, {} );
 		gfRenderSummary = TRUE;
 	}
 	if( gfTempFile ) //constantly extract the temp filename for updating purposes.
@@ -2149,11 +2144,11 @@ static void UpdateMasterProgress(void)
 		MasterEnd = (gusCurrent / (double)gusTotal) * 100.0;
 		if( gfMajorUpdate )
 		{
-			SetRelativeStartAndEndPercentage( 2, (UINT16)MasterStart, (UINT16)MasterEnd, ST::null );
+			SetRelativeStartAndEndPercentage( 2, (UINT16)MasterStart, (UINT16)MasterEnd, {} );
 			RenderProgressBar( 2, 0 );
 		}
 		else
-			SetRelativeStartAndEndPercentage( 1, (UINT16)MasterStart, (UINT16)MasterEnd, ST::null );
+			SetRelativeStartAndEndPercentage( 1, (UINT16)MasterStart, (UINT16)MasterEnd, {} );
 	}
 }
 
@@ -2303,7 +2298,7 @@ void ApologizeOverrideAndForceUpdateEverything()
 	SUMMARYFILE *pSF;
 	//Create one huge assed button
 	gfMajorUpdate = TRUE;
-	iSummaryButton[SUMMARY_BACKGROUND] = CreateLabel(ST::null, 0, 0, 0, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, MSYS_PRIORITY_HIGH - 1);
+	iSummaryButton[SUMMARY_BACKGROUND] = CreateLabel({}, 0, 0, 0, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, MSYS_PRIORITY_HIGH - 1);
 	//Draw it
 	iSummaryButton[SUMMARY_BACKGROUND]->Draw();
 	InvalidateScreen();

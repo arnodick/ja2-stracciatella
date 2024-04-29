@@ -34,7 +34,6 @@
 #include "Input.h"
 #include "Arms_Dealer_Init.h"
 #include "English.h"
-#include "Soldier_Add.h"
 #include "Faces.h"
 #include "Dialogue_Control.h"
 #include "ShopKeeper_Quotes.h"
@@ -43,11 +42,8 @@
 #include "Random.h"
 #include "Squads.h"
 #include "Soldier_Profile.h"
-#include "Message.h"
 #include "LaptopSave.h"
 #include "Quests.h"
-#include "Weapons.h"
-#include "Line.h"
 #include "Drugs_And_Alcohol.h"
 #include "Map_Screen_Interface.h"
 #include "Soldier_Macros.h"
@@ -487,9 +483,6 @@ ScreenID ShopKeeperScreenHandle()
 	// render help
 	SaveBackgroundRects( );
 	RenderFastHelp( );
-
-	ExecuteBaseDirtyRectQueue();
-	EndFrameBufferRender();
 
 	if( gfSKIScreenExit )
 	{
@@ -2136,7 +2129,7 @@ static UINT32 DisplayInvSlot(UINT8 const slot_num, UINT16 const item_idx, UINT16
 		ST::string overlay_text =
 			item_o.bGunAmmoStatus < 0 ? ST::string(TacticalStr[JAMMED_ITEM_STR]) :
 			print_repaired            ? ST::string(SKI_Text[SKI_TEXT_REPAIRED]) :
-			ST::null;
+			ST::string();
 		if (!overlay_text.empty())
 		{
 			INT16 cen_x;
@@ -2817,7 +2810,7 @@ static void SetSkiFaceRegionHelpText(const INVENTORY_IN_SLOT* pInv, MOUSE_REGION
 	}
 	else
 	{
-		zHelpText = ST::null;
+		zHelpText.clear();
 	}
 	pRegion->SetFastHelpText(zHelpText);
 }
@@ -4592,12 +4585,12 @@ static void ClearArmsDealerOfferSlot(INT32 ubSlotToClear)
 	ArmsDealerOfferArea[ ubSlotToClear ] = INVENTORY_IN_SLOT{};
 
 	//Remove the mouse help text from the region
-	gDealersOfferSlotsMouseRegions[ubSlotToClear].SetFastHelpText(ST::null);
+	gDealersOfferSlotsMouseRegions[ubSlotToClear].SetFastHelpText({});
 
 	//if the dealer repairs
 	if (DoesDealerDoRepairs(gbSelectedArmsDealerID))
 	{
-		gDealersOfferSlotsSmallFaceMouseRegions[ubSlotToClear].SetFastHelpText(ST::null);
+		gDealersOfferSlotsSmallFaceMouseRegions[ubSlotToClear].SetFastHelpText({});
 	}
 }
 
@@ -4611,8 +4604,8 @@ static void ClearPlayersOfferSlot(INT32 ubSlotToClear)
 	PlayersOfferArea[ ubSlotToClear ] = INVENTORY_IN_SLOT{};
 
 	//Clear the text for the item
-	gPlayersOfferSlotsMouseRegions[ubSlotToClear].SetFastHelpText(ST::null);
-	gPlayersOfferSlotsSmallFaceMouseRegions[ubSlotToClear].SetFastHelpText(ST::null);
+	gPlayersOfferSlotsMouseRegions[ubSlotToClear].SetFastHelpText({});
+	gPlayersOfferSlotsSmallFaceMouseRegions[ubSlotToClear].SetFastHelpText({});
 
 	// if the player offer area is clear, reset flags for transaction
 	CheckAndHandleClearingOfPlayerOfferArea( );
@@ -6306,7 +6299,7 @@ static ST::string BuildDoneWhenTimeString(ArmsDealerID ubArmsDealer, UINT16 usIt
 	//if the item has already been repaired
 	if( gArmsDealersInventory[ ubArmsDealer ][ usItemIndex ].SpecialItem[ ubElement ].uiRepairDoneTime <= GetWorldTotalMin() )
 	{
-		return ST::null;
+		return {};
 	}
 
 	uiDoneTime = gArmsDealersInventory[ ubArmsDealer ][ usItemIndex ].SpecialItem[ ubElement ].uiRepairDoneTime;
@@ -6357,7 +6350,7 @@ static ST::string BuildItemHelpTextString(const INVENTORY_IN_SLOT* pInv, UINT8 u
 	}
 	else
 	{
-		return ST::null;
+		return {};
 	}
 }
 

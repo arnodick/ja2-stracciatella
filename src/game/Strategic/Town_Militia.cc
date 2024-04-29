@@ -1,6 +1,6 @@
-#include "Local.h"
 #include "MapScreen.h"
 #include "MessageBoxScreen.h"
+#include "SAM_Sites.h"
 #include "Town_Militia.h"
 #include "Militia_Control.h"
 #include "Campaign_Types.h"
@@ -10,13 +10,10 @@
 #include "Random.h"
 #include "Text.h"
 #include "Map_Screen_Interface.h"
-#include "Interface.h"
 #include "LaptopSave.h"
 #include "Finances.h"
 #include "Game_Clock.h"
 #include "Assignments.h"
-#include "Squads.h"
-#include "Soldier_Create.h"
 #include "Dialogue_Control.h"
 #include "Queen_Command.h"
 #include "PreBattle_Interface.h"
@@ -192,14 +189,14 @@ void TownMilitiaTrainingCompleted(SOLDIERTYPE *pTrainer, const SGPSector& sector
 }
 
 
-INT8 SoldierClassToMilitiaRank(UINT8 const soldier_class)
+std::optional<UINT8> SoldierClassToMilitiaRank(UINT8 const soldier_class)
 {
 	switch (soldier_class)
 	{
 		case SOLDIER_CLASS_GREEN_MILITIA: return GREEN_MILITIA;
 		case SOLDIER_CLASS_REG_MILITIA:   return REGULAR_MILITIA;
 		case SOLDIER_CLASS_ELITE_MILITIA: return ELITE_MILITIA;
-		default:                          return -1;
+		default:                          return {};
 	}
 }
 
@@ -948,7 +945,7 @@ ST::string BuildMilitiaPromotionsString()
 {
 	ST::string str;
 
-	if (gbMilitiaPromotions == 0) return ST::null;
+	if (gbMilitiaPromotions == 0) return {};
 
 	PromoteMilitia(str, gbGreenToElitePromotions, gzLateLocalizedString[STR_LATE_29], gzLateLocalizedString[STR_LATE_22]);
 	PromoteMilitia(str, gbGreenToRegPromotions,  gzLateLocalizedString[STR_LATE_30], gzLateLocalizedString[STR_LATE_23]);

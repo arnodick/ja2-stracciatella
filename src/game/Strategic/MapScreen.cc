@@ -30,6 +30,7 @@
 #include "Interface_Items.h"
 #include "Interface_Panels.h"
 #include "Interface_Utils.h"
+#include "ItemModel.h"
 #include "Items.h"
 #include "JAScreens.h"
 #include "LaptopSave.h"
@@ -38,6 +39,7 @@
 #include "Map_Screen_Interface.h"
 #include "Map_Screen_Interface_Border.h"
 #include "Map_Screen_Interface_Bottom.h"
+#include "Map_Screen_Interface_Map.h"
 #include "Map_Screen_Interface_Map_Inventory.h"
 #include "Map_Screen_Interface_TownMine_Info.h"
 #include "Meanwhile.h"
@@ -55,15 +57,17 @@
 #include "Radar_Screen.h"
 #include "Render_Dirty.h"
 #include "RenderWorld.h"
+#include "SAM_Sites.h"
 #include "SaveLoadScreen.h"
+#include "Soldier_Control.h"
 #include "Soldier_Macros.h"
 #include "Squads.h"
+#include "StrategicMap.h"
 #include "StrategicMap_Secrets.h"
 #include "Strategic_Movement_Costs.h"
 #include "Strategic_Pathing.h"
 #include "Strategic_Town_Loyalty.h"
 #include "Strategic_Turns.h"
-#include "Sys_Globals.h"
 #include "SysUtil.h"
 #include "Tactical_Save.h"
 #include "Text.h"
@@ -76,14 +80,7 @@
 
 #include <string_theory/format>
 
-struct PopUpBox;
-
-
-
 #define MAX_SORT_METHODS					6
-
-// Cursors
-#define SCREEN_CURSOR CURSOR_NORMAL
 
 // Fonts
 #define CHAR_FONT BLOCKFONT2 // COMPFONT
@@ -774,9 +771,7 @@ static void DrawCharacterInfo(SOLDIERTYPE const& s)
 	DrawStringCentered(nickname, PIC_NAME_X,  PIC_NAME_Y,  PIC_NAME_WID,  PIC_NAME_HEI,  CHAR_FONT);
 	DrawStringCentered(name,     CHAR_NAME_X, CHAR_NAME_Y, CHAR_NAME_WID, CHAR_NAME_HEI, CHAR_FONT);
 
-	ST::string assignment =
-		s.bAssignment == VEHICLE ? pShortVehicleStrings[GetVehicle(s.iVehicleId).ubVehicleType] : // Show vehicle type
-		pAssignmentStrings[s.bAssignment];
+	auto const assignment = GetMapscreenMercAssignmentString(s);
 	DrawStringCentered(assignment, CHAR_ASSIGN_X, CHAR_ASSIGN1_Y, CHAR_ASSIGN_WID, CHAR_ASSIGN_HEI, CHAR_FONT);
 
 	// Second assignment line
@@ -902,7 +897,7 @@ static void DrawCharacterInfo(SOLDIERTYPE const& s)
 
 	ST::string morale =
 		s.bAssignment == ASSIGNMENT_POW ? pPOWStrings[1] : // POW - morale unknown
-		s.bLife == 0                    ? ST::null :
+		s.bLife == 0                    ? ST::string() :
 		GetMoraleString(s);
 	DrawStringCentered(morale, CHAR_MORALE_X, CHAR_MORALE_Y, CHAR_MORALE_WID, CHAR_MORALE_HEI, CHAR_FONT);
 }
@@ -1305,9 +1300,6 @@ static void RefreshMapScreen()
 // THIS IS STUFF THAT RUNS *ONCE* DURING APPLICATION EXECUTION, AT INITIAL STARTUP
 void MapScreenInit(void)
 {
-	// init palettes for big map
-	InitializePalettesForMap( );
-
 	InitMapScreenInterfaceMap();
 
 	// set up leave list arrays for dismissed mercs
@@ -1323,8 +1315,6 @@ void MapScreenShutdown(void)
 {
 	// free up alloced mapscreen messages
 	FreeGlobalMessageList( );
-
-	ShutDownPalettesForMap( );
 
 	// free memory for leave list arrays for dismissed mercs
 	ShutDownLeaveList( );
@@ -1562,7 +1552,7 @@ ScreenID MapScreenHandle(void)
 
 		if ( !gfFadeOutDone && !gfFadeIn )
 		{
-			MSYS_SetCurrentCursor(SCREEN_CURSOR);
+			SetCurrentCursorFromDatabase(CURSOR_NORMAL);
 		}
 		gMPanelRegion.Disable();
 
@@ -1910,10 +1900,6 @@ ScreenID MapScreenHandle(void)
 	// now the border corner piece
 	//RenderMapBorderCorner( );
 
-
-	// Display Framerate
-	DisplayFrameRate( );
-
 	// update paused states
 	UpdatePausedStatesDueToTimeCompression( );
 
@@ -2036,17 +2022,10 @@ ScreenID MapScreenHandle(void)
 		GlowItem( );
 	}
 
-
 	RenderFastHelp();
-
-	// execute dirty
-	ExecuteBaseDirtyRectQueue( );
 
 	// update cursor
 	UpdateCursorIfInLastSector( );
-
-	EndFrameBufferRender( );
-
 
 	// if not going anywhere else
 	if ( guiPendingScreen == NO_PENDING_SCREEN )
@@ -3000,14 +2979,6 @@ static void HandleModAlt(UINT32 const key)
 			}
 			break;
 
-		case 'f':
-			if (INFORMATION_CHEAT_LEVEL())
-			{ // Toggle Frame Rate Display
-				gbFPSDisplay = !gbFPSDisplay;
-				EnableFPSOverlay(gbFPSDisplay);
-			}
-			break;
-
 		case 'l':
 			// Although we're not actually going anywhere, we must still be in a state where this is permitted
 			if (AllowedToExitFromMapscreenTo(MAP_EXIT_TO_LOAD)) DoQuickLoad();
@@ -3194,7 +3165,7 @@ void EndMapScreen( BOOLEAN fDuringFade )
 
 	if ( !fDuringFade )
 	{
-		MSYS_SetCurrentCursor(SCREEN_CURSOR);
+		SetCurrentCursorFromDatabase(CURSOR_NORMAL);
 	}
 
 	RemoveMapStatusBarsRegion( );
@@ -3262,8 +3233,6 @@ void EndMapScreen( BOOLEAN fDuringFade )
 		PlayJA2SampleFromFile(SOUNDSDIR "/initial power up (8-11).wav", HIGHVOLUME, 1, MIDDLEPAN);
 		BltVideoObjectOnce(FRAME_BUFFER, INTERFACEDIR "/laptopon.sti", 0, 465, 417);
 		InvalidateRegion( 465, 417, 480, 427 );
-		ExecuteBaseDirtyRectQueue( );
-		EndFrameBufferRender( );
 		RefreshScreen();
 	}
 
@@ -4083,7 +4052,6 @@ static void HandleAnimatedCursorsForMapScreen(void)
 {
 	if ( COUNTERDONE( CURSORCOUNTER ) )
 	{
-		RESETCOUNTER( CURSORCOUNTER );
 		UpdateAnimatedCursorFrames( gMapScreenMaskRegion.Cursor );
 		SetCurrentCursorFromDatabase(  gMapScreenMaskRegion.Cursor  );
 	}
@@ -4168,7 +4136,8 @@ static void BlitBackgroundToSaveBuffer(void)
 
 static void MakeRegion(MOUSE_REGION* r, UINT idx, UINT16 x, UINT16 y, UINT16 w, MOUSE_CALLBACK move, MOUSE_CALLBACK click, const ST::string& help)
 {
-	MSYS_DefineRegion(r, x, y, x + w, y + Y_SIZE + 1, MSYS_PRIORITY_NORMAL + 1, MSYS_NO_CURSOR, move, click);
+	MSYS_DefineRegion(r, x, y, x + w, y + Y_SIZE + 1, MSYS_PRIORITY_NORMAL + 1,
+		MSYS_NO_CURSOR, std::move(move), std::move(click));
 	MSYS_SetRegionUserData(r, 0, idx);
 	r->SetFastHelpText(help);
 }
@@ -5335,7 +5304,7 @@ static void EnableDisableTeamListRegionsAndHelpText(void)
 				{
 					// "Remove Merc"
 					r.assignment.SetFastHelpText(pRemoveMercStrings[0]);
-					r.destination.SetFastHelpText(ST::null);
+					r.destination.SetFastHelpText({});
 				}
 				else
 				{
@@ -6806,8 +6775,9 @@ BOOLEAN CanExtendContractForSoldier(const SOLDIERTYPE* const s)
 	Assert(s);
 	Assert(s->bActive);
 
-	// if a vehicle, in transit, or a POW
+	// if a vehicle, an EPC, in transit, or a POW
 	if (s->uiStatusFlags & SOLDIER_VEHICLE ||
+			s->ubWhatKindOfMercAmI == MERC_TYPE__EPC ||
 			s->bAssignment == IN_TRANSIT ||
 			s->bAssignment == ASSIGNMENT_POW)
 	{
@@ -6815,9 +6785,9 @@ BOOLEAN CanExtendContractForSoldier(const SOLDIERTYPE* const s)
 		return (FALSE);
 	}
 
-	// mercs below OKLIFE, M.E.R.C. mercs, EPCs, and the Robot use the Contract menu so they can be DISMISSED/ABANDONED!
-
-	// everything OK
+	// mercs below OKLIFE, M.E.R.C. mercs, and the Robot use the Contract menu
+	// so they can be DISMISSED/ABANDONED! EPCs must be 'unrecruited" via the
+	// assignment menu.
 	return( TRUE );
 }
 
@@ -7712,7 +7682,7 @@ ST::string GetMapscreenMercDestinationString(SOLDIERTYPE const& s)
 	else
 	{
 no_destination:
-		return ST::null;
+		return {};
 	}
 }
 

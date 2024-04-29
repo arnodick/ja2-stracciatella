@@ -1,25 +1,21 @@
 #include "Editor_Callback_Prototypes.h"
+#include "Font.h"
 #include "HImage.h"
 #include "Handle_UI.h"
 #include "Interface.h"
-#include "Local.h"
-#include "Edit_Sys.h"
+#include "Inventory_Choosing.h"
+#include "ItemModel.h"
 #include "TileDat.h"
 #include "VSurface.h"
 #include "VObject.h"
 #include "MouseSystem.h"
 #include "Button_System.h"
 #include "Line.h"
-#include "Input.h"
-#include "SysUtil.h"
-#include "Font.h"
 #include "Font_Control.h"
 #include "EditScreen.h"
 #include "SelectWin.h"
 #include "Video.h"
 #include "Interface_Items.h"
-#include "Text.h"
-#include "World_Items.h"
 #include "WorldMan.h"
 #include "WorldDef.h"
 #include "Overhead.h"
@@ -28,10 +24,6 @@
 #include "Animation_Control.h"
 #include "EditorDefines.h"
 #include "EditorMercs.h"
-#include "EditorTerrain.h" //for access to TerrainTileDrawMode
-#include "Soldier_Create.h" //The stuff that connects the editor generated information
-														//to the saved map and the game itself.
-#include "Inventory_Choosing.h"
 #include "Soldier_Init_List.h"
 #include "StrategicMap.h"
 #include "Soldier_Add.h"
@@ -43,15 +35,12 @@
 #include "WordWrap.h"
 #include "EditorItems.h"
 #include "Editor_Taskbar_Utils.h"
-#include "Exit_Grids.h"
 #include "Editor_Undo.h"
 #include "Item_Statistics.h"
 #include "Simple_Render_Utils.h"
 #include "Map_Information.h"
 #include "Isometric_Utils.h"
 #include "Render_Dirty.h"
-#include "PopupMenu.h"
-#include "Scheduling.h"
 #include "Timer_Control.h"
 #include "Items.h"
 #include "Debug.h"
@@ -220,6 +209,7 @@ static SoldierBodyType const bRebelArray[]    = { BODY_RANDOM, FATCIV, MANCIV, R
 static SoldierBodyType const bCivArray[]      = { BODY_RANDOM, FATCIV, MANCIV, MINICIV, DRESSCIV, HATKIDCIV, KIDCIV, REGMALE, BIGMALE, STOCKYMALE, REGFEMALE, HUMVEE, ELDORADO, ICECREAMTRUCK, JEEP, CRIPPLECIV, ROBOTNOWEAPON, COW };
 static SoldierBodyType gbCurrCreature = BLOODCAT;
 
+constexpr UINT8 NO_PAL_REP = 0xff;
 
 void GameInitEditorMercsInfo()
 {
@@ -304,7 +294,13 @@ void ProcessMercEditing(void)
 			return;
 	}
 
-	UINT8 ubPaletteRep = GetPaletteRepIndexFromID(*soldier_pal);
+	auto const paletteRep = GetPaletteRepIndexFromID(*soldier_pal);
+	if (!paletteRep)
+	{
+		return;
+	}
+	auto ubPaletteRep = *paletteRep;
+
 	const INT32 start = iEditColorStart[ubType];
 	const UINT8 range = gubpNumReplacementsPerRange[ubType];
 	if (iEditWhichStat & 1)
@@ -615,9 +611,8 @@ void MercsSetColorsCallback( GUI_BUTTON *btn, UINT32 reason )
 	}
 }
 
-
-static void ChangeBodyType(INT8 bOffset);
-
+enum class CBT { next, previous };
+static void ChangeBodyType(CBT);
 
 void MercsSetBodyTypeCallback( GUI_BUTTON *btn, UINT32 reason )
 {
@@ -625,9 +620,9 @@ void MercsSetBodyTypeCallback( GUI_BUTTON *btn, UINT32 reason )
 	{
 		gfRenderMercInfo = TRUE;
 		if (btn == iEditorButton[MERCS_BODYTYPE_DOWN])
-			ChangeBodyType( 1 );	//next
+			ChangeBodyType(CBT::next);
 		else
-			ChangeBodyType( -1 ); //previous
+			ChangeBodyType(CBT::previous);
 	}
 }
 
@@ -647,7 +642,7 @@ static void ShowEditMercPalettes(SOLDIERTYPE* pSoldier)
 		if (pSoldier->HeadPal.empty())
 			ubPaletteRep = 0xff;
 		else
-			ubPaletteRep = GetPaletteRepIndexFromID(pSoldier->HeadPal);
+			ubPaletteRep = GetPaletteRepIndexFromID(pSoldier->HeadPal).value_or(NO_PAL_REP);
 	}
 	ShowEditMercColorSet( ubPaletteRep, 0 );
 
@@ -656,7 +651,7 @@ static void ShowEditMercPalettes(SOLDIERTYPE* pSoldier)
 		if (pSoldier->SkinPal.empty())
 			ubPaletteRep = 0xff;
 		else
-			ubPaletteRep = GetPaletteRepIndexFromID(pSoldier->SkinPal);
+			ubPaletteRep = GetPaletteRepIndexFromID(pSoldier->SkinPal).value_or(NO_PAL_REP);
 	}
 	ShowEditMercColorSet( ubPaletteRep, 1 );
 
@@ -665,7 +660,7 @@ static void ShowEditMercPalettes(SOLDIERTYPE* pSoldier)
 		if (pSoldier->VestPal.empty())
 			ubPaletteRep = 0xff;
 		else
-			ubPaletteRep = GetPaletteRepIndexFromID(pSoldier->VestPal);
+			ubPaletteRep = GetPaletteRepIndexFromID(pSoldier->VestPal).value_or(NO_PAL_REP);
 	}
 	ShowEditMercColorSet( ubPaletteRep, 2 );
 
@@ -674,7 +669,7 @@ static void ShowEditMercPalettes(SOLDIERTYPE* pSoldier)
 		if (pSoldier->PantsPal.empty())
 			ubPaletteRep = 0xff;
 		else
-			ubPaletteRep = GetPaletteRepIndexFromID(pSoldier->PantsPal);
+			ubPaletteRep = GetPaletteRepIndexFromID(pSoldier->PantsPal).value_or(NO_PAL_REP);
 	}
 	ShowEditMercColorSet( ubPaletteRep, 3 );
 }
@@ -689,7 +684,7 @@ static void ShowEditMercColorSet(UINT8 ubPaletteRep, INT16 sSet)
 	INT16 sUnitSize;
 	INT16  sLeft, sTop, sRight, sBottom;
 
-	if( ubPaletteRep == 0xff )
+	if (ubPaletteRep == NO_PAL_REP)
 		ubSize = 16;
 	else
 		ubSize = gpPalRep[ ubPaletteRep ].ubPaletteSize;
@@ -1102,7 +1097,7 @@ static void SetupTextInputForMercProfile(void)
 
 	sNum = gpSelected->pDetailedPlacement->ubProfile;
 	if( sNum == NO_PROFILE )
-		str = ST::null;
+		str.clear();
 	else
 		str = CalcStringForValue(gpSelected->pDetailedPlacement->ubProfile, NUM_PROFILES);
 	AddTextInputField( 200, EDITOR_TASKBAR_POS_Y + 70, 30, 20, MSYS_PRIORITY_NORMAL, str, 3, INPUTTYPE_NUMERICSTRICT );
@@ -1153,7 +1148,7 @@ static void SetupTextInputForMercAttributes(void)
 static ST::string CalcStringForValue(INT32 iValue, UINT32 uiMax)
 {
 	if( iValue < 0 )			//a blank string is determined by a negative value.
-		return ST::null;
+		return {};
 	else if( (UINT32)iValue > uiMax )	//higher than max attribute value, so convert it to the max.
 		return ST::format("{}", uiMax);
 	else										//this is a valid static value, so convert it to a string.
@@ -1248,13 +1243,13 @@ static void SetupTextInputForMercSchedule(void)
 {
 	InitTextInputModeWithScheme( DEFAULT_SCHEME );
 	AddUserInputField( NULL );
-	AddTextInputField(268, EDITOR_TASKBAR_POS_Y + 13, 36, 16, MSYS_PRIORITY_NORMAL, ST::null, 6, INPUTTYPE_24HOURCLOCK);
+	AddTextInputField(268, EDITOR_TASKBAR_POS_Y + 13, 36, 16, MSYS_PRIORITY_NORMAL, {}, 6, INPUTTYPE_24HOURCLOCK);
 	SetExclusive24HourTimeValue( 1, gCurrSchedule.usTime[0] );
-	AddTextInputField(268, EDITOR_TASKBAR_POS_Y + 34, 36, 16, MSYS_PRIORITY_NORMAL, ST::null, 6, INPUTTYPE_24HOURCLOCK);
+	AddTextInputField(268, EDITOR_TASKBAR_POS_Y + 34, 36, 16, MSYS_PRIORITY_NORMAL, {}, 6, INPUTTYPE_24HOURCLOCK);
 	SetExclusive24HourTimeValue( 2, gCurrSchedule.usTime[1] );
-	AddTextInputField(268, EDITOR_TASKBAR_POS_Y + 55, 36, 16, MSYS_PRIORITY_NORMAL, ST::null, 6, INPUTTYPE_24HOURCLOCK);
+	AddTextInputField(268, EDITOR_TASKBAR_POS_Y + 55, 36, 16, MSYS_PRIORITY_NORMAL, {}, 6, INPUTTYPE_24HOURCLOCK);
 	SetExclusive24HourTimeValue( 3, gCurrSchedule.usTime[2] );
-	AddTextInputField(268, EDITOR_TASKBAR_POS_Y + 76, 36, 16, MSYS_PRIORITY_NORMAL, ST::null, 6, INPUTTYPE_24HOURCLOCK);
+	AddTextInputField(268, EDITOR_TASKBAR_POS_Y + 76, 36, 16, MSYS_PRIORITY_NORMAL, {}, 6, INPUTTYPE_24HOURCLOCK);
 	SetExclusive24HourTimeValue( 4, gCurrSchedule.usTime[3] );
 }
 
@@ -1377,9 +1372,9 @@ void KillDetailedPlacementForMerc()
 }
 
 
-static void ChangeBodyType(INT8 const offset)
+static void ChangeBodyType(CBT const direction)
 {
-	Assert(offset == -1 || offset == 1); // only +/-1 allowed
+	int const offset = direction == CBT::next ? 1 : -1;
 
 	gfRenderTaskbar  = TRUE;
 	gfRenderMercInfo = TRUE;
@@ -1395,7 +1390,7 @@ static void ChangeBodyType(INT8 const offset)
 		case CREATURE_TEAM: body_types = bCreatureArray; n = lengthof(bCreatureArray); break;
 		case MILITIA_TEAM:  body_types = bRebelArray;    n = lengthof(bRebelArray);    break;
 		case CIV_TEAM:      body_types = bCivArray;      n = lengthof(bCivArray);      break;
-		default: abort(); // HACK000E
+		default: return;
 	}
 	INT32 next = 0; // XXX HACK000E
 	for (INT32 i = 0; i != n; ++i)
@@ -1440,7 +1435,13 @@ static void ChangeBodyType(INT8 const offset)
 			default:
 				break;
 		}
-		SetSoldierAnimationSurface(&s, s.usAnimState);
+		// Different body types have different number of animation frames, so
+		// we have to reset the current frame here to avoid a crash in
+		// RenderWorld; issue #1890. Afterwards we have to reset the direction
+		// so this character is displayed facing the right way.
+		s.usAniFrame = 0;
+		SetSoldierAnimationSurface(&s, AnimationStates::STANDING);
+		SetMercDirection(s.bDirection);
 	}
 	// Update the placement's info as well.
 	bp.bBodyType = body_type;
@@ -1641,7 +1642,7 @@ void SetMercEditingMode( UINT8 ubNewMode )
 			HideEditorButtons( MERCS_SCHEDULE, MERCS_GLOWSCHEDULE );
 			ShowEditorButtons( FIRST_MERCS_GETITEM_BUTTON, LAST_MERCS_GETITEM_BUTTON );
 			InitEditorItemsInfo( eInfo.uiItemType );
-			ClickEditorButton( ITEMS_WEAPONS + eInfo.uiItemType - TBAR_MODE_ITEM_WEAPONS );
+			ClickEditorButton(static_cast<INT32>(ITEMS_WEAPONS) + static_cast<INT32>(eInfo.uiItemType) - static_cast<INT32>(TBAR_MODE_ITEM_WEAPONS));
 			break;
 		case MERC_INVENTORYMODE:
 			UpdateMercItemSlots();
@@ -1986,7 +1987,7 @@ void UpdateMercsInfo()
 //is called by the region callback functions to handle these cases.  The event types are defined
 //in Editor Taskbar Utils.h.  Here are the internal functions...
 
-SGPRect mercRects[9] =
+static SGPRect const mercRects[9]
 {
 	{  75,  0, 104, 19 }, //head
 	{  75, 22, 104, 41 }, //body
@@ -2000,13 +2001,13 @@ SGPRect mercRects[9] =
 };
 
 
-static BOOLEAN PointInRect(SGPRect* pRect, INT32 x, INT32 y)
+static bool PointInRect(SGPRect const * pRect, INT32 x, INT32 y)
 {
 	return( x >= pRect->iLeft && x <= pRect->iRight && y >= pRect->iTop && y <= pRect->iBottom );
 }
 
 
-static void DrawRect(SGPRect* pRect, INT16 color)
+static void DrawRect(SGPRect const * pRect, INT16 color)
 {
 	SGPVSurface::Lock l(FRAME_BUFFER);
 	SetClippingRegionAndImageWidth(l.Pitch(), 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
@@ -2779,9 +2780,9 @@ void ClearCurrentSchedule()
 		gCurrSchedule.usTime[i] = 0xffff;
 		SetExclusive24HourTimeValue( (UINT8)(i+1), gCurrSchedule.usTime[ i ] ); //blanks the field
 		gCurrSchedule.usData1[i] = 0xffff;
-		iEditorButton[MERCS_SCHEDULE_DATA1A + i]->SpecifyText(ST::null);
+		iEditorButton[MERCS_SCHEDULE_DATA1A + i]->SpecifyText({});
 		gCurrSchedule.usData2[i] = 0xffff;
-		iEditorButton[MERCS_SCHEDULE_DATA1B + i]->SpecifyText(ST::null);
+		iEditorButton[MERCS_SCHEDULE_DATA1B + i]->SpecifyText({});
 	}
 	//Remove the variance stuff
 	gCurrSchedule.usFlags = 0;
@@ -2860,7 +2861,7 @@ static void UpdateScheduleInfo(void)
 			if( pSchedule->usData1[i] != 0xffff )
 				str = ST::format("{}", pSchedule->usData1[i]);
 			iEditorButton[MERCS_SCHEDULE_DATA1A + i]->SpecifyText(str);
-			str = ST::null;
+			str.clear();
 			if( pSchedule->usData2[i] != 0xffff )
 				str = ST::format("{}", pSchedule->usData2[i]);
 			iEditorButton[MERCS_SCHEDULE_DATA1B + i]->SpecifyText(str);

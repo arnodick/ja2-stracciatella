@@ -6,7 +6,6 @@
 #include "Font_Control.h"
 #include "Handle_UI.h"
 #include "Interface.h"
-#include "Overhead.h"
 #include "Cursor_Control.h"
 #include "Sound_Control.h"
 #include "Video.h"
@@ -1192,8 +1191,6 @@ void HandleAnimatedCursors(void)
 {
 	if (COUNTERDONE(CURSORCOUNTER))
 	{
-		RESETCOUNTER(CURSORCOUNTER);
-
 		if (gViewportRegion.uiFlags & MSYS_MOUSE_IN_AREA)
 		{
 			UpdateAnimatedCursorFrames(gViewportRegion.Cursor);
@@ -1215,8 +1212,6 @@ void HandleAnimatedCursors(void)
 
 	if (COUNTERDONE(CURSORFLASHUPDATE))
 	{
-		RESETCOUNTER(CURSORFLASHUPDATE);
-
 		if (gViewportRegion.uiFlags & MSYS_MOUSE_IN_AREA)
 		{
 			UpdateFlashingCursorFrames(gViewportRegion.Cursor);
@@ -1352,7 +1347,7 @@ static void DrawMouseText(void)
 				{
 					if (COUNTERDONE(INVALID_AP_HOLD))
 					{
-						RESETCOUNTER(INVALID_AP_HOLD);
+						// INVALID_AP_HOLD was reset by COUNTERDONE
 						RESETCOUNTER(CURSORFLASH);
 
 						fShow = !fShow;
@@ -1363,7 +1358,7 @@ static void DrawMouseText(void)
 				{
 					if (COUNTERDONE(CURSORFLASH))
 					{
-						RESETCOUNTER(CURSORFLASH);
+						// CURSORFLASH was reset by COUNTERDONE
 						RESETCOUNTER(INVALID_AP_HOLD);
 
 						fShow = !fShow;

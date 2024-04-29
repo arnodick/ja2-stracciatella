@@ -1,30 +1,23 @@
 #include "Button_System.h"
-#include "Cheats.h"
-#include "Debug.h"
-#include "FileMan.h"
+#include "FPS.h"
 #include "Font.h"
 #include "GameLoop.h"
-#include "Init.h" // XXX should not be used in SGP
+#include "GameSettings.h"
 #include "Input.h"
 #include "Intro.h"
 #include "JA2_Splash.h"
 #include "Random.h"
 #include "SGP.h"
-#include "SaveLoadGame.h" // XXX should not be used in SGP
 #include "SoundMan.h"
 #include "VObject.h"
 #include "Video.h"
-#include "VSurface.h"
 #include <SDL.h>
 #include "UILayout.h"
 #include "GameRes.h"
 #include "GameMode.h"
-#include "Timer.h"
-#include "Font.h"
 
 #include "DefaultContentManager.h"
 #include "GameInstance.h"
-#include "JsonUtility.h"
 #include "ModPackContentManager.h"
 #include "policy/GamePolicy.h"
 #include "RustInterface.h"
@@ -50,82 +43,15 @@
 
 #include <string_theory/format>
 
+#include <chrono>
 #include <exception>
 #include <locale>
 #include <new>
+#include <thread>
 #include <utility>
+using namespace std::chrono_literals;
 
 extern BOOLEAN gfPauseDueToPlayerGamePause;
-
-////////////////////////////////////////////////////////////////////////////
-//
-////////////////////////////////////////////////////////////////////////////
-
-// #include "JsonObject.h"
-// #include "ItemModel.h"
-// #include "MagazineModel.h"
-// #include "WeaponModels.h"
-// #include "Weapons.h"
-// #include "rapidjson/document.h"
-// #include <rapidjson/ostreamwrapper.h>
-// #include "rapidjson/prettywriter.h"
-// #include "stdio.h"
-// #include <fstream>
-
-//bool writeItemsToJson(const char *name, uint16_t from, uint16_t until)
-//{
-//	std::ofstream ofs(name);
-//	rapidjson::OStreamWrapper os(ofs);
-//	rapidjson::PrettyWriter<rapidjson::OStreamWrapper> writer(os);
-//
-//	rapidjson::Document document;
-//	document.SetArray();
-//	rapidjson::Document::AllocatorType& allocator = document.GetAllocator();
-//
-//	for (int i = from; i < until; i++)
-//	{
-//		// printf("%d\n", i);
-//		auto item = GCM->getItem(i);
-//		JsonObject obj(allocator);
-//		item->serializeTo(obj);
-//		document.PushBack(obj.getValue(), allocator);
-//	}
-//
-//	document.Accept(writer);
-//
-//	ofs << std::endl;
-//	ofs.close();
-//
-//	return true;
-//}
-
-// bool writeMagazinesToJson(const char *name)
-// {
-//   FILE *f = fopen(name, "wt");
-//   if(f)
-//   {
-//     rapidjson::FileStream os(f);
-//     rapidjson::PrettyWriter<rapidjson::FileStream> writer(os);
-
-//     rapidjson::Document document;
-//     document.SetArray();
-//     rapidjson::Document::AllocatorType& allocator = document.GetAllocator();
-
-//     const std::vector<const MagazineModel*>& magazines = GCM->getMagazines();
-//     for (const MagazineModel* mag : magazines)
-//     {
-//       JsonObject obj(allocator);
-//       mag->serializeTo(obj);
-//       document.PushBack(obj.getValue(), allocator);
-//     }
-
-//     document.Accept(writer);
-
-//     fputs("\n", f);
-//     return fclose(f) == 0;
-//   }
-//   return false;
-// }
 
 ////////////////////////////////////////////////////////////////////////////
 //
@@ -142,6 +68,7 @@ static void shutdownGame()
 		ShutdownGame();
 	}
 
+	SLOGD("Shutting Down Content Manager");
 	delete GCM;
 	GCM = NULL;
 
@@ -186,13 +113,15 @@ void requestGameExit()
 	SDL_PushEvent(&event);
 }
 
-static void MainLoop(int msPerGameCycle)
+static void MainLoop()
 {
-	BOOLEAN s_doGameCycles = TRUE;
+	bool s_doGameCycles{true};
 
 	while (true)
 	{
 		// cycle until SDL_Quit is received
+		extern void UpdateJA2Clock();
+		UpdateJA2Clock();
 
 		SDL_Event event;
 		if (SDL_PollEvent(&event))
@@ -207,7 +136,17 @@ static void MainLoop(int msPerGameCycle)
 					s_doGameCycles = true;
 					break;
 
-				case SDL_KEYDOWN: KeyDown(&event.key.keysym); break;
+				case SDL_KEYDOWN:
+					if (event.key.keysym.sym == SDLK_f &&
+					    SDL_GetModState() & KMOD_CTRL)
+					{
+						FPS::ToggleOnOff();
+					}
+					else
+					{
+						KeyDown(&event.key.keysym);
+					}
+					break;
 				case SDL_KEYUP:   KeyUp(  &event.key.keysym); break;
 				case SDL_TEXTINPUT: TextInput(&event.text); break;
 
@@ -231,22 +170,14 @@ static void MainLoop(int msPerGameCycle)
 		{
 			if (s_doGameCycles)
 			{
-				UINT32 gameCycleMS = GetClock();
-#if DEBUG_PRINT_GAME_CYCLE_TIME
-				UINT32 totalGameCycleMS = gameCycleMS;
-#endif
-				GameLoop();
-				gameCycleMS = GetClock() - gameCycleMS;
+				// Aim to execute the game loop at a rate of 144Hz,
+				// once every ~6944 microseconds.
+				constexpr auto targetResolution = 1'000'000us / 144;
+				auto const beforeGameLoop = std::chrono::steady_clock::now();
+				FPS::GameLoopPtr();
 
-				if(static_cast<int>(gameCycleMS) < msPerGameCycle)
-				{
-					SDL_Delay(msPerGameCycle - gameCycleMS);
-				}
-
-#if DEBUG_PRINT_GAME_CYCLE_TIME
-				totalGameCycleMS = GetClock() - totalGameCycleMS;
-				printf("game cycle: %4d %4d\n", gameCycleMS, totalGameCycleMS);
-#endif
+				// If the game loop took longer than 6944ms, this call does nothing.
+				std::this_thread::sleep_until(beforeGameLoop + targetResolution);
 			}
 			else
 			{
@@ -341,16 +272,6 @@ std::vector<ST::string> InitGlobalLocale()
 int main(int argc, char* argv[])
 {
     try {
-		// init locale and logging
-		{
-			std::vector<ST::string> problems = InitGlobalLocale();
-			Logger_initialize("ja2.log");
-			for (const ST::string& msg : problems)
-			{
-				SLOGW("{}", msg);
-			}
-		}
-
 		#ifdef __ANDROID__
 		JNIEnv* jniEnv = (JNIEnv*)SDL_AndroidGetJNIEnv();
 
@@ -362,6 +283,17 @@ int main(int argc, char* argv[])
 			return EXIT_FAILURE;
 		}
 		#endif
+
+		// init locale and logging
+		{
+			std::vector<ST::string> problems = InitGlobalLocale();
+			Logger_initialize("ja2.log");
+			for (const ST::string& msg : problems)
+			{
+				SLOGW("{}", msg);
+			}
+		}
+
 		RustPointer<char> configFolderPath(EngineOptions_getStracciatellaHome());
 		if (configFolderPath.get() == NULL) {
 			auto rustError = getRustError();
@@ -461,7 +393,7 @@ int main(int argc, char* argv[])
 		g_ui.recalculatePositions();
 
 		SLOGD("Initializing Video Manager");
-		InitializeVideoManager(scalingQuality);
+		InitializeVideoManager(scalingQuality, GCM->getGamePolicy()->target_fps);
 		VideoSetBrightness(brightness);
 
 		SLOGD("Initializing Video Object Manager");
@@ -500,7 +432,7 @@ int main(int argc, char* argv[])
 		/* At this point the SGP is set up, which means all I/O, Memory, tools, etc.
 		* are available. All we need to do is attend to the gaming mechanics
 		* themselves */
-		MainLoop(gamepolicy(ms_per_game_cycle));
+		MainLoop();
 
 		delete cm;
 		GCM = NULL;

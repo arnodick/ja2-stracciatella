@@ -1,5 +1,6 @@
 #include "Handle_Doors.h"
 #include "Handle_Items.h"
+#include "ItemModel.h"
 #include "MapScreen.h"
 #include "Soldier_Find.h"
 #include "Spread_Burst.h"
@@ -18,8 +19,6 @@
 #include "Event_Pump.h"
 #include "Timer_Control.h"
 #include "Render_Fun.h"
-#include "Render_Dirty.h"
-#include "MouseSystem.h"
 #include "Interface.h"
 #include "SysUtil.h"
 #include "Points.h"
@@ -34,7 +33,6 @@
 #include "Lighting.h"
 #include "PathAI.h"
 #include "ScreenIDs.h"
-#include "Interface_Cursors.h"
 #include "Weapons.h"
 #include "Rotting_Corpses.h"
 #include "Structure.h"
@@ -44,12 +42,9 @@
 #include "Soldier_Profile.h"
 #include "FOV.h"
 #include "Soldier_Macros.h"
-#include "EditorMercs.h"
 #include "Soldier_Tile.h"
-#include "Structure_Wrap.h"
 #include "Tile_Animation.h"
 #include "Strategic_Merc_Handler.h"
-#include "Strategic_Movement.h"
 #include "Strategic_Turns.h"
 #include "Squads.h"
 #include "Morale.h"
@@ -66,7 +61,6 @@
 #include "Auto_Bandage.h"
 #include "Game_Event_Hook.h"
 #include "Explosion_Control.h"
-#include "SkillCheck.h"
 #include "World_Items.h"
 #include "Smell.h"
 #include "Player_Command.h"
@@ -84,7 +78,6 @@
 #include "Map_Screen_Helicopter.h"
 #include "Interface_Control.h"
 #include "Exit_Grids.h"
-#include "Game_Init.h"
 #include "JAScreens.h"
 #include "Arms_Dealer_Init.h"
 #include "Interface_Utils.h"
@@ -555,19 +548,12 @@ static void HandleCreatureTenseQuote(void);
 
 void ExecuteOverhead(void)
 {
-	// Diagnostic Stuff
-	static INT32 iTimerTest = 0;
-
 	BOOLEAN fKeepMoving;
 
 	if (COUNTERDONE(TOVERHEAD))
 	{
-		RESETCOUNTER(TOVERHEAD);
-
 		// Diagnostic Stuff
 		UINT32 uiTimerVal = GetJA2Clock();
-		guiTimerDiag = uiTimerVal - iTimerTest;
-		iTimerTest  = uiTimerVal;
 
 		// ANIMATED TILE STUFF
 		UpdateAniTiles();
@@ -605,9 +591,6 @@ void ExecuteOverhead(void)
 		{
 			SOLDIERTYPE* pSoldier = MercSlots[cnt];
 
-			// Syncronize for upcoming soldier counters
-			SYNCTIMECOUNTER();
-
 			if (pSoldier != NULL)
 			{
 				HandlePanelFaceAnimations(pSoldier);
@@ -620,8 +603,6 @@ void ExecuteOverhead(void)
 						pSoldier->bDisplayDamageCount++;
 						pSoldier->sDamageX += 1;
 						pSoldier->sDamageY -= 1;
-
-						RESETTIMECOUNTER(pSoldier->DamageCounter, DAMAGE_DISPLAY_DELAY);
 					}
 
 					if (pSoldier->bDisplayDamageCount >= 8)
@@ -636,8 +617,6 @@ void ExecuteOverhead(void)
 				if (pSoldier->fBeginFade &&
 						TIMECOUNTERDONE(pSoldier->FadeCounter, NEW_FADE_DELAY))
 				{
-					RESETTIMECOUNTER(pSoldier->FadeCounter, NEW_FADE_DELAY);
-
 					// Fade out....
 					if (pSoldier->fBeginFade == 1)
 					{
@@ -759,8 +738,8 @@ void ExecuteOverhead(void)
 				// Handle animation update counters
 				// ATE: Added additional check here for special value of anispeed that pauses all updates
 #ifndef BOUNDS_CHECKER
-				if (TIMECOUNTERDONE(pSoldier->UpdateCounter, pSoldier->sAniDelay) &&
-					pSoldier->sAniDelay != 10000)
+				if (pSoldier->sAniDelay != 10000 &&
+				    TIMECOUNTERDONE(pSoldier->UpdateCounter, pSoldier->sAniDelay))
 #endif
 				{
 					// Check if we need to look for items
@@ -769,8 +748,6 @@ void ExecuteOverhead(void)
 						RevealRoofsAndItems(pSoldier, FALSE);
 						pSoldier->uiStatusFlags &= ~SOLDIER_LOOKFOR_ITEMS;
 					}
-
-					RESETTIMECOUNTER(pSoldier->UpdateCounter, pSoldier->sAniDelay);
 
 					BOOLEAN fNoAPsForPendingAction = FALSE;
 
@@ -1156,9 +1133,6 @@ void ExecuteOverhead(void)
 				guiAISlotToHandle == HANDLE_OFF_MAP_MERC
 				&& guiAIAwaySlotToHandle != RESET_HANDLE_OF_OFF_MAP_MERCS)
 		{
-			// Syncronize for upcoming soldier counters
-			SYNCTIMECOUNTER();
-
 			// the ONLY thing to do with away soldiers is process their schedule if they have one
 			// and there is an action for them to do (like go on-sector)
 			SOLDIERTYPE* const pSoldier = AwaySlots[guiAIAwaySlotToHandle];
@@ -2546,11 +2520,11 @@ void HandleNPCTeamMemberDeath(SOLDIERTYPE* const pSoldierOld)
 	}
 	else if (pSoldierOld->bTeam == MILITIA_TEAM)
 	{
-		const INT8 bMilitiaRank = SoldierClassToMilitiaRank(pSoldierOld->ubSoldierClass);
-		if (bMilitiaRank != -1)
+		auto const militiaRank = SoldierClassToMilitiaRank(pSoldierOld->ubSoldierClass);
+		if (militiaRank)
 		{
 			// remove this militia from the strategic records
-			StrategicRemoveMilitiaFromSector(gWorldSector, bMilitiaRank, 1);
+			StrategicRemoveMilitiaFromSector(gWorldSector, *militiaRank, 1);
 		}
 
 		// also treat this as murder - but player will never be blamed for militia death he didn't cause
@@ -4483,7 +4457,7 @@ BOOLEAN CheckForEndOfBattle( BOOLEAN fAnEnemyRetreated )
 
 		// Play death music
 		SetMusicMode( MUSIC_TACTICAL_DEFEAT );
-		SetCustomizableTimerCallbackAndDelay( 10000, DeathNoMessageTimerCallback, FALSE );
+		SetCustomizableTimerCallbackAndDelay(10s, DeathNoMessageTimerCallback, false);
 
 		if ( CheckFact( FACT_FIRST_BATTLE_BEING_FOUGHT, 0 ) )
 		{
@@ -4699,7 +4673,7 @@ BOOLEAN CheckForEndOfBattle( BOOLEAN fAnEnemyRetreated )
 			}
 		}
 
-		SetCustomizableTimerCallbackAndDelay(3000, HandleThePlayerBeNotifiedOfSomeoneElseInSector, FALSE);
+		SetCustomizableTimerCallbackAndDelay(3s, HandleThePlayerBeNotifiedOfSomeoneElseInSector, false);
 
 		//Whenever returning TRUE, make sure you clear gfBlitBattleSectorLocator;
 		gfBlitBattleSectorLocator = FALSE;
@@ -5071,11 +5045,11 @@ static BOOLEAN CheckForLosingEndOfBattle(void)
 			if ( fDoCapture )
 			{
 				EndCaptureSequence( );
-				SetCustomizableTimerCallbackAndDelay( 3000, CaptureTimerCallback, FALSE );
+				SetCustomizableTimerCallbackAndDelay(3s, CaptureTimerCallback, false);
 			}
 			else
 			{
-				SetCustomizableTimerCallbackAndDelay( 10000, DeathTimerCallback, FALSE );
+				SetCustomizableTimerCallbackAndDelay(10s, DeathTimerCallback, false);
 			}
 
 		}
@@ -6216,7 +6190,7 @@ void HandleThePlayerBeNotifiedOfSomeoneElseInSector(void)
 		AreWeInAUIMenu()
 		)
 	{
-		SetCustomizableTimerCallbackAndDelay(2000, HandleThePlayerBeNotifiedOfSomeoneElseInSector, FALSE);
+		SetCustomizableTimerCallbackAndDelay(2s, HandleThePlayerBeNotifiedOfSomeoneElseInSector, false);
 		return;
 	}
 

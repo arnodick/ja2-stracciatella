@@ -13,7 +13,6 @@
 #include "RustInterface.h"
 #include "ItemStrings.h"
 
-#include "rapidjson/document.h"
 #include <string_theory/string>
 
 #include <map>
@@ -26,7 +25,7 @@ class DefaultContentManager : public ContentManager, public IGameDataLoader
 public:
 	DefaultContentManager(RustPointer<EngineOptions> engineOptions);
 
-	virtual ~DefaultContentManager() noexcept(false) override;
+	virtual ~DefaultContentManager() override;
 
 	void logConfiguration() const override;
 
@@ -61,7 +60,7 @@ public:
 	virtual DirFs* tempFiles() const override;
 
 	/* Open a game resource file for reading. */
-	virtual SGPFile* openGameResForReading(const ST::string& filename) const override;
+	virtual SGPFile* openGameResForReading(ST::string filename) const override;
 
 	/* Checks if a game resource exists. */
 	virtual bool doesGameResExists(const ST::string& filename) const override;
@@ -93,7 +92,7 @@ public:
 	virtual const ItemModel* getItemByName(const ST::string &internalName) const override;
 	virtual const ItemModel* getKeyItemForKeyId(uint16_t usKeyItem) const override;
 	virtual std::vector<ST::string> getAllSmallInventoryGraphicPaths() const override;
-	virtual const std::map<uint16_t, uint16_t> getMapItemReplacements() const override;
+	virtual const std::map<uint16_t, uint16_t>& getMapItemReplacements() const override;
 
 	virtual const std::vector<std::vector<const WeaponModel*> > & getNormalGunChoice() const override;
 	virtual const std::vector<std::vector<const WeaponModel*> > & getExtendedGunChoice() const override;
@@ -106,7 +105,7 @@ public:
 	virtual const DealerInventory* getBobbyRayUsedInventory() const override;
 
 	virtual const DealerModel* getDealer(uint8_t dealerID) const override;
-	virtual const std::vector<const DealerModel*> getDealers() const override;
+	virtual const std::vector<const DealerModel*> & getDealers() const override;
 
 	virtual const std::vector<const ShippingDestinationModel*>& getShippingDestinations() const override;
 	virtual const ShippingDestinationModel* getShippingDestination(uint8_t locationId) const override;
@@ -160,7 +159,7 @@ public:
 
 	virtual const std::map<UINT32, UINT16>* getTranslationTable() const override;
 
-	std::unique_ptr<rapidjson::Document> readJsonDataFile(const ST::string& fileName) const;
+	JsonValue readJsonDataFile(const ST::string& fileName) const;
 
 	/* Gets the enabled mods and their version strings */
 	virtual const std::vector<std::pair<ST::string, ST::string>> getEnabledMods() const override;
@@ -255,14 +254,14 @@ protected:
 	bool loadCalibres();
 	bool loadAmmoTypes();
 	bool loadArmyData();
-	bool loadMusicModeList(MusicMode mode, rapidjson::Value &array);
+	bool loadMusicModeList(MusicMode mode, const JsonValue& array);
 	bool loadMusic();
 
 	const DealerInventory * loadDealerInventory(const ST::string& fileName);
 	bool loadAllDealersAndInventory();
 	void loadStringRes(const ST::string& name, std::vector<ST::string> &strings) const;
 
-	bool readWeaponTable(
+	void readWeaponTable(
 		const ST::string& fileName,
 		std::vector<std::vector<const WeaponModel*> > & weaponTable);
 
@@ -272,8 +271,9 @@ protected:
 	void loadVehicles();
 	void loadTranslationTable();
 
-	std::unique_ptr<rapidjson::Document> readJsonFromString(const ST::string& jsonData, const ST::string& label) const;
-	std::unique_ptr<rapidjson::Document> readJsonDataFileWithSchema(const ST::string& jsonPath) const;
+	JsonValue readJsonFromString(const ST::string& jsonData, const ST::string& label) const;
+	JsonValue readJsonDataFileWithSchema(const ST::string& jsonPath) const;
+
 
 	/**
 	 * @param profileID

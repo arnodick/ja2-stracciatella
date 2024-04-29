@@ -15,10 +15,8 @@
 #include "GameMode.h"
 #include "Handle_UI.h"
 #include "HImage.h"
-#include "Input.h"
 #include "Isometric_Utils.h"
 #include "JA2Types.h"
-#include "JAScreens.h"
 #include "Keys.h"
 #include "LightEffects.h"
 #include "Lighting.h"
@@ -41,9 +39,7 @@
 #include "RenderWorld.h"
 #include "Rotting_Corpses.h"
 #include "Scheduling.h"
-#include "ScreenIDs.h"
 #include "SGPFile.h"
-#include "SGPStrings.h"
 #include "SmokeEffects.h"
 #include "Soldier_Control.h"
 #include "Soldier_Create.h"
@@ -97,7 +93,6 @@ void SetAllNewTileSurfacesLoaded( BOOLEAN fNew )
 
 
 // Global Variables
-MAP_ELEMENT			*gpWorldLevelData;
 UINT8						gubWorldMovementCosts[ WORLD_MAX ][MAXDIR][2];
 
 // set to nonzero (locs of base gridno of structure are good) to have it defined by structure code
@@ -170,11 +165,6 @@ void InitializeWorld()
 	// Init default surface list
 	std::fill(std::begin(gbDefaultSurfaceUsed), std::end(gbDefaultSurfaceUsed), 0);
 
-
-	// Initialize world data
-
-	gpWorldLevelData = new MAP_ELEMENT[WORLD_MAX]{};
-
 	// Init room database
 	InitRoomDatabase( );
 
@@ -189,12 +179,6 @@ static void DestroyTileSurfaces(void);
 void DeinitializeWorld( )
 {
 	TrashWorld();
-
-	if ( gpWorldLevelData != NULL )
-	{
-		delete[] gpWorldLevelData;
-		gpWorldLevelData = nullptr;
-	}
 
 	DestroyTileSurfaces( );
 	FreeAllStructureFiles( );

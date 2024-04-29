@@ -1,5 +1,6 @@
 #include "Faces.h"
 #include "Assignments.h"
+#include "Campaign_Types.h"
 #include "ContentManager.h"
 #include "Dialogue_Control.h"
 #include "Directories.h"
@@ -1149,8 +1150,6 @@ void HandleAutoFaces(void)
 				case FLASH_PORTRAIT_START:
 					if (TIMECOUNTERDONE(s->PortraitFlashCounter, FLASH_PORTRAIT_DELAY))
 					{
-						RESETTIMECOUNTER(s->PortraitFlashCounter, FLASH_PORTRAIT_DELAY);
-
 						if (++s->bFlashPortraitFrame > FLASH_PORTRAIT_ENDSHADE)
 						{
 							s->bFlashPortraitFrame = FLASH_PORTRAIT_ENDSHADE;

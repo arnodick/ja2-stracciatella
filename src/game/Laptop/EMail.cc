@@ -2,17 +2,13 @@
 #include "Font.h"
 #include "Laptop.h"
 #include "EMail.h"
-#include "Local.h"
 #include "VObject.h"
 #include "Debug.h"
 #include "WordWrap.h"
-#include "Render_Dirty.h"
 #include "Cursors.h"
 #include "Soldier_Profile.h"
 #include "IMP_Compile_Character.h"
 #include "IMP_Portraits.h"
-#include "Game_Clock.h"
-#include "Environment.h"
 #include "AIMMembers.h"
 #include "Random.h"
 #include "Text.h"
@@ -278,6 +274,9 @@ void GameInitEmail()
 {
 	pEmailList=NULL;
 	pPageList=NULL;
+
+	CurrentMail = NULL;
+	PreviousMail = NULL;
 
 	iLastPage=-1;
 
@@ -1524,7 +1523,7 @@ static void MakeButton(UINT idx, INT16 x, GUI_CALLBACK click, const ST::string& 
 static void CreateMailScreenButtons(void)
 {
 	// create sort buttons, right now - not finished
-	MakeButton(0, ENVELOPE_BOX_X, ReadCallback,    ST::null);
+	MakeButton(0, ENVELOPE_BOX_X, ReadCallback,    {});
 	MakeButton(1, FROM_BOX_X,     FromCallback,    pEmailHeaders[FROM_HEADER]);
 	MakeButton(2, SUBJECT_BOX_X,  SubjectCallback, pEmailHeaders[SUBJECT_HEADER]);
 	MakeButton(3, DATE_BOX_X,     DateCallback,    pEmailHeaders[RECD_HEADER]);

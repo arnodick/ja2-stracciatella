@@ -1,7 +1,6 @@
 #ifndef __VOBJECT_H
 #define __VOBJECT_H
 
-#include "Buffer.h"
 #include "Types.h"
 #include <memory>
 
@@ -13,10 +12,10 @@
 // Z-buffer info structure for properly assigning Z values
 struct ZStripInfo
 {
+	INT8  pbZChange[16];      // change to the Z value in each strip (after the first)
 	INT8  bInitialZChange;    // difference in Z value between the leftmost and base strips
 	UINT8 ubFirstZStripWidth; // # of pixels in the leftmost strip
 	UINT8 ubNumberOfZChanges; // number of strips (after the first)
-	INT8* pbZChange;          // change to the Z value in each strip (after the first)
 };
 
 // This definition mimics what is found in WINDOWS.H ( for Direct Draw compatiblity )
@@ -28,12 +27,13 @@ struct ZStripInfo
 class SGPVObject
 {
 	public:
-		SGPVObject(SGPImage const*);
+		// This modifies the SGPImage: relevant data is moved away from it
+		SGPVObject(SGPImage *);
 		~SGPVObject();
 
 		UINT8 BPP() const { return bit_depth_; }
 
-		SGPPaletteEntry const* Palette() const { return palette_; }
+		SGPPaletteEntry const* Palette() const { return palette_.get(); }
 
 		UINT16 const* Palette16() const { return palette16_; }
 
@@ -66,18 +66,18 @@ class SGPVObject
 
 	private:
 		Flags                        flags_;                         // Special flags
-		UINT32                       pix_data_size_;                 // ETRLE data size
-		SGP::Buffer<SGPPaletteEntry> palette_;                       // 8BPP Palette
+		std::unique_ptr<SGPPaletteEntry const []> palette_;          // 8BPP Palette
 		UINT16*                      palette16_;                     // A 16BPP palette used for 8->16 blits
 
-		UINT8*                       pix_data_;                      // ETRLE pixel data
-		ETRLEObject*                 etrle_object_;                  // Object offset data etc
+		std::unique_ptr<UINT8 const []> pix_data_;                   // ETRLE pixel data
+		std::unique_ptr<ETRLEObject const []> etrle_object_;         // Object offset data etc
 	public:
 		UINT16*                      pShades[HVOBJECT_SHADE_TABLES]; // Shading tables
 	private:
 		UINT16 const*                current_shade_;
 	public:
-		ZStripInfo**                 ppZStripInfo;                   // Z-value strip info arrays
+		// Smart pointer to an array of smart pointers to ZStripInfo structs.
+		std::unique_ptr<std::unique_ptr<ZStripInfo> []> ppZStripInfo;// Z-value strip info arrays
 
 	private:
 		UINT16                       subregion_count_;               // Total number of objects

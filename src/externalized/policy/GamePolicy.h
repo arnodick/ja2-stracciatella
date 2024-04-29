@@ -29,8 +29,8 @@ public:
 
 	bool f_draw_item_shadow;              /**< Draw shadows from the inventory items. */
 
-	int32_t ms_per_game_cycle;            /**< Milliseconds per game cycle. */
-	int32_t ms_per_time_slice;            /**< Milliseconds per time slice. */
+	int32_t target_fps;
+	double game_durations_multiplier;
 
 	int32_t starting_cash_easy;
 	int32_t starting_cash_medium;

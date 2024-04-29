@@ -2,8 +2,8 @@
 #include "Font.h"
 #include "HImage.h"
 #include "Handle_Items.h"
+#include "ItemModel.h"
 #include "Local.h"
-#include "Sys_Globals.h"
 #include "Timer_Control.h"
 #include "Types.h"
 #include "MouseSystem.h"
@@ -19,7 +19,6 @@
 #include "Interface_Items.h"
 #include "Soldier_Find.h"
 #include "World_Items.h"
-#include "Text.h"
 #include "Overhead_Map.h"
 #include "Cursor_Modes.h"
 #include "EditScreen.h"
@@ -42,7 +41,6 @@
 #include "Lighting.h"
 #include "Keys.h"
 #include "Debug.h"
-#include "JAScreens.h"
 #include "Video.h"
 #include "VSurface.h"
 #include "FileMan.h"
@@ -53,7 +51,6 @@
 #include <string_theory/format>
 #include <string_theory/string>
 
-#include <stdarg.h>
 
 
 //editor icon storage vars
@@ -141,11 +138,17 @@ static void InitEditorRegions()
 	gfShowTerrainTileButtons = FALSE;
 
 	// Create the region for the items selection window.
+	// Ends above the secondary row of tabs.
 	MSYS_DefineRegion(&ItemsRegion, 100, EDITOR_TASKBAR_POS_Y, 540, EDITOR_TASKBAR_POS_Y + 80, MSYS_PRIORITY_NORMAL, 0, MouseMovedInItemsRegion, MouseClickedInItemsRegion);
 	ItemsRegion.Disable();
 
 	// Create the region for the merc inventory panel.
-	MSYS_DefineRegion(&MercRegion, 175, EDITOR_TASKBAR_POS_Y + 1, 450, EDITOR_TASKBAR_POS_Y + 80, MSYS_PRIORITY_NORMAL, 0, MouseMovedInMercRegion, MouseClickedInMercRegion);
+	// Ends directly above the main row of tabs.
+	MSYS_DefineRegion(&MercRegion,
+		175, EDITOR_TASKBAR_POS_Y + 1,
+		450, EDITOR_TASKBAR_POS_Y + 100,
+		MSYS_PRIORITY_NORMAL, 0,
+		MouseMovedInMercRegion, MouseClickedInMercRegion);
 	MercRegion.Disable();
 }
 
@@ -390,7 +393,7 @@ void DoTaskbar(void)
 			SetFont( FONT10ARIAL );
 			SetFontForeground( FONT_YELLOW );
 			ClickEditorButton( TAB_ITEMS );
-			ClickEditorButton( ITEMS_WEAPONS + eInfo.uiItemType - TBAR_MODE_ITEM_WEAPONS );
+			ClickEditorButton(static_cast<INT32>(ITEMS_WEAPONS) + static_cast<INT32>(eInfo.uiItemType) - static_cast<INT32>(TBAR_MODE_ITEM_WEAPONS));
 			InitEditorItemsInfo( eInfo.uiItemType );
 			ShowItemStatsPanel();
 			gfShowPits = TRUE;

@@ -7,7 +7,6 @@
 #include "VObject.h"
 #include "WordWrap.h"
 #include "Cursors.h"
-#include "Overhead.h"
 #include "Soldier_Add.h"
 #include "EMail.h"
 #include "Game_Clock.h"
@@ -27,7 +26,6 @@
 #include "Button_System.h"
 #include "Video.h"
 #include "VSurface.h"
-#include "Debug.h"
 #include "Font_Control.h"
 #include "GameInstance.h"
 #include "ContentManager.h"
@@ -802,7 +800,7 @@ static void HandleTalkingSpeck(void)
 			if( DisplayMercVideoIntro( MERC_INTRO_TIME ) )
 			{
 				//NULL out the string
-				gsSpeckDialogueTextPopUp = ST::null;
+				gsSpeckDialogueTextPopUp.clear();
 
 				//Start speck talking
 				if( !StartSpeckTalking( gusMercVideoSpeckSpeech ) )
@@ -1339,10 +1337,9 @@ static BOOLEAN ShouldSpeckStartTalkingDueToActionOnSubPage(void)
 		HandlePlayerHiringMerc(listing[gubCurMercIndex]);
 
 		//get speck to say the thank you
-		if( Random( 100 ) > 50 )
-			StartSpeckTalking( SPECK_QUOTE_GENERIC_THANKS_FOR_HIRING_MERCS_1 );
-		else
-			StartSpeckTalking( SPECK_QUOTE_GENERIC_THANKS_FOR_HIRING_MERCS_2 );
+		StartSpeckTalking(CoinToss()
+			? SPECK_QUOTE_GENERIC_THANKS_FOR_HIRING_MERCS_1
+			: SPECK_QUOTE_GENERIC_THANKS_FOR_HIRING_MERCS_2);
 
 		gfJustHiredAMercMerc = FALSE;
 		//gfDoneIntroSpeech = TRUE;

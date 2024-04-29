@@ -3,17 +3,12 @@
 #include "AI.h"
 #include "Action_Items.h"
 #include "Animation_Control.h"
-#include "Campaign_Types.h"
 #include "ContentManager.h"
 #include "Debug.h"
 #include "Directories.h"
-#include "End_Game.h"
 #include "FOV.h"
-#include "FileMan.h"
-#include "Font_Control.h"
 #include "GameInstance.h"
 #include "GameSettings.h"
-#include "Game_Clock.h"
 #include "Handle_Doors.h"
 #include "Handle_Items.h"
 #include "Handle_UI.h"
@@ -21,6 +16,7 @@
 #include "Interface.h"
 #include "Interface_Dialogue.h"
 #include "Isometric_Utils.h"
+#include "ItemModel.h"
 #include "Items.h"
 #include "Keys.h"
 #include "LightEffects.h"
@@ -29,7 +25,6 @@
 #include "LoadSaveExplosionType.h"
 #include "Logger.h"
 #include "Map_Information.h"
-#include "Message.h"
 #include "Morale.h"
 #include "OppList.h"
 #include "Overhead.h"
@@ -46,7 +41,6 @@
 #include "SmokeEffects.h"
 #include "Soldier_Add.h"
 #include "Soldier_Control.h"
-#include "Soldier_Create.h"
 #include "Soldier_Macros.h"
 #include "Soldier_Profile.h"
 #include "Soldier_Tile.h"
@@ -1113,7 +1107,8 @@ static BOOLEAN ExpAffect(const INT16 sBombGridNo, const INT16 sGridNo, const UIN
 	{
 		// Drop blood ....
 		// Get blood quantity....
-		InternalDropBlood(sGridNo, 0, HUMAN, std::max(MAXBLOODQUANTITY - uiDist * 2 /* XXX always >= 0, because uiDist is unsigned */, 0U), 1);
+		UINT8 const bloodAmount = uiDist * 2 > MAXBLOODQUANTITY ? 0 : MAXBLOODQUANTITY - uiDist * 2;
+		InternalDropBlood(sGridNo, 0, HUMAN, bloodAmount, 1);
 	}
 
 	if ( sSubsequent != ERASE_SPREAD_EFFECT && sSubsequent != BLOOD_SPREAD_EFFECT )

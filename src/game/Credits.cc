@@ -2,7 +2,6 @@
 #include "Cursors.h"
 #include "Debug.h"
 #include "Directories.h"
-#include "English.h"
 #include "Font.h"
 #include "Font_Control.h"
 #include "Input.h"
@@ -180,8 +179,6 @@ ScreenID CreditScreenHandle(void)
 
 	GetCreditScreenUserInput();
 	HandleCreditScreen();
-	ExecuteBaseDirtyRectQueue();
-	EndFrameBufferRender();
 
 	if (!g_credits_active)
 	{

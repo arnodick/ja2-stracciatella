@@ -9,7 +9,6 @@
 #include "Video.h"
 #include "Render_Dirty.h"
 #include "Music_Control.h"
-#include "ContentMusic.h"
 #include "Timer_Control.h"
 #include "SysUtil.h"
 #include "UILayout.h"
@@ -79,8 +78,8 @@ void CreateProgressBar(const UINT8 ubProgressBarID, const UINT16 x, const UINT16
 	pNew->usMsgFont            = FONT12POINT1;
 	pNew->ubMsgFontForeColor   = FONT_BLACK;
 	pNew->ubMsgFontShadowColor = 0;
-	SetRelativeStartAndEndPercentage(ubProgressBarID, 0, 100, ST::null);
-	pNew->title = ST::null;
+	SetRelativeStartAndEndPercentage(ubProgressBarID, 0, 100, {});
+	pNew->title.clear();
 
 	//Default the progress bar's color to be red
 	pNew->fill_colour = FROMRGB(150, 0, 0);
@@ -260,8 +259,6 @@ void RenderProgressBar( UINT8 ubID, UINT32 uiPercentage )
 			ColorFillVideoSurfaceArea(FRAME_BUFFER,	x + 2, y + 2, end, y + h - 2, Get16BPPColor(FROMRGB(72 , 155, 24)));
 		}
 		InvalidateRegion(x, y, x + w, y + h);
-		ExecuteBaseDirtyRectQueue();
-		EndFrameBufferRender();
 		RefreshScreen();
 	}
 

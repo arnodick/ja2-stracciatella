@@ -1,15 +1,8 @@
-#include "Local.h"
 #include "GameLoop.h"
+#include "Interface_Panels.h"
 #include "VSurface.h"
-#include "WorldDef.h"
-#include "Input.h"
-#include "Font.h"
-#include "Screens.h"
 #include "Overhead.h"
-#include "SysUtil.h"
 #include "Event_Pump.h"
-#include "Font_Control.h"
-#include "Debug_Pages.h"
 #include "Timer_Control.h"
 #include "Radar_Screen.h"
 #include "Render_Dirty.h"
@@ -22,11 +15,9 @@
 #include "Sys_Globals.h"
 #include "Environment.h"
 #include "Bullets.h"
-#include "Assignments.h"
 #include "Message.h"
 #include "Overhead_Map.h"
 #include "Strategic_Exit_GUI.h"
-#include "Strategic_Movement.h"
 #include "Tactical_Placement_GUI.h"
 #include "Game_Clock.h"
 #include "Game_Init.h"
@@ -41,20 +32,14 @@
 #include "Cursor_Control.h"
 #include "Strategic_Turns.h"
 #include "Merc_Entering.h"
-#include "Soldier_Create.h"
-#include "Soldier_Init_List.h"
-#include "Interface_Panels.h"
 #include "Map_Information.h"
 #include "Squads.h"
 #include "Interface_Dialogue.h"
 #include "Auto_Bandage.h"
 #include "Meanwhile.h"
-#include "Strategic_AI.h"
 #include "HelpScreen.h"
 #include "PreBattle_Interface.h"
 #include "Sound_Control.h"
-#include "Text.h"
-#include "Debug.h"
 #include "Video.h"
 #include "JAScreens.h"
 #include "UILayout.h"
@@ -66,13 +51,6 @@
 #define ARE_IN_FADE_IN( )		( gfFadeIn || gfFadeInitialized )
 
 BOOLEAN gfTacticalDoHeliRun = FALSE;
-
-
-// VIDEO OVERLAYS
-VIDEO_OVERLAY* g_fps_overlay            = NULL;
-VIDEO_OVERLAY* g_counter_period_overlay = NULL;
-
-
 BOOLEAN	gfGameScreenLocateToSoldier = FALSE;
 BOOLEAN	gfEnteringMapScreen					= FALSE;
 SOLDIERTYPE* gPreferredInitialSelectedGuy = NULL;
@@ -95,14 +73,6 @@ static ScreenID guiTacticalLeaveScreenID = ERROR_SCREEN; // XXX TODO001A had no 
 static BOOLEAN  guiTacticalLeaveScreen   = FALSE;
 
 
-static void BlitMFont(VIDEO_OVERLAY* const ovr)
-{
-	SetFontAttributes(ovr->uiFontID, ovr->ubFontFore, DEFAULT_SHADOW, ovr->ubFontBack);
-	SGPVSurface::Lock l(ovr->uiDestBuff);
-	MPrintBuffer(l.Buffer<UINT16>(), l.Pitch(), ovr->sX, ovr->sY, ovr->codepoints);
-}
-
-
 void MainGameScreenInit(void)
 {
 	// all blit functions expect z-buffer pitch to match framebuffer pitch
@@ -115,31 +85,6 @@ void MainGameScreenInit(void)
 	//EnvSetTimeInHours(ENV_TIME_12);
 
 	SetRenderFlags(RENDER_FLAG_FULL);
-
-	// Init Video Overlays
-	// FIRST, FRAMERATE
-	g_fps_overlay = RegisterVideoOverlay(
-					BlitMFont,
-					DEBUG_PAGE_SCREEN_OFFSET_X,
-					DEBUG_PAGE_SCREEN_OFFSET_Y,
-					DEBUG_PAGE_FONT,
-					DEBUG_PAGE_TEXT_COLOR,
-					0,
-					L"90"
-	);
-	EnableVideoOverlay(false, g_fps_overlay);
-
-	// SECOND, PERIOD COUNTER
-	g_counter_period_overlay = RegisterVideoOverlay(
-					BlitMFont,
-					DEBUG_PAGE_SCREEN_OFFSET_X,
-					DEBUG_PAGE_SCREEN_OFFSET_Y+DEBUG_PAGE_LINE_HEIGHT,
-					DEBUG_PAGE_FONT,
-					DEBUG_PAGE_TEXT_COLOR,
-					0,
-					L"Levelnodes: 100000"
-	);
-	EnableVideoOverlay(false, g_counter_period_overlay);
 }
 
 
@@ -148,8 +93,6 @@ void MainGameScreenInit(void)
 void MainGameScreenShutdown(void)
 {
 	ShutdownZBuffer(gpZBuffer);
-	RemoveVideoOverlay(g_fps_overlay);
-	RemoveVideoOverlay(g_counter_period_overlay);
 }
 
 
@@ -582,20 +525,9 @@ ScreenID MainGameScreenHandle(void)
 		RenderFastHelp( );
 	}
 
-	// Display Framerate
-	DisplayFrameRate( );
-
 	CheckForMeanwhileOKStart( );
 
 	ScrollString( );
-
-	ExecuteBaseDirtyRectQueue( );
-
-	//KillBackgroundRects( );
-
-	/////////////////////////////////////////////////////
-	EndFrameBufferRender( );
-
 
 	if ( HandleFadeInCallback( ) )
 	{
@@ -638,13 +570,6 @@ ScreenID MainGameScreenHandle(void)
 void SetRenderHook( RENDER_HOOK pRenderOverride )
 {
 	gRenderOverride = pRenderOverride;
-}
-
-
-void EnableFPSOverlay(BOOLEAN fEnable)
-{
-	EnableVideoOverlay(fEnable, g_fps_overlay);
-	EnableVideoOverlay(fEnable, g_counter_period_overlay);
 }
 
 
@@ -754,10 +679,6 @@ static void HandleModalTactical(void)
 	SaveBackgroundRects( );
 	RenderFastHelp();
 	RenderPausedGameBox( );
-
-	ExecuteBaseDirtyRectQueue( );
-	EndFrameBufferRender( );
-
 }
 
 

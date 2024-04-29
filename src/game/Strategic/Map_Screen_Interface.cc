@@ -3,7 +3,6 @@
 #include "Dialogue_Control.h"
 #include "Directories.h"
 #include "EMail.h"
-#include "FileMan.h"
 #include "Finances.h"
 #include "Font.h"
 #include "Font_Control.h"
@@ -24,6 +23,7 @@
 #include "Map_Screen_Helicopter.h"
 #include "Map_Screen_Interface_Border.h"
 #include "Map_Screen_Interface_Bottom.h"
+#include "Map_Screen_Interface_Map.h"
 #include "Map_Screen_Interface_Map_Inventory.h"
 #include "MapScreen.h"
 #include "MercPortrait.h"
@@ -36,13 +36,14 @@
 #include "Render_Dirty.h"
 #include "Render_Fun.h"
 #include "RenderWorld.h"
+#include "SAM_Sites.h"
 #include "SamSiteModel.h"
 #include "ShippingDestinationModel.h"
 #include "Soldier_Macros.h"
 #include "SoundMan.h"
 #include "Squads.h"
 #include "Strategic.h"
-#include "StrategicMap_Secrets.h"
+#include "StrategicMap.h"
 #include "Strategic_Mines.h"
 #include "Strategic_Pathing.h"
 #include "SysUtil.h"
@@ -1247,7 +1248,7 @@ void UpdateCharRegionHelpText(void)
 	ST::string status;
 	if (!s || s->bLife == 0)
 	{
-		status = ST::null;
+		status.clear();
 	}
 	else if (s->bAssignment == ASSIGNMENT_POW)
 	{
@@ -2324,7 +2325,7 @@ static void AddStringsToMoveBox(PopUpBox* const box)
 
 
 	// blank line
-	AddMonoString(box, ST::null);
+	AddMonoString(box, {});
 
 
 	// add squads
@@ -2406,7 +2407,7 @@ static void AddStringsToMoveBox(PopUpBox* const box)
 
 
 	// blank line
-	AddMonoString(box, ST::null);
+	AddMonoString(box, {});
 
 
 	if ( IsAnythingSelectedForMoving() )
@@ -2417,7 +2418,7 @@ static void AddStringsToMoveBox(PopUpBox* const box)
 	else
 	{
 		// blank line
-		AddMonoString(box, ST::null);
+		AddMonoString(box, {});
 	}
 
 	// add cancel line
@@ -3605,17 +3606,17 @@ void UpdateHelpTextForMapScreenMercIcons()
 
 	// if merc is an AIM merc
 	ST::string contract = s && s->ubWhatKindOfMercAmI == MERC_TYPE__AIM_MERC ?
-		zMarksMapScreenText[21] : ST::null;
+		zMarksMapScreenText[21] : ST::string();
 	gContractIconRegion.SetFastHelpText(contract);
 
 	// if merc has life insurance
 	ST::string insurance = s && s->usLifeInsurance > 0 ?
-		zMarksMapScreenText[3] : ST::null;
+		zMarksMapScreenText[3] : ST::string();
 	gInsuranceIconRegion.SetFastHelpText(insurance);
 
 	// if merc has a medical deposit
 	ST::string medical = s && s->usMedicalDeposit > 0 ?
-		zMarksMapScreenText[12] : ST::null;
+		zMarksMapScreenText[12] : ST::string();
 	gDepositIconRegion.SetFastHelpText(medical);
 }
 

@@ -16,14 +16,12 @@
 #include "Creature_Spreading.h"
 #include "Debug.h"
 #include "Dialogue_Control.h"
-#include "Directories.h"
 #include "Enemy_Soldier_Save.h"
 #include "Environment.h"
 #include "Explosion_Control.h"
 #include "FileMan.h"
 #include "Files.h"
 #include "Finances.h"
-#include "Font.h"
 #include "Font_Control.h"
 #include "Game_Events.h"
 #include "Game_Clock.h"
@@ -44,7 +42,6 @@
 #include "Interface.h"
 #include "JAScreens.h"
 #include "Keys.h"
-#include "Laptop.h"
 #include "Lighting.h"
 #include "LightEffects.h"
 #include "Loading_Screen.h"
@@ -53,7 +50,6 @@
 #include "LoadSaveMercProfile.h"
 #include "LoadSaveSoldierType.h"
 #include "LoadSaveTacticalStatusType.h"
-#include "Local.h"
 #include "Logger.h"
 #include "LaptopSave.h"
 #include "Map_Screen_Helicopter.h"
@@ -82,7 +78,6 @@
 #include "Queen_Command.h"
 #include "Quests.h"
 #include "Random.h"
-#include "Render_Dirty.h"
 #include "RenderWorld.h"
 #include "SaveLoadGame.h"
 #include "SaveLoadGameStates.h"
@@ -99,7 +94,6 @@
 #include "Strategic_Movement.h"
 #include "Strategic_Status.h"
 #include "Strategic_Town_Loyalty.h"
-#include "Strategic_Pathing.h"
 #include "StrategicMap.h"
 #include "StrategicMap_Secrets.h"
 #include "Tactical_Placement_GUI.h"
@@ -122,6 +116,7 @@
 #include <regex>
 #include <algorithm>
 #include <stdexcept>
+#include <utility>
 
 static const ST::string g_backup_dir     = "Backup";
 static const ST::string g_quicksave_name = "QuickSave";
@@ -256,7 +251,6 @@ BOOLEAN SaveGame(const ST::string& saveName, const ST::string& gameDesc)
 	}
 
 	InvalidateScreen();
-	ExecuteBaseDirtyRectQueue();
 	RefreshScreen();
 
 	// Make sure we redraw the screen when we are done
@@ -319,7 +313,7 @@ BOOLEAN SaveGame(const ST::string& saveName, const ST::string& gameDesc)
 		NewWayOfSavingEnemyAndCivliansToTempFile(gWorldSector, FALSE, TRUE);
 
 		// Setup the save game header
-		header.uiSavedGameVersion = guiSavedGameVersion;
+		header.uiSavedGameVersion = SAVE_GAME_VERSION;
 		strcpy(header.zGameVersionNumber, g_version_number);
 
 		// The following will be used to quickly access info to display in the save/load screen
@@ -795,7 +789,7 @@ void LoadSavedGame(const ST::string &saveName)
 	LoadUnderGroundSectorInfoFromSavedGame(f);
 
 	BAR(1, "Squad Info...");
-	LoadSquadInfoFromSavedGameFile(f);
+	LoadSquadInfoFromSavedGameFile(f, version);
 
 	BAR(1, "Strategic Movement Groups...");
 	LoadStrategicMovementGroupsFromSavedGameFile(f);
@@ -1199,13 +1193,11 @@ void LoadSavedGame(const ST::string &saveName)
 static void SaveMercProfiles(HWFILE const f)
 {
 	// Loop through all the profiles to save
-	void (&writer)(HWFILE, BYTE const*, UINT32) = guiSavedGameVersion < 87 ?
-		JA2EncryptedFileWrite : NewJA2EncryptedFileWrite;
 	FOR_EACH(MERCPROFILESTRUCT, i, gMercProfiles)
 	{
 		BYTE data[716];
 		InjectMercProfile(data, *i);
-		writer(f, data, sizeof(data));
+		NewJA2EncryptedFileWrite(f, data, sizeof(data));
 	}
 }
 
@@ -1311,8 +1303,6 @@ static void LoadSavedMercProfiles(HWFILE const f, UINT32 const savegame_version,
 static void SaveSoldierStructure(HWFILE const f)
 {
 	// Loop through all the soldier structs to save
-	void (&writer)(HWFILE, BYTE const*, UINT32) = guiSavedGameVersion < 87 ?
-		JA2EncryptedFileWrite : NewJA2EncryptedFileWrite;
 	for (UINT16 i = 0; i < TOTAL_SOLDIERS; ++i)
 	{
 		SOLDIERTYPE const& s = GetMan(i);
@@ -1325,7 +1315,7 @@ static void SaveSoldierStructure(HWFILE const f)
 		BYTE data[2328];
 		std::fill_n(data, 2328, 0);
 		InjectSoldierType(data, &s);
-		writer(f, data, sizeof(data));
+		NewJA2EncryptedFileWrite(f, data, sizeof(data));
 
 		// Save all the pointer info from the structure
 		SaveMercPath(f, s.pMercPath);
@@ -2477,7 +2467,7 @@ static void CalcJA2EncryptionSet(SAVED_GAME_HEADER const& h)
 	guiJA2EncryptionSet = set;
 }
 
-SaveGameInfo::SaveGameInfo(ST::string name_, HWFILE file) : saveName(name_) {
+SaveGameInfo::SaveGameInfo(ST::string name_, HWFILE file) : saveName(std::move(name_)) {
 	bool stracciatellaFormat = false;
 	auto savedGameHeader = SAVED_GAME_HEADER{};
 	file->seek(0, FileSeekMode::FILE_SEEK_FROM_START);

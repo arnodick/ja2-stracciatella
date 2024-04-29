@@ -1,7 +1,6 @@
 #include "Directories.h"
 #include "Font.h"
 #include "HImage.h"
-#include "Local.h"
 #include "MapScreen.h"
 #include "Radar_Screen.h"
 #include "Line.h"
@@ -22,7 +21,6 @@
 #include "Interface_Control.h"
 #include "Game_Clock.h"
 #include "Map_Screen_Interface_Map_Inventory.h"
-#include "Environment.h"
 #include "Meanwhile.h"
 #include "StrategicMap.h"
 #include "Animation_Data.h"
@@ -230,7 +228,6 @@ void RenderRadarScreen()
 		// Cycle fFlash variable
 		if (COUNTERDONE(RADAR_MAP_BLINK))
 		{
-			RESETCOUNTER(RADAR_MAP_BLINK);
 			gfRadarCurrentGuyFlash = !gfRadarCurrentGuyFlash;
 		}
 
@@ -319,7 +316,6 @@ static void AdjustWorldCenterFromRadarCoords(INT16 sRadarX, INT16 sRadarY)
 
 	INT16 sScreenX, sScreenY;
 	INT16	sTempX_W, sTempY_W;
-	INT16 sNewCenterWorldX, sNewCenterWorldY;
 	INT16 sNumXSteps, sNumYSteps;
 
 	// Use radar scale values to get screen values, then convert ot map values, rounding to nearest middle tile
@@ -349,10 +345,7 @@ static void AdjustWorldCenterFromRadarCoords(INT16 sRadarX, INT16 sRadarY)
 	FromScreenToCellCoordinates( sScreenX, sScreenY, &sTempX_W, &sTempY_W );
 
 	// Adjust these to world center
-	sNewCenterWorldX = (INT16)(gCenterWorldX + sTempX_W);
-	sNewCenterWorldY = (INT16)(gCenterWorldY + sTempY_W);
-
-	SetRenderCenter( sNewCenterWorldX, sNewCenterWorldY );
+	SetRenderCenter( gCenterWorldX + sTempX_W, gCenterWorldY + sTempY_W);
 }
 
 

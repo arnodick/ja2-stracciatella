@@ -3,9 +3,9 @@
 #include "MapScreen.h"
 #include "Map_Screen_Interface_Bottom.h"
 #include "Map_Screen_Interface_TownMine_Info.h"
+#include "SAM_Sites.h"
 #include "StrategicMap.h"
 #include "StrategicMap_Secrets.h"
-#include "StrategicMapSecretModel.h"
 #include "PopUpBox.h"
 #include "Map_Screen_Interface.h"
 #include "Queen_Command.h"
@@ -14,15 +14,12 @@
 #include "Text.h"
 #include "Map_Screen_Interface_Map.h"
 #include "Map_Screen_Interface_Border.h"
-#include "Handle_UI.h"
-#include "NPC.h"
 #include "Strategic_Town_Loyalty.h"
 #include "Strategic_Mines.h"
 #include "Finances.h"
 #include "Map_Screen_Interface_Map_Inventory.h"
 #include "Town_Militia.h"
 #include "HelpScreen.h"
-#include "Map_Screen_Helicopter.h"
 #include "Tactical_Save.h"
 #include "Button_System.h"
 #include "Debug.h"
@@ -184,7 +181,7 @@ static void AddTextToTownBox(PopUpBox* const box)
 
 	AddMonoString(box, title);
 	// blank line
-	AddMonoString(box, ST::null);
+	AddMonoString(box, {});
 
 	AddSectorToBox(box);
 
@@ -245,7 +242,7 @@ static void AddTextToMineBox(PopUpBox* const box, INT8 const mine)
 	buf = ST::format("{} {}", GCM->getTownName(town), pwMineStrings[0]);
 	AddMonoString(box, buf);
 
-	AddMonoString(box, ST::null); // Blank line
+	AddMonoString(box, {}); // Blank line
 
 	AddSectorToBox(box);
 
@@ -319,7 +316,7 @@ static void AddTextToBlankSectorBox(PopUpBox* const box)
 	AddMonoString(box, GetSectorLandTypeString(sector, 0, true));
 
 	// blank line
-	AddMonoString(box, ST::null);
+	AddMonoString(box, {});
 
 	AddSectorToBox(box);
 }

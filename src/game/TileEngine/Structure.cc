@@ -6,7 +6,6 @@
 #include "VObject.h"
 #include "WCheck.h"
 #include "Debug.h"
-#include "FileMan.h"
 #include "Structure.h"
 #include "TileDef.h"
 #include "WorldDef.h"
@@ -14,12 +13,9 @@
 #include "Interface.h"
 #include "Isometric_Utils.h"
 #include "Font.h"
-#include "Font_Control.h"
 #include "Debug_Pages.h"
-#include "LOS.h"
 #include "Smell.h"
 #include "SaveLoadMap.h"
-#include "StrategicMap.h"
 #include "Sys_Globals.h" //for access to gfEditMode flag
 //Kris:
 #include "Editor_Undo.h" //for access to AddToUndoList( iMapIndex )
@@ -34,10 +30,11 @@
 #include "GameInstance.h"
 
 #include <climits>
+#include <memory>
+#include <stdexcept>
 #include <string_theory/format>
 #include <string_theory/string>
 
-#include <stdexcept>
 
 
 #ifdef COUNT_PATHS
@@ -1530,7 +1527,8 @@ void AddZStripInfoToVObject(HVOBJECT const hVObject, STRUCTURE_FILE_REF const* c
 	if (!fFound) return;
 
 	UINT         const zcount = hVObject->SubregionCount();
-	ZStripInfo** const zinfo  = new ZStripInfo*[zcount]{};
+	auto & zinfo = hVObject->ppZStripInfo;
+	zinfo = std::make_unique<std::unique_ptr<ZStripInfo> []>(zcount);
 
 	INT16 sSTIStep;
 	if (fFromAnimation)
@@ -1558,7 +1556,6 @@ void AddZStripInfoToVObject(HVOBJECT const hVObject, STRUCTURE_FILE_REF const* c
 	INT16   sNext           = sSTIStartIndex + sSTIStep;
 	BOOLEAN fFirstTime      = TRUE;
 	for (UINT32 uiLoop = sSTIStartIndex; uiLoop < zcount; ++uiLoop)
-	try
 	{
 		// Defualt to true
 		BOOLEAN fCopyIntoVo = TRUE;
@@ -1592,9 +1589,9 @@ void AddZStripInfoToVObject(HVOBJECT const hVObject, STRUCTURE_FILE_REF const* c
 				// ATE: We allow SLIDING DOORS of 2 tile sizes...
 				if (!(pDBStructure->fFlags & STRUCTURE_ANYDOOR) || pDBStructure->fFlags & STRUCTURE_SLIDINGDOOR)
 				{
-					ZStripInfo* const pCurr = new ZStripInfo{};
 					Assert(uiDestVoIndex < zcount);
-					zinfo[uiDestVoIndex] = pCurr;
+					auto & pCurr = zinfo[uiDestVoIndex];
+					pCurr = std::make_unique<ZStripInfo>();
 
 					UINT8 ubNumIncreasing = 0;
 					UINT8 ubNumStable     = 0;
@@ -1712,21 +1709,12 @@ void AddZStripInfoToVObject(HVOBJECT const hVObject, STRUCTURE_FILE_REF const* c
 
 					// now create the array!
 					pCurr->ubNumberOfZChanges = ubNumIncreasing + ubNumStable + ubNumDecreasing;
-					pCurr->pbZChange = new INT8[pCurr->ubNumberOfZChanges]{};
+					Assert(pCurr->ubNumberOfZChanges <= std::size(pCurr->pbZChange));
+					auto end = std::fill_n(pCurr->pbZChange, ubNumIncreasing, 1);
+					     end = std::fill_n(end, ubNumStable, 0);
+					     end = std::fill_n(end, ubNumDecreasing, -1);
+					std::fill(end, std::end(pCurr->pbZChange), 0);
 
-					UINT8 ubLoop2;
-					for (ubLoop2 = 0; ubLoop2 < ubNumIncreasing; ubLoop2++)
-					{
-						pCurr->pbZChange[ubLoop2] = 1;
-					}
-					for (; ubLoop2 < ubNumIncreasing + ubNumStable; ubLoop2++)
-					{
-						pCurr->pbZChange[ubLoop2] = 0;
-					}
-					for (; ubLoop2 < pCurr->ubNumberOfZChanges; ubLoop2++)
-					{
-						pCurr->pbZChange[ubLoop2] = -1;
-					}
 					if (ubNumIncreasing > 0)
 					{
 						pCurr->bInitialZChange = -ubNumIncreasing;
@@ -1743,20 +1731,6 @@ void AddZStripInfoToVObject(HVOBJECT const hVObject, STRUCTURE_FILE_REF const* c
 			}
 		}
 	}
-	catch (...)
-	{
-		for (UINT ubLoop2 = 0; ubLoop2 < uiLoop; ++ubLoop2)
-		{
-			if (zinfo[ubLoop2] != NULL)
-			{
-				delete zinfo[uiLoop];
-			}
-		}
-		delete[] zinfo;
-		throw;
-	}
-
-	hVObject->ppZStripInfo = zinfo;
 }
 
 

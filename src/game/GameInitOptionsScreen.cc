@@ -3,7 +3,6 @@
 #include "Cursor_Control.h"
 #include "Cursors.h"
 #include "Directories.h"
-#include "English.h"
 #include "Fade_Screen.h"
 #include "Font.h"
 #include "Font_Control.h"
@@ -12,7 +11,6 @@
 #include "GameSettings.h"
 #include "Input.h"
 #include "Intro.h"
-#include "Local.h"
 #include "MainMenuScreen.h"
 #include "MessageBoxScreen.h"
 #include "Music_Control.h"
@@ -210,9 +208,6 @@ ScreenID GameInitOptionsScreenHandle(void)
 	// render help
 	RenderFastHelp();
 #endif
-
-	ExecuteBaseDirtyRectQueue();
-	EndFrameBufferRender();
 
 	if (HandleFadeOutCallback())
 	{

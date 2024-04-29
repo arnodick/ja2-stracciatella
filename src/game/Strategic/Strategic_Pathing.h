@@ -1,7 +1,6 @@
 #ifndef __STRATPATH_H
 #define __STRATPATH_H
 
-#include "Map_Screen_Interface_Map.h"
 #include "Strategic_Movement.h"
 
 
@@ -13,18 +12,6 @@
 #define WEST_MOVE    -1
 #define SOUTH_MOVE  18
 
-
-// Movement speed defines
-#define NORMAL_MVT 1
-#define SLOW_MVT   0
-
-
-// movment modes
-enum{
-	MVT_MODE_AIR,
-	MVT_MODE_VEHICLE,
-	MVT_MODE_FOOT,
-};
 
 INT32 FindStratPath(INT16 sStart, INT16 sDestination, GROUP const&, BOOLEAN fTacticalTraversal);
 

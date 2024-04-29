@@ -6,7 +6,6 @@
 #include "ContentManager.h"
 #include "Dialogue_Control.h"
 #include "Faces.h"
-#include "FileMan.h"
 #include "Font_Control.h"
 #include "Game_Clock.h"
 #include "Game_Events.h"
@@ -22,6 +21,7 @@
 #include "Map_Screen_Interface_Border.h"
 #include "Map_Screen_Interface_Bottom.h"
 #include "MapScreen.h"
+#include "Map_Screen_Interface_Map.h"
 #include "Meanwhile.h"
 #include "MercProfile.h"
 #include "Message.h"
@@ -31,9 +31,11 @@
 #include "PreBattle_Interface.h"
 #include "Queen_Command.h"
 #include "Quests.h"
+#include "SAM_Sites.h"
 #include "Soldier_Macros.h"
 #include "Squads.h"
 #include "Strategic.h"
+#include "StrategicMap.h"
 #include "StrategicMap_Secrets.h"
 #include "Strategic_AI.h"
 #include "Strategic_Pathing.h"
@@ -398,18 +400,22 @@ BOOLEAN AddWaypointToPGroup(GROUP *g, const SGPSector& sMap)
 	{
 		if (n_aligned_axes == 0)
 		{
-			AssertMsg(FALSE, ST::format("Invalid DIAGONAL waypoint being added for groupID {}. AM-0", g->ubGroupID));
+			SLOGE("Invalid DIAGONAL waypoint being added for groupID {}. AM-0", g->ubGroupID);
 			return FALSE;
 		}
 
 		if (n_aligned_axes >= 2)
 		{
-			AssertMsg(FALSE, ST::format("Invalid IDENTICAL waypoint being added for groupID {}. AM-0", g->ubGroupID));
+			SLOGE("Invalid IDENTICAL waypoint being added for groupID {}. AM-0", g->ubGroupID);
 			return FALSE;
 		}
 
 		// Has to be different in exactly 1 axis to be a valid new waypoint
-		Assert(n_aligned_axes == 1);
+		if (n_aligned_axes != 1)
+		{
+			SLOGE("n_aligned_axes should be 1, is {}", n_aligned_axes);
+			return false;
+		}
 	}
 
 	WAYPOINT* const new_wp = new WAYPOINT{};

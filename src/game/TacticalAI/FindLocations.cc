@@ -6,6 +6,7 @@
 #include "AI.h"
 #include "AIInternals.h"
 #include "LOS.h"
+#include "Overhead.h"
 #include "Soldier_Profile.h"
 #include "Structure.h"
 #include "Weapons.h"
@@ -18,8 +19,6 @@
 #include "RenderWorld.h"
 #include "Render_Fun.h"
 #include "Boxing.h"
-#include "Text.h"
-#include "Structure_Wrap.h"
 #ifdef _DEBUG
 	#include "Video.h"
 #endif
@@ -50,25 +49,24 @@ INT8 gubAIPathCosts[19][19];
 
 static INT32 CalcPercentBetter(INT32 iOldValue, INT32 iNewValue, INT32 iOldScale, INT32 iNewScale)
 {
-	INT32 iValueChange,iScaleSum,iPercentBetter;//,loopCnt,tempInt;
-
 	// calcalate how much better the new cover would be than the current cover
-	iValueChange = iNewValue - iOldValue;
+	INT32 const iValueChange = iNewValue - iOldValue;
 
 	// here, the change in cover HAS to be an improvement over current cover
 	if (iValueChange <= 0)
 	{
-		return(NOWHERE);
+		return 0; // not any better
 	}
 
-	iScaleSum = iOldScale + iNewScale;
+	INT32 const iScaleSum = iOldScale + iNewScale;
 
 	// here, the change in cover HAS to be an improvement over current cover
 	if (iScaleSum <= 0)
 	{
-		return(NOWHERE);
+		return 0; // not any better
 	}
-	iPercentBetter = (iValueChange * 100) / iScaleSum;
+
+	INT32 const iPercentBetter = (iValueChange * 100) / iScaleSum;
 	SLOGD("CalcPercentBetter: %Better {}, old {}, new {}, change {}\noldScale {}, newScale {}, scaleSum {}",
 		iPercentBetter, iOldValue, iNewValue, iValueChange, iOldScale, iNewScale, iScaleSum);
 	return(iPercentBetter);
@@ -977,7 +975,7 @@ INT16 FindBestNearbyCover(SOLDIERTYPE *pSoldier, INT32 morale, INT32 *piPercentB
 		{
 			SLOGD("Found Cover: current {}, best {}, %Better {}",
 				iCurrentCoverValue, iBestCoverValue, *piPercentBetter);
-			return((INT16)sBestCover);       // return the gridno of that cover
+			return sBestCover; // return the gridno of that cover
 		}
 	}
 	return(NOWHERE);       // return that no suitable cover was found

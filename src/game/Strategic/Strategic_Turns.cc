@@ -1,17 +1,9 @@
 #include "Game_Clock.h"
-#include "Render_Dirty.h"
 #include "Timer_Control.h"
 #include "Overhead.h"
-#include "Environment.h"
-#include "WorldDef.h"
-#include "Rotting_Corpses.h"
-#include "Soldier_Create.h"
-#include "Soldier_Add.h"
 #include "Strategic_Turns.h"
-#include "Animation_Data.h"
 #include "Tactical_Turns.h"
 #include "RT_Time_Defines.h"
-#include "Assignments.h"
 #include "JAScreens.h"
 #include "ScreenIDs.h"
 
@@ -43,8 +35,6 @@ void HandleStrategicTurn(void)
 	// OK, DO THIS CHECK EVERY ONCE AND A WHILE...
 	if ( COUNTERDONE( STRATEGIC_OVERHEAD ) )
 	{
-		RESETCOUNTER( STRATEGIC_OVERHEAD );
-
 		// if the game is paused, or we're in mapscreen and time is not being compressed
 		if (GamePaused() ||
 				( ( guiCurrentScreen == MAP_SCREEN ) && !IsTimeBeingCompressed() ) )

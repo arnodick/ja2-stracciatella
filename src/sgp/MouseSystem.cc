@@ -27,7 +27,6 @@
 #include "Timer.h"
 #include "Font_Control.h"
 #include "JAScreens.h"
-#include "Local.h"
 #include "Render_Dirty.h"
 #include "VSurface.h"
 #include "ScreenIDs.h"
@@ -517,7 +516,7 @@ static void MSYS_UpdateMouseRegion(void)
 
 			MSYS_Action &= ~MSYS_DO_MOVE;
 
-			if (cur->ButtonCallback && MSYS_Action & (MSYS_DO_BUTTONS | MSYS_DO_TFINGER_UP | MSYS_DO_TFINGER_DOWN | MSYS_DO_TFINGER_REPEAT))
+			if (cur->ButtonCallback && (MSYS_Action & (MSYS_DO_BUTTONS | MSYS_DO_TFINGER_UP | MSYS_DO_TFINGER_DOWN | MSYS_DO_TFINGER_REPEAT)))
 			{
 				if (cur->uiFlags & MSYS_REGION_ENABLED)
 				{
@@ -699,7 +698,7 @@ void MSYS_DefineRegion(MOUSE_REGION* const r, UINT16 const tlx, UINT16 const tly
 	r->MovementCallback   = movecallback;
 	r->ButtonCallback     = buttoncallback;
 	r->FastHelpTimer      = 0;
-	r->FastHelpText       = ST::null;
+	r->FastHelpText.clear();
 	r->FastHelpRect       = nullptr;
 	r->next               = 0;
 	r->prev               = 0;
@@ -732,7 +731,7 @@ void MSYS_RemoveRegion(MOUSE_REGION* const r)
 		FreeBackgroundRectPending(r->FastHelpRect);
 	}
 
-	r->FastHelpText = ST::null;
+	r->FastHelpText.clear();
 
 	MSYS_DeleteRegionFromList(r);
 
@@ -768,7 +767,7 @@ void RefreshMouseRegions( )
 
 void MOUSE_REGION::SetFastHelpText(const ST::string& str)
 {
-	FastHelpText = ST::null;
+	FastHelpText.clear();
 
 	if (!(uiFlags & MSYS_REGION_EXISTS)) return;
 

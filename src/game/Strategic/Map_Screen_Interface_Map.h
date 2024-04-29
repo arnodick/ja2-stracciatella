@@ -1,10 +1,8 @@
 #ifndef _MAP_SCREEN_INTERFACE_MAP_H
 #define _MAP_SCREEN_INTERFACE_MAP_H
 
-#include "Types.h"
+#include "JA2Types.h"
 #include "UILayout.h"
-struct SOLDIERTYPE;
-struct VEHICLETYPE;
 
 
 void InitMapScreenInterfaceMap();
@@ -16,9 +14,6 @@ void DrawMapIndexBigMap( BOOLEAN fSelectedCursorIsYellow );
 void DrawMap(void);
 
 void GetScreenXYFromMapXY(const SGPSector& sMap, INT16 *psX, INT16 *psY);
-
-void InitializePalettesForMap(void);
-void ShutDownPalettesForMap( void );
 
 // plot path for helicopter
 void PlotPathForHelicopter(const SGPSector& sector);

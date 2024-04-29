@@ -12,7 +12,6 @@
 #include "Interface.h"
 #include "Interface_Control.h"
 #include "Isometric_Utils.h"
-#include "Local.h"
 #include "Overhead.h"
 #include "Radar_Screen.h"
 #include "Render_Dirty.h"
@@ -28,6 +27,7 @@
 #include "TileDef.h"
 #include "Tile_Cache.h"
 #include "Timer_Control.h"
+#include "Video.h"
 #include "VObject.h"
 #include "VObject_Blitters.h"
 #include "VSurface.h"
@@ -96,6 +96,10 @@ enum RenderLayerID
 
 #define NUM_ITEM_CYCLE_COLORS 20
 
+
+#define MIN_SCROLL_OFFSET_X 20
+#define MIN_SCROLL_OFFSET_Y 20
+
 static UINT16 us16BPPItemCycleWhiteColors[NUM_ITEM_CYCLE_COLORS];
 static UINT16 us16BPPItemCycleRedColors[NUM_ITEM_CYCLE_COLORS];
 static UINT16 us16BPPItemCycleYellowColors[NUM_ITEM_CYCLE_COLORS];
@@ -138,14 +142,10 @@ BOOLEAN gfIgnoreScrollDueToCenterAdjust = FALSE;
 //
 
 // GLOBAL SCROLLING PARAMS
-INT16 gCenterWorldX;
-INT16 gCenterWorldY;
 INT16 gsLeftX;      // Left edge of the current map in screen coordinates.
 INT16 gsTopY;       // Top edge of the current map in screen coordinates.
 INT16 gsRightX;     // Right edge of the current map in screen coordinates.
 INT16 gsBottomY;    // Bottom edge of the current map in screen coordinates.
-INT16 gsCX;         // Center of the map in screen coordinates (seems to be always 0).
-INT16 gsCY;         // Center of the map in screen coordinates (seems to be always 1625).
 double gdScaleX;
 double gdScaleY;
 
@@ -1192,7 +1192,7 @@ zlevel_topmost:
 								sXPos += pTrav.sOffsetX;
 								sYPos += pTrav.sOffsetY;
 
-								INT16 const h = std::min((int) uiBrushHeight, gsVIEWPORT_WINDOW_END_Y - sYPos);
+								INT16 const h = std::min((int) uiBrushHeight, std::max(0, gsVIEWPORT_WINDOW_END_Y - sYPos));
 								RegisterBackgroundRect(uiDirtyFlags, sXPos, sYPos, uiBrushWidth, h);
 								if (fSaveZ)
 								{
@@ -1683,7 +1683,6 @@ void RenderWorld(void)
 	// For now here, update animated tiles
 	if (COUNTERDONE(ANIMATETILES))
 	{
-		RESETCOUNTER(ANIMATETILES);
 		for (UINT32 i = 0; i != gusNumAnimatedTiles; ++i)
 		{
 			TILE_ANIMATION_DATA& a = *gTileDatabase[gusAnimatedTiles[i]].pAnimData;
@@ -1694,7 +1693,6 @@ void RenderWorld(void)
 	// HERE, UPDATE GLOW INDEX
 	if (COUNTERDONE(GLOW_ENEMYS))
 	{
-		RESETCOUNTER(GLOW_ENEMYS);
 		gsCurrentGlowFrame     = (gsCurrentGlowFrame     + 1) % lengthof(gsGlowFrames);
 		gsCurrentItemGlowFrame = (gsCurrentItemGlowFrame + 1) % NUM_ITEM_CYCLE_COLORS;
 	}
@@ -1843,7 +1841,7 @@ void RenderStaticWorldRect(INT16 sLeft, INT16 sTop, INT16 sRight, INT16 sBottom,
 
 	ResetRenderParameters();
 
-	if (!gfDoVideoScroll) AddBaseDirtyRect(sLeft, sTop, sRight, sBottom);
+	if (!gfDoVideoScroll) InvalidateRegionEx(sLeft, sTop, sRight, sBottom);
 }
 
 
@@ -1883,7 +1881,7 @@ static void RenderStaticWorld(void)
 	sLevelIDs[1] = RENDER_STATIC_ONROOF;
 	RenderTiles(TILES_OBSCURED, gsLStartPointX_M, gsLStartPointY_M, gsLStartPointX_S, gsLStartPointY_S, gsLEndXS, gsLEndYS, 2, sLevelIDs);
 
-	AddBaseDirtyRect(gsVIEWPORT_START_X, gsVIEWPORT_WINDOW_START_Y, gsVIEWPORT_END_X, gsVIEWPORT_WINDOW_END_Y);
+	InvalidateRegionEx(gsVIEWPORT_START_X, gsVIEWPORT_WINDOW_START_Y, gsVIEWPORT_END_X, gsVIEWPORT_WINDOW_END_Y);
 	ResetRenderParameters();
 }
 
@@ -1922,7 +1920,7 @@ static void RenderMarkedWorld(void)
 	sLevelIDs[0] = RENDER_STATIC_TOPMOST;
 	RenderTiles(TILES_MARKED, gsStartPointX_M, gsStartPointY_M, gsStartPointX_S, gsStartPointY_S, gsEndXS, gsEndYS, 1, sLevelIDs);
 
-	AddBaseDirtyRect(gsVIEWPORT_START_X, gsVIEWPORT_WINDOW_START_Y, gsVIEWPORT_END_X, gsVIEWPORT_WINDOW_END_Y);
+	InvalidateRegionEx(gsVIEWPORT_START_X, gsVIEWPORT_WINDOW_START_Y, gsVIEWPORT_END_X, gsVIEWPORT_WINDOW_END_Y);
 
 	ResetRenderParameters();
 }
@@ -2054,6 +2052,7 @@ void ScrollWorld(void)
 	if (_KeyDown(ALT)) return;
 
 	UINT32 ScrollFlags = 0;
+	BOOLEAN fIsScrollingByOffset = gsScrollXOffset != 0 || gsScrollYOffset != 0;
 
 	do
 	{
@@ -2117,10 +2116,9 @@ void ScrollWorld(void)
 			if (!g_scroll_inertia && !gfScrollPending)
 			{
 				if (!COUNTERDONE(STARTSCROLL)) break;
-				RESETCOUNTER(STARTSCROLL);
 			}
 
-			if (!gfIsUsingTouch) {
+			if (!gfIsUsingTouch && !fIsScrollingByOffset) {
 				if (gusMouseYPos <  NO_PX_SHOW_EXIT_CURS)                 ScrollFlags |= SCROLL_UP;
 				if (gusMouseYPos >= SCREEN_HEIGHT - NO_PX_SHOW_EXIT_CURS) ScrollFlags |= SCROLL_DOWN;
 				if (gusMouseXPos >= SCREEN_WIDTH  - NO_PX_SHOW_EXIT_CURS) ScrollFlags |= SCROLL_RIGHT;
@@ -2130,8 +2128,6 @@ void ScrollWorld(void)
 	}
 	while (FALSE);
 
-
-	BOOLEAN fIsScrollingByOffset = gsScrollXOffset != 0 || gsScrollYOffset != 0;
 	BOOLEAN fAGoodMove   = FALSE;
 	INT16   sScrollXStep = -1;
 	INT16   sScrollYStep = -1;
@@ -2144,9 +2140,9 @@ void ScrollWorld(void)
 
 		fAGoodMove = HandleScrollDirections(ScrollFlags, sScrollXStep, sScrollYStep, TRUE);
 	} else if (fIsScrollingByOffset) {
-		if (std::abs(gsScrollXOffset) >= CELL_X_SIZE || std::abs(gsScrollYOffset) >= CELL_Y_SIZE) {
-			sScrollXStep = (gsScrollXOffset / CELL_X_SIZE) * CELL_X_SIZE;
-			sScrollYStep = (gsScrollYOffset / CELL_Y_SIZE) * CELL_Y_SIZE;
+		if (std::abs(gsScrollXOffset) >= MIN_SCROLL_OFFSET_X || std::abs(gsScrollYOffset) >= MIN_SCROLL_OFFSET_Y) {
+			sScrollXStep = (gsScrollXOffset / MIN_SCROLL_OFFSET_X) * MIN_SCROLL_OFFSET_X;
+			sScrollYStep = (gsScrollYOffset / MIN_SCROLL_OFFSET_Y) * MIN_SCROLL_OFFSET_Y;
 			if (sScrollXStep != 0) {
 				ScrollFlags |= (sScrollXStep > 0) ? SCROLL_LEFT : SCROLL_RIGHT;
 			}
@@ -2157,12 +2153,6 @@ void ScrollWorld(void)
 			sScrollYStep = std::abs(sScrollYStep);
 
 			fAGoodMove = HandleScrollDirections(ScrollFlags, sScrollXStep, sScrollYStep, TRUE);
-
-			if (fAGoodMove) {
-				SetRenderFlags(RENDER_FLAG_FULL);
-				gsScrollXOffset %= CELL_X_SIZE;
-				gsScrollYOffset %= CELL_Y_SIZE;
-			}
 		}
 	}
 
@@ -2171,8 +2161,6 @@ void ScrollWorld(void)
 	{
 		if (COUNTERDONE(NEXTSCROLL) || fIsScrollingByOffset)
 		{
-			RESETCOUNTER(NEXTSCROLL);
-
 			// Are we starting a new scroll?
 			if (!g_scroll_inertia && !gfScrollPending)
 			{
@@ -2191,6 +2179,11 @@ void ScrollWorld(void)
 
 			g_scroll_inertia = true;
 
+			if (fIsScrollingByOffset) {
+				SetRenderFlags(RENDER_FLAG_FULL);
+				gsScrollXOffset %= MIN_SCROLL_OFFSET_X;
+				gsScrollYOffset %= MIN_SCROLL_OFFSET_Y;
+			}
 			// Now we actually begin our scrolling
 			HandleScrollDirections(ScrollFlags, sScrollXStep, sScrollYStep, FALSE);
 		}
@@ -2255,17 +2248,12 @@ void InitRenderParams(UINT8 ubRestrictionID)
 		default: abort(); // HACK000E
 	}
 
-	gCenterWorldX = CELL_X_SIZE * WORLD_ROWS / 2;
-	gCenterWorldY = CELL_X_SIZE * WORLD_COLS / 2;
-
 	// Convert Bounding box into screen coords
 	FromCellToScreenCoordinates(gTopLeftWorldLimitX,     gTopLeftWorldLimitY,     &gsLeftX, &gsTopY);
 	FromCellToScreenCoordinates(gBottomRightWorldLimitX, gBottomRightWorldLimitY, &gsRightX, &gsBottomY);
-	FromCellToScreenCoordinates(gCenterWorldX,           gCenterWorldY,           &gsCX,  &gsCY);
 
 	// Adjust for interface height tabbing!
 	gsTopY += ROOF_LEVEL_HEIGHT;
-	gsCY  += ROOF_LEVEL_HEIGHT / 2;
 
 	SLOGD("World Screen Width {} Height {}", gsRightX - gsLeftX, gsBottomY - gsTopY);
 
@@ -2524,8 +2512,8 @@ static void Blt8BPPDataTo16BPPBufferTransZIncClip(UINT16* pBuffer, UINT32 uiDest
 		return;
 	}
 	// setup for the z-column blitting stuff
-	const ZStripInfo* const pZInfo = hSrcVObject->ppZStripInfo[usIndex];
-	if (pZInfo == NULL)
+	auto const& pZInfo = hSrcVObject->ppZStripInfo[usIndex];
+	if (!pZInfo)
 	{
 		SLOGW("Missing Z-Strip info on multi-Z object");
 		return;
@@ -2787,8 +2775,8 @@ static void Blt8BPPDataTo16BPPBufferTransZIncClipZSameZBurnsThrough(UINT16* pBuf
 		return;
 	}
 	// setup for the z-column blitting stuff
-	const ZStripInfo* const pZInfo = hSrcVObject->ppZStripInfo[usIndex];
-	if (pZInfo == NULL)
+	auto const& pZInfo = hSrcVObject->ppZStripInfo[usIndex];
+	if (!pZInfo)
 	{
 		SLOGW("Missing Z-Strip info on multi-Z object");
 		return;
@@ -3054,8 +3042,8 @@ static void Blt8BPPDataTo16BPPBufferTransZIncObscureClip(UINT16* pBuffer, UINT32
 		return;
 	}
 	// setup for the z-column blitting stuff
-	const ZStripInfo* const pZInfo = hSrcVObject->ppZStripInfo[usIndex];
-	if (pZInfo == NULL)
+	auto const& pZInfo = hSrcVObject->ppZStripInfo[usIndex];
+	if (!pZInfo)
 	{
 		SLOGW("Missing Z-Strip info on multi-Z object");
 		return;
@@ -3316,8 +3304,8 @@ static void Blt8BPPDataTo16BPPBufferTransZTransShadowIncObscureClip(UINT16* pBuf
 		return;
 	}
 	// setup for the z-column blitting stuff
-	const ZStripInfo* const pZInfo = hSrcVObject->ppZStripInfo[sZIndex];
-	if (pZInfo == NULL)
+	auto const& pZInfo = hSrcVObject->ppZStripInfo[sZIndex];
+	if (!pZInfo)
 	{
 		SLOGW("Missing Z-Strip info on multi-Z object");
 		return;
@@ -3582,8 +3570,8 @@ static void Blt8BPPDataTo16BPPBufferTransZTransShadowIncClip(UINT16* pBuffer, UI
 		return;
 	}
 	// setup for the z-column blitting stuff
-	const ZStripInfo* const pZInfo = hSrcVObject->ppZStripInfo[sZIndex];
-	if (pZInfo == NULL)
+	auto const& pZInfo = hSrcVObject->ppZStripInfo[sZIndex];
+	if (!pZInfo)
 	{
 		SLOGW("Missing Z-Strip info on multi-Z object");
 		return;

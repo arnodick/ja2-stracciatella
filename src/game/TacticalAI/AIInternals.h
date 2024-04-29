@@ -1,7 +1,8 @@
-#include "Types.h"
-#include "Overhead.h"
-#include "Random.h"
-#include "Points.h"
+#ifndef TACTICALAI_AIINTERNALS_H
+#define TACTICALAI_AIINTERNALS_H
+
+#include "JA2Types.h"
+#include "Overhead_Types.h"
 
 
 extern BOOLEAN gfTurnBasedAI;
@@ -30,8 +31,8 @@ extern BOOLEAN gfTurnBasedAI;
 #define NOWATER         0
 #define WATEROK         1
 
-#define DONTADDTURNCOST 0
-#define ADDTURNCOST     1
+constexpr bool DONTADDTURNCOST = false;
+constexpr bool ADDTURNCOST     = true;
 
 enum
 {
@@ -181,3 +182,5 @@ BOOLEAN InLightAtNight( INT16 sGridNo, INT8 bLevel );
 INT16 FindNearbyDarkerSpot( SOLDIERTYPE *pSoldier );
 
 BOOLEAN ArmySeesOpponents( void );
+
+#endif

@@ -17,11 +17,9 @@
 #include "Strategic_Movement.h"
 #include "Assignments.h"
 #include "Strategic_Mines.h"
-#include "Strategic_Town_Loyalty.h"
 #include "Map_Screen_Interface.h"
 #include "Map_Screen_Helicopter.h"
 #include "Scheduling.h"
-#include "BobbyRGuns.h"
 #include "Arms_Dealer_Init.h"
 #include "Meanwhile.h"
 #include "Overhead.h"
@@ -34,10 +32,12 @@
 #include "Laptop.h"
 #include "Campaign.h"
 #include "Debug.h"
+#include "Observable.h"
 
 extern UINT32	guiTimeStampOfCurrentlyExecutingEvent;
 extern BOOLEAN gfPreventDeletionOfAnyEvent;
 
+Observable<STRATEGICEVENT*, BOOLEAN_S*> OnStrategicEvent;
 
 static BOOLEAN DelayEventIfBattleInProgress(STRATEGICEVENT* pEvent)
 {
@@ -66,6 +66,14 @@ BOOLEAN ExecuteStrategicEvent( STRATEGICEVENT *pEvent )
 	{
 		gfPreventDeletionOfAnyEvent = fOrigPreventFlag;
 		return FALSE;
+	}
+
+	BOOLEAN_S eventProcessed = false;
+	OnStrategicEvent(pEvent, &eventProcessed);
+	if (eventProcessed)
+	{
+		gfPreventDeletionOfAnyEvent = fOrigPreventFlag;
+		return true;
 	}
 
 	// Look at the ID of event and do stuff according to that!

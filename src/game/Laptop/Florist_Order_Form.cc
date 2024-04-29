@@ -12,7 +12,6 @@
 #include "Text_Input.h"
 #include "Finances.h"
 #include "Game_Clock.h"
-#include "English.h"
 #include "Text.h"
 #include "LaptopSave.h"
 #include "Random.h"
@@ -986,6 +985,6 @@ void InitFloristOrderForm()
 	gubCurrentlySelectedFlowerLocation = 0;
 	gbCurrentlySelectedCard = -1;
 
-	gsSentimentTextField = ST::null;
-	gsNameTextField = ST::null;
+	gsSentimentTextField.clear();
+	gsNameTextField.clear();
 }

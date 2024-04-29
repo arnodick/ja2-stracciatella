@@ -78,6 +78,7 @@ static MODS_DIR: &str = "mods";
 static DATA_DIR: &str = "data";
 static EXTERNALIZED_DIR: &str = "externalized";
 static EDITOR_SLF_NAME: &str = "editor.slf";
+static ONE_DOT_THIRTEEN_MARKER: &str = "Ja2Set.dat.xml";
 
 impl Vfs {
     /// Creates a new virtual filesystem.
@@ -175,6 +176,16 @@ impl Vfs {
         let vanilla_game_dir = engine_options.vanilla_game_dir.clone();
         let vanilla_data_dir =
             fs::resolve_existing_components(Path::new(DATA_DIR), Some(&vanilla_game_dir), true);
+
+        let one_dot_thirteen_marker = fs::resolve_existing_components(
+            Path::new(ONE_DOT_THIRTEEN_MARKER),
+            Some(&vanilla_data_dir),
+            true,
+        );
+        if one_dot_thirteen_marker.exists() {
+            log::error!("The game directory seems to be modified by a 1.13 installation, the game might crash at any point in time.")
+        }
+
         let home_data_dir = fs::resolve_existing_components(
             &PathBuf::from(DATA_DIR),
             Some(&engine_options.stracciatella_home),
@@ -412,7 +423,7 @@ mod tests {
         let mut vfs = Vfs::new();
         vfs.init(&engine_options, &mod_manager).unwrap();
 
-        crate::fs::remove_dir_all(&engine_options.stracciatella_home.join("mods/test-mod/data"))
+        std::fs::remove_dir_all(&engine_options.stracciatella_home.join("mods/test-mod/data"))
             .expect("remove `test-mod/data` dir");
         std::fs::create_dir_all(&engine_options.stracciatella_home.join("mods/test-mod/dAtA"))
             .expect("create `test-mod/dAtA` dir");

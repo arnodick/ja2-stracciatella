@@ -1,6 +1,4 @@
 #include "StrategicMapSecretModel.h"
-#include "Campaign_Types.h"
-#include "JsonObject.h"
 #include "JsonUtility.h"
 #include "SamSiteModel.h"
 #include <set>
@@ -13,10 +11,10 @@ StrategicMapSecretModel::StrategicMapSecretModel(
 		secretMapIcon(std::move(secretMapIcon_)),
 		secretLandType(secretLandType_ ), foundLandType(foundLandType_) {}
 
-StrategicMapSecretModel* StrategicMapSecretModel::deserialize(const rapidjson::Value& json, const TraversibilityMap &mapping)
+StrategicMapSecretModel* StrategicMapSecretModel::deserialize(const JsonValue& json, const TraversibilityMap &mapping)
 {
-	JsonObjectReader r(json);
-	auto sector         = JsonUtility::parseSectorID(r.GetString("sector"));
+	auto r = json.toObject();
+	auto sector         = JsonUtility::parseSectorID(r["sector"]);
 	auto landTypeString = r.GetString("secretLandType");
 	auto secretLandType = mapping.at(landTypeString);
 

@@ -1,6 +1,5 @@
 #include "Directories.h"
 #include "Font.h"
-#include "Overhead_Types.h"
 #include "Types.h"
 #include "MouseSystem.h"
 #include "Button_System.h"
@@ -14,7 +13,6 @@
 #include "Action_Items.h"
 #include "Item_Types.h"
 #include "Video.h"
-#include "Weapons.h"
 #include "Items.h"
 #include "EditScreen.h"
 #include "Random.h"
@@ -30,6 +28,8 @@
 
 #include <string_theory/format>
 #include <string_theory/string>
+#include <string_view>
+#include <utility>
 
 
 GUIButtonRef giBothCheckboxButton;
@@ -79,7 +79,7 @@ const ST::string gszActionItemDesc[NUM_ACTIONITEMS] =
 ST::string GetActionItemName(const OBJECTTYPE* pItem)
 {
 	if( !pItem || pItem->usItem != ACTION_ITEM )
-		return ST::null;
+		return {};
 	if( pItem->bActionValue != ACTION_ITEM_BLOW_UP )
 	{
 		switch( pItem->bActionValue )
@@ -107,7 +107,7 @@ ST::string GetActionItemName(const OBJECTTYPE* pItem)
 			case ACTION_ITEM_TOGGLE_PRESSURE_ITEMS:		return gszActionItemDesc[ ACTIONITEM_TOGGLE_PRESSURE_ITEMS ];
 			case ACTION_ITEM_MUSEUM_ALARM:						return gszActionItemDesc[ ACTIONITEM_MUSEUM_ALARM ];
 			case ACTION_ITEM_BLOODCAT_ALARM:					return gszActionItemDesc[ ACTIONITEM_BLOODCAT_ALARM ];
-			default:																	return ST::null;
+			default:																	return {};
 		}
 	}
 	else switch( pItem->usBombItem )
@@ -123,13 +123,14 @@ ST::string GetActionItemName(const OBJECTTYPE* pItem)
 		case TRIP_FLARE:				return gszActionItemDesc[ ACTIONITEM_FLARE ];
 		case TRIP_KLAXON:				return gszActionItemDesc[ ACTIONITEM_TRIP_KLAXON ];
 		case BIG_TEAR_GAS:			return gszActionItemDesc[ ACTIONITEM_BIG_TEAR_GAS ];
-		default:								return ST::null;
+		default:								return {};
 	}
 }
 
 struct AttachmentInfo
 {
-	AttachmentInfo(UINT16 const a, const ST::string& l) : attachment(a), label(l), attached(false) {}
+	AttachmentInfo(UINT16 const a, std::string_view l) :
+		attachment(a), label(l), attached(false) {}
 
 	UINT16         const attachment;
 	const ST::string     label;

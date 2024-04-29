@@ -1,18 +1,17 @@
 #include "Directories.h"
-#include "FileMan.h"
 #include "Font.h"
 #include "Font_Control.h"
 #include "Input.h"
 #include "Interface.h"
 #include "LoadSaveData.h"
 #include "Local.h"
+#include "Map_Screen_Interface.h"
 #include "Timer.h"
 #include "Timer_Control.h"
 #include "VObject.h"
 #include "VSurface.h"
 #include "Render_Dirty.h"
 #include "SysUtil.h"
-#include "Screens.h"
 #include "Cursors.h"
 #include "Event_Pump.h"
 #include "Laptop.h"
@@ -57,8 +56,6 @@
 #include "WordWrap.h"
 #include "Game_Init.h"
 #include "Game_Clock.h"
-#include "Soldier_Control.h"
-#include "Soldier_Profile.h"
 #include "Overhead.h"
 #include "Environment.h"
 #include "Music_Control.h"
@@ -66,17 +63,12 @@
 #include "LaptopSave.h"
 #include "RenderWorld.h"
 #include "GameLoop.h"
-#include "English.h"
-#include "Random.h"
-#include "Merc_Hiring.h"
-#include "Map_Screen_Interface.h"
 #include "Ambient_Control.h"
 #include "Sound_Control.h"
 #include "Text.h"
 #include "Message.h"
 #include "Map_Screen_Interface_Bottom.h"
 #include "Cursor_Control.h"
-#include "Quests.h"
 #include "GameRes.h"
 #include "BrokenLink.h"
 #include "BobbyRShipments.h"
@@ -86,7 +78,6 @@
 #include "Video.h"
 #include "Debug.h"
 #include "Button_System.h"
-#include "JAScreens.h"
 #include "UILayout.h"
 
 #include "policy/GamePolicy.h"
@@ -1224,9 +1215,6 @@ ScreenID LaptopScreenHandle()
 	// display power and HD lights
 	ShowLights();
 
-	// render frame rate
-	DisplayFrameRate();
-
 	// invalidate screen if redrawn
 	if (fReDrawScreenFlag)
 	{
@@ -1240,9 +1228,7 @@ ScreenID LaptopScreenHandle()
 	RenderFastHelp();
 
 	// ex SAVEBUFFER queue
-	ExecuteBaseDirtyRectQueue();
 	ResetInterface();
-	EndFrameBufferRender();
 	return (LAPTOP_SCREEN);
 }
 
@@ -3503,7 +3489,7 @@ void CreateFileAndNewEmailIconFastHelpText(UINT32 uiHelpTextID, BOOLEAN fClearHe
 			return;
 	}
 
-	ST::string help = (fClearHelpText ? ST::null : gzLaptopHelpText[uiHelpTextID]);
+	ST::string help = (fClearHelpText ? ST::string() : gzLaptopHelpText[uiHelpTextID]);
 	pRegion->SetFastHelpText(help);
 }
 

@@ -2,7 +2,6 @@
 #include "AIMMembers.h"
 #include "Assignments.h"
 #include "Button_System.h"
-#include "Campaign_Types.h"
 #include "Cheats.h"
 #include "ContentManager.h"
 #include "Cursors.h"
@@ -326,7 +325,7 @@ try
 	else
 	{
 		shaded = FALSE;
-		text   = ST::null;
+		text.clear();
 	}
 
 	BltVideoObject(FRAME_BUFFER, face.get(), 0, MERC_FACE_X, MERC_FACE_Y);
@@ -336,7 +335,7 @@ try
 		FRAME_BUFFER->ShadowRect(MERC_FACE_X, MERC_FACE_Y, MERC_FACE_X + MERC_FACE_WIDTH, MERC_FACE_Y + MERC_FACE_HEIGHT);
 	}
 
-	if (text != NULL)
+	if (!text.empty())
 	{
 		DisplayWrappedString(MERC_FACE_X, MERC_FACE_Y + MERC_PORTRAIT_TEXT_OFFSET_Y, MERC_FACE_WIDTH, 2, FONT14ARIAL, 145, text, FONT_MCOLOR_BLACK, CENTER_JUSTIFIED);
 	}

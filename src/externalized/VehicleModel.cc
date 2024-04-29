@@ -2,16 +2,17 @@
 #include "Exceptions.h"
 #include "ItemModel.h"
 #include "ItemSystem.h"
-#include "JsonObject.h"
 #include "Vehicles.h"
+#include <utility>
+
 
 VehicleModel::VehicleModel(ST::string enterSound, ST::string movementSound,
                            ProfileID profile, VehicleMovementType movementType,
                            uint16_t armourType, uint8_t seats_)
-    : enter_sound(enterSound), move_sound(movementSound), profile(profile),
+    : enter_sound(std::move(enterSound)), move_sound(std::move(movementSound)), profile(profile),
       movement_type(movementType), armour_type(armourType), seats(seats_) {}
 
-static VehicleMovementType toMovementType(const std::string& typeName)
+static VehicleMovementType toMovementType(const ST::string& typeName)
 {
 	if (typeName == "FOOT") return FOOT;
 	if (typeName == "CAR") return CAR;
@@ -22,8 +23,9 @@ static VehicleMovementType toMovementType(const std::string& typeName)
 	throw DataError(ST::format("'{}' is not a valid vehicle movement type", typeName));
 }
 
-const VehicleModel* VehicleModel::deserialize(JsonObjectReader &obj, const ItemSystem* itemSystem, const MercSystem* mercSystem)
+const VehicleModel* VehicleModel::deserialize(const JsonValue &json, const ItemSystem* itemSystem, const MercSystem* mercSystem)
 {
+	auto obj = json.toObject();
 	ST::string profile = obj.GetString("profile");
 	auto mercProfile = mercSystem->getMercProfileInfoByName(profile);
 	if (mercProfile == NULL) {

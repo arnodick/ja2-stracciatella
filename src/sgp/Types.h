@@ -52,7 +52,6 @@ typedef char            CHAR8;
 
 // other
 typedef unsigned char		BOOLEAN;
-typedef void *					PTR;
 typedef UINT8						BYTE;
 
 #ifndef TRUE
@@ -190,7 +189,7 @@ namespace _Types
 	template<typename T>
 	struct BoxedValue
 	{
-		BoxedValue<T>(T v) : val(v) {};
+		BoxedValue(T v) : val(v) {};
 
 		operator T() const { return val; }
 

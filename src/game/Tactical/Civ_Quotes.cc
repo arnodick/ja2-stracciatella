@@ -1,7 +1,6 @@
 #include "Civ_Quotes.h"
 #include "Directories.h"
 #include "Font_Control.h"
-#include "Local.h"
 #include "MouseSystem.h"
 #include "Soldier_Find.h"
 #include "StrategicMap.h"
@@ -17,7 +16,6 @@
 #include "Animation_Data.h"
 #include "Video.h"
 #include "Message.h"
-#include "RenderWorld.h"
 #include "Cursors.h"
 #include "Dialogue_Control.h"
 #include "Quests.h"
@@ -26,7 +24,6 @@
 #include "NPC.h"
 #include "Strategic_Mines.h"
 #include "Random.h"
-#include "FileMan.h"
 #include "UILayout.h"
 
 #include "ContentManager.h"
@@ -170,7 +167,7 @@ static void SurrenderMessageBoxCallBack(MessageBoxReturnValue const ubExitValue)
 		EndCaptureSequence( );
 
 		gfSurrendered = TRUE;
-		SetCustomizableTimerCallbackAndDelay( 3000, CaptureTimerCallback, FALSE );
+		SetCustomizableTimerCallbackAndDelay(3s, CaptureTimerCallback, false);
 
 		ActionDone( gCivQuoteData.pCiv );
 	}

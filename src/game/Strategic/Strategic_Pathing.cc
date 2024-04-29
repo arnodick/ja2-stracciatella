@@ -1,16 +1,13 @@
+#include "Map_Screen_Interface_Map.h"
 #include "Strategic_Movement_Costs.h"
 #include "Types.h"
-#include "WorldDef.h"
 #include "MapScreen.h"
-#include "Overhead.h"
 #include "StrategicMap.h"
 #include "Strategic_Pathing.h"
-#include "Map_Screen_Interface_Border.h"
 #include "Game_Clock.h"
 #include "Strategic_Movement.h"
 #include "Campaign_Types.h"
 #include "Assignments.h"
-#include "Squads.h"
 #include "Vehicles.h"
 #include "Map_Screen_Helicopter.h"
 #include "Input.h"
@@ -27,6 +24,15 @@ static BOOLEAN gfPlotToAvoidPlayerInfuencedSectors = FALSE;
 
 
 // Globals
+
+namespace StrategicPathing
+{
+// These type definitions were placed inside a namespace to avoid a collision
+// with their counterparts in Tactical/PathAI.cc which caused a violation of
+// the C++ One Definition Rule, issue #1963.
+
+using TRAILCELLTYPE = UINT32;
+
 struct path_t
 {
 	INT16 nextLink;           //2
@@ -43,6 +49,9 @@ struct trail_t
 	short diStratDelta;
 };
 
+}
+using namespace StrategicPathing;
+
 #define MAXTRAILTREE	(4096)
 #define MAXpathQ			(512)
 #define MAP_WIDTH 18
@@ -52,7 +61,6 @@ struct trail_t
 //#define ISWATER(t)	(((t)==TRAVELCOST_KNEEDEEP) || ((t)==TRAVELCOST_DEEPWATER))
 //#define NOPASS (TRAVELCOST_OBSTACLE)
 //#define VEINCOST TRAVELCOST_FLAT     //actual cost for bridges and doors and such
-#define TRAILCELLTYPE UINT32
 #define TRAILCELLMAX 0xFFFFFFFF
 
 static path_t        pathQB[MAXpathQ];
@@ -794,7 +802,6 @@ void RebuildWayPointsForGroupPath(PathSt* const pHeadOfPath, GROUP& g)
 	INT32 iOldDelta = 0;
 	BOOLEAN fFirstNode = TRUE;
 	PathSt* pNode = pHeadOfPath;
-	WAYPOINT *wp = NULL;
 
 	//KRIS!  Added this because it was possible to plot a new course to the same destination, and the
 	//       group would add new arrival events without removing the existing one(s).
@@ -868,10 +875,18 @@ void RebuildWayPointsForGroupPath(PathSt* const pHeadOfPath, GROUP& g)
 	AddWaypointStrategicIDToPGroup(&g, pNode->uiSectorId);
 
 	// at this point, the final sector in the path must be identical to this group's last waypoint
-	wp = GetFinalWaypoint(&g);
-	AssertMsg( wp, "Path exists, but no waypoints were added!  AM-0" );
-	AssertMsg(pNode->uiSectorId == (UINT32) wp->sSector.AsStrategicIndex(), "Last waypoint differs from final path sector!  AM-0");
+	{
+		auto * const wp = GetFinalWaypoint(&g);
 
+		if (wp == nullptr)
+		{
+			SLOGE("Path exists, but no waypoints were added!  AM-0" );
+		}
+		else if (pNode->uiSectorId != static_cast<UINT32>(wp->sSector.AsStrategicIndex()))
+		{
+			SLOGE("Last waypoint differs from final path sector!  AM-0");
+		}
+	}
 
 	// see if we've already reached the first sector in the path (we never actually left the sector and reversed back to it)
 	if (g.uiArrivalTime == GetWorldTotalMin())

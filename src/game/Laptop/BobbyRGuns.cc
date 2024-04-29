@@ -13,9 +13,7 @@
 #include "Store_Inventory.h"
 #include "LaptopSave.h"
 #include "Finances.h"
-#include "AIMMembers.h"
 #include "Overhead.h"
-#include "Weapons.h"
 #include "Button_System.h"
 #include "Video.h"
 #include "VSurface.h"
@@ -31,7 +29,6 @@
 #include "ContentManager.h"
 #include "GameInstance.h"
 #include "policy/GamePolicy.h"
-#include "Logger.h"
 
 #include <string_theory/format>
 #include <string_theory/string>
@@ -350,7 +347,7 @@ void InitBobbyMenuBar()
 
 	UINT16             x    = BOBBYR_CATALOGUE_BUTTON_START_X;
 	UINT16     const   y    = BOBBYR_CATALOGUE_BUTTON_Y;
-	const ST::string* text = BobbyRText + BOBBYR_GUNS_GUNS;
+	const ST::string* text = &BobbyRText[BOBBYR_GUNS_GUNS];
 	LaptopMode const*  mode = ubCatalogueButtonValues;
 	FOR_EACHX(GUIButtonRef, i, guiBobbyRPageMenu, x += BOBBYR_CATALOGUE_BUTTON_GAP)
 	{

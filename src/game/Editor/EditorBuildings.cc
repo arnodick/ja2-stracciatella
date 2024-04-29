@@ -1,21 +1,19 @@
 #include "Button_System.h"
 #include "Cursor_Modes.h"
 #include "Directories.h"
+#include "EditScreen.h"
 #include "Font.h"
+#include "Handle_UI.h"
 #include "Isometric_Utils.h"
-#include "Local.h"
 #include "Edit_Sys.h"
-#include "SysUtil.h"
 #include "Font_Control.h"
 #include "WorldMan.h"			//HideStructOfGivenType()
 #include "EditorDefines.h"
 #include "EditorBuildings.h"
-#include "EditorTerrain.h" //for access to TerrainTileDrawMode
 #include "Render_Fun.h"
 #include "NewSmooth.h"
 #include "Editor_Undo.h"
 #include "Editor_Taskbar_Utils.h"
-#include "Editor_Modes.h"
 #include "Smoothing_Utils.h"
 #include "Text_Input.h"
 #include "Keys.h"
@@ -510,11 +508,16 @@ void InitDoorEditing(INT32 const map_idx)
 {
 	if (!DoorAtGridNo(map_idx) && !OpenableAtGridNo(map_idx)) return;
 
+	// Let HandleMouseClicksInGameScreen() know it should ignore clicks,
+	// otherwise it would call this function for every mouse click. We
+	// restore the old value in KillDoorEditing().
+	iDrawMode = DRAW_MODE_NOTHING;
+
 	gfEditingDoor = TRUE;
 	iDoorMapIndex = map_idx;
 	DisableEditorTaskbar();
 	MSYS_DefineRegion(&DoorRegion, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, MSYS_PRIORITY_HIGH - 2, 0, MSYS_NO_CALLBACK, MSYS_NO_CALLBACK);
-	iDoorButton[DOOR_BACKGROUND] = CreateLabel(ST::null, 0, 0, 0, 200, 130, 240, 100, MSYS_PRIORITY_HIGH - 1);
+	iDoorButton[DOOR_BACKGROUND] = CreateLabel({}, 0, 0, 0, 200, 130, 240, 100, MSYS_PRIORITY_HIGH - 1);
 	iDoorButton[DOOR_OKAY]       = CreateTextButton("Okay",   FONT12POINT1, FONT_BLACK, FONT_BLACK, 330, 195, 50, 30, MSYS_PRIORITY_HIGH, DoorOkayCallback);
 	iDoorButton[DOOR_CANCEL]     = CreateTextButton("Cancel", FONT12POINT1, FONT_BLACK, FONT_BLACK, 385, 195, 50, 30, MSYS_PRIORITY_HIGH, DoorCancelCallback);
 	InitTextInputModeWithScheme(DEFAULT_SCHEME);
@@ -641,6 +644,8 @@ void KillDoorEditing()
 	MSYS_RemoveRegion(&DoorRegion);
 	FOR_EACH(GUIButtonRef, i, iDoorButton) RemoveButton(*i);
 	gfEditingDoor = FALSE;
+	// Restore the draw mode that we changed in InitDoorEditing().
+	iDrawMode = DRAW_MODE_DOORKEYS;
 	KillTextInputMode();
 }
 

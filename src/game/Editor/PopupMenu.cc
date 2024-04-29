@@ -9,11 +9,9 @@
 //currently disabled.
 
 #include "Button_System.h"
+#include "Font.h"
 #include "HImage.h"
 #include "Input.h"
-#include "Local.h"
-#include "SysUtil.h"
-#include "Font.h"
 #include "Font_Control.h"
 #include "Line.h"
 #include "VObject.h"
@@ -21,13 +19,11 @@
 #include "SelectWin.h"
 #include "PopupMenu.h"
 #include "EditorDefines.h"
-#include "Render_Dirty.h"
 #include "MouseSystem.h"
 #include "Cursors.h"
 #include "Overhead_Types.h"
 #include "EditorMercs.h"
 #include "Scheduling.h"
-#include "English.h"
 #include "Item_Statistics.h"
 #include "Video.h"
 #include "VSurface.h"
@@ -88,7 +84,7 @@ static const ST::string GetPopupMenuString(UINT8 ubIndex)
 		case ACTIONITEM_POPUP:
 			return gszActionItemDesc[ ubIndex ];
 		default:
-			return ST::null;
+			return {};
 	}
 }
 
@@ -504,7 +500,5 @@ BOOLEAN ProcessPopupMenuIfActive( )
 	PopupMenuHandle();
 	RenderPopupMenu();
 	InvalidateRegion( gPopup.usLeft, gPopup.usTop, gPopup.usRight, gPopup.usBottom );
-	ExecuteBaseDirtyRectQueue();
-	EndFrameBufferRender( );
 	return TRUE;
 }

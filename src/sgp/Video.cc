@@ -1,38 +1,26 @@
-#include "ContentManager.h"
 #include "Cursor_Control.h"
 #include "Debug.h"
 #include "Fade_Screen.h"
-#include "FileMan.h"
-#include "GameInstance.h"
+#include "FPS.h"
 #include "HImage.h"
-#include "Input.h"
 #include "Local.h"
 #include "Logger.h"
 #include "RenderWorld.h"
 #include "Render_Dirty.h"
-#include "Timer.h"
-#include "Timer_Control.h"
 #include "Types.h"
 #include "VObject_Blitters.h"
 #include "VSurface.h"
 #include "Video.h"
 #include "UILayout.h"
-#include "Font.h"
 #include "Icon.h"
 #include <algorithm>
-#include <ctime>
+#include <chrono>
 #include <stdexcept>
-
-#define BUFFER_READY      0x00
-#define BUFFER_DIRTY      0x02
 
 #define MAX_CURSOR_WIDTH  64
 #define MAX_CURSOR_HEIGHT 64
 
 #define MAX_DIRTY_REGIONS 128
-
-#define VIDEO_OFF         0x00
-#define VIDEO_ON          0x01
 
 #define RED_MASK 0xF800
 #define GREEN_MASK 0x07E0
@@ -50,10 +38,6 @@ static INT16  gsMouseCursorYOffset;
 INT16 gsMouseSizeYModifier = 0; // This can increase the size of gusMouseCursorHeight so image data (ie, text) outside the normal height of the mouse cursor can be copied onto screen buffer
 
 static SDL_Rect MouseBackground = { 0, 0, 0, 0 };
-
-// Refresh thread based variables
-static UINT32 guiFrameBufferState;  // BUFFER_READY, BUFFER_DIRTY
-static UINT32 guiVideoManagerState; // VIDEO_ON, VIDEO_OFF
 
 // Dirty rectangle management variables
 static SDL_Rect DirtyRegions[MAX_DIRTY_REGIONS];
@@ -75,6 +59,8 @@ static SDL_Texture* ScreenTexture;
 static SDL_Texture* ScaledScreenTexture;
 static Uint32       g_window_flags = 0;
 static VideoScaleQuality ScaleQuality = VideoScaleQuality::LINEAR;
+static std::chrono::steady_clock::duration TimeBetweenRefreshScreens;
+static std::chrono::steady_clock::time_point LastRefresh;
 
 static void DeletePrimaryVideoSurfaces(void);
 
@@ -131,7 +117,8 @@ void VideoSetBrightness(float brightness)
 static void GetRGBDistribution();
 
 
-void InitializeVideoManager(const VideoScaleQuality quality)
+void InitializeVideoManager(const VideoScaleQuality quality,
+                            const int32_t targetFPS)
 {
 	SLOGD("Initializing the video manager");
 	SDL_SetHint(SDL_HINT_RENDER_DRIVER, "opengl");
@@ -179,7 +166,7 @@ void InitializeVideoManager(const VideoScaleQuality quality)
 	if (ScaleQuality == VideoScaleQuality::PERFECT)
 	{
 		SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "nearest");
-#if SDL_VERSION_ATLEAST(2,0,5)
+
 		if (!IsDesktopLargeEnough())
 		{
 			// Pixel-perfect mode cannot handle scaling down, and will
@@ -190,10 +177,6 @@ void InitializeVideoManager(const VideoScaleQuality quality)
 		}
 		SDL_SetWindowMinimumSize(g_game_window, SCREEN_WIDTH, SCREEN_HEIGHT);
 		SDL_RenderSetIntegerScale(GameRenderer, SDL_TRUE);
-#else
-		SLOGW("Pixel-perfect scaling is not available");
-		ScaleQuality = VideoScaleQuality::NEAR_PERFECT;
-#endif
 	}
 	else if (ScaleQuality == VideoScaleQuality::NEAR_PERFECT)
 	{
@@ -248,23 +231,18 @@ void InitializeVideoManager(const VideoScaleQuality quality)
 	SDL_ShowCursor(SDL_DISABLE);
 
 	// Initialize state variables
-	guiFrameBufferState      = BUFFER_DIRTY;
-	guiVideoManagerState     = VIDEO_ON;
-	guiDirtyRegionCount      = 0;
 	gfForceFullScreenRefresh = TRUE;
 
 	// This function must be called to setup RGB information
 	GetRGBDistribution();
+
+	TimeBetweenRefreshScreens = std::chrono::microseconds{1'000'000} / targetFPS;
 }
 
 
 void ShutdownVideoManager(void)
 {
 	SLOGD("Shutting down the video manager");
-	/* Toggle the state of the video manager to indicate to the refresh thread
-	 * that it needs to shut itself down */
-
-	guiVideoManagerState = VIDEO_OFF;
 
 	// ScreenBuffer SDL surface freed by its SGPVSurface wrapper.
 	ScreenBuffer = nullptr;
@@ -290,9 +268,6 @@ void ShutdownVideoManager(void)
 	}
 
 	SDL_QuitSubSystem(SDL_INIT_VIDEO);
-
-	// ATE: Release mouse cursor!
-	FreeMouseCursor();
 }
 
 
@@ -328,9 +303,7 @@ void InvalidateRegion(INT32 iLeft, INT32 iTop, INT32 iRight, INT32 iBottom)
 	{
 		// The MAX_DIRTY_REGIONS limit has been exceeded. Therefore we arbitrarely invalidate the entire
 		// screen and force a full screen refresh
-		guiDirtyRegionExCount = 0;
-		guiDirtyRegionCount = 0;
-		gfForceFullScreenRefresh = TRUE;
+		InvalidateScreen();
 	}
 }
 
@@ -340,6 +313,12 @@ static void AddRegionEx(INT32 iLeft, INT32 iTop, INT32 iRight, INT32 iBottom);
 
 void InvalidateRegionEx(INT32 iLeft, INT32 iTop, INT32 iRight, INT32 iBottom)
 {
+	if (gfForceFullScreenRefresh)
+	{
+		// There's no point in going on since we are forcing a full screen refresh
+		return;
+	}
+
 	// Check if we are spanning the rectangle - if so slit it up!
 	if (iTop <= gsVIEWPORT_WINDOW_END_Y && iBottom > gsVIEWPORT_WINDOW_END_Y)
 	{
@@ -378,25 +357,16 @@ static void AddRegionEx(INT32 iLeft, INT32 iTop, INT32 iRight, INT32 iBottom)
 	}
 	else
 	{
-		guiDirtyRegionExCount = 0;
-		guiDirtyRegionCount = 0;
-		gfForceFullScreenRefresh = TRUE;
+		InvalidateScreen();
 	}
 }
 
 
 void InvalidateScreen(void)
 {
-	// W A R N I N G ---- W A R N I N G ---- W A R N I N G ---- W A R N I N G ---- W A R N I N G ----
-	//
-	// This function is intended to be called by a thread which has already locked the
-	// FRAME_BUFFER_MUTEX mutual exclusion section. Anything else will cause the application to
-	// yack
-
 	guiDirtyRegionCount = 0;
 	guiDirtyRegionExCount = 0;
 	gfForceFullScreenRefresh = TRUE;
-	guiFrameBufferState = BUFFER_DIRTY;
 }
 
 
@@ -404,52 +374,48 @@ void InvalidateScreen(void)
 
 static void ScrollJA2Background(INT16 sScrollXIncrement, INT16 sScrollYIncrement)
 {
-	SDL_Surface* Frame  = FrameBuffer;
-	SurfaceUniquePtr Source(SDL_CreateRGBSurfaceWithFormat(0, ScreenBuffer->w, ScreenBuffer->h, 0, ScreenBuffer->format->format));
 	SDL_Surface* Dest   = ScreenBuffer; // Back
 	SDL_Rect     SrcRect;
 	SDL_Rect     DstRect;
 	SDL_Rect     StripRegions[2];
 	UINT16       NumStrips = 0;
 
-	const UINT16 usWidth  = SCREEN_WIDTH;
-	const UINT16 usHeight = gsVIEWPORT_WINDOW_END_Y - gsVIEWPORT_WINDOW_START_Y;
-
-	SDL_BlitSurface(ScreenBuffer, NULL, Source.get(), NULL);
+	int const width  = SCREEN_WIDTH;
+	int const height = gsVIEWPORT_WINDOW_END_Y - gsVIEWPORT_WINDOW_START_Y;
 
 	if (sScrollXIncrement < 0)
 	{
 		SrcRect.x = 0;
-		SrcRect.w = usWidth + sScrollXIncrement;
+		SrcRect.w = width + sScrollXIncrement;
 		DstRect.x = -sScrollXIncrement;
 		StripRegions[0].x = gsVIEWPORT_START_X;
 		StripRegions[0].y = gsVIEWPORT_WINDOW_START_Y;
 		StripRegions[0].w = -sScrollXIncrement;
-		StripRegions[0].h = usHeight;
+		StripRegions[0].h = height;
 		++NumStrips;
 	}
 	else if (sScrollXIncrement > 0)
 	{
 		SrcRect.x = sScrollXIncrement;
-		SrcRect.w = usWidth - sScrollXIncrement;
+		SrcRect.w = width - sScrollXIncrement;
 		DstRect.x = 0;
 		StripRegions[0].x = gsVIEWPORT_END_X - sScrollXIncrement;
 		StripRegions[0].y = gsVIEWPORT_WINDOW_START_Y;
 		StripRegions[0].w = sScrollXIncrement;
-		StripRegions[0].h = usHeight;
+		StripRegions[0].h = height;
 		++NumStrips;
 	}
 	else
 	{
 		SrcRect.x = 0;
-		SrcRect.w = usWidth;
+		SrcRect.w = width;
 		DstRect.x = 0;
 	}
 
 	if (sScrollYIncrement < 0)
 	{
 		SrcRect.y = gsVIEWPORT_WINDOW_START_Y;
-		SrcRect.h = usHeight + sScrollYIncrement;
+		SrcRect.h = height + sScrollYIncrement;
 		DstRect.y = gsVIEWPORT_WINDOW_START_Y - sScrollYIncrement;
 		StripRegions[NumStrips].x = DstRect.x;
 		StripRegions[NumStrips].y = gsVIEWPORT_WINDOW_START_Y;
@@ -460,7 +426,7 @@ static void ScrollJA2Background(INT16 sScrollXIncrement, INT16 sScrollYIncrement
 	else if (sScrollYIncrement > 0)
 	{
 		SrcRect.y = gsVIEWPORT_WINDOW_START_Y + sScrollYIncrement;
-		SrcRect.h = usHeight - sScrollYIncrement;
+		SrcRect.h = height - sScrollYIncrement;
 		DstRect.y = gsVIEWPORT_WINDOW_START_Y;
 		StripRegions[NumStrips].x = DstRect.x;
 		StripRegions[NumStrips].y = gsVIEWPORT_WINDOW_END_Y - sScrollYIncrement;
@@ -471,29 +437,34 @@ static void ScrollJA2Background(INT16 sScrollXIncrement, INT16 sScrollYIncrement
 	else
 	{
 		SrcRect.y = gsVIEWPORT_WINDOW_START_Y;
-		SrcRect.h = usHeight;
+		SrcRect.h = height;
 		DstRect.y = gsVIEWPORT_WINDOW_START_Y;
 	}
-
-	SDL_BlitSurface(Source.get(), &SrcRect, Dest, &DstRect);
 
 #ifdef SCROLL_TEST
 	SDL_FillRect(Dest, NULL, 0);
 #endif
 
+	{
+		SurfaceUniquePtr Source(SDL_CreateRGBSurfaceWithFormat(0,
+			ScreenBuffer->w, ScreenBuffer->h, 0, ScreenBuffer->format->format));
+		SDL_BlitSurface(ScreenBuffer, nullptr, Source.get(), nullptr);
+		SDL_BlitSurface(Source.get(), &SrcRect, Dest, &DstRect);
+	}
+
 	for (UINT i = 0; i < NumStrips; i++)
 	{
-		UINT x = StripRegions[i].x;
-		UINT y = StripRegions[i].y;
-		UINT w = StripRegions[i].w;
-		UINT h = StripRegions[i].h;
-		for (UINT j = y; j < y + h; ++j)
+		INT16 const x = static_cast<INT16>(StripRegions[i].x);
+		INT16 const y = static_cast<INT16>(StripRegions[i].y);
+		INT16 const w = static_cast<INT16>(StripRegions[i].w);
+		INT16 const h = static_cast<INT16>(StripRegions[i].h);
+		for (int j = y; j < y + h; ++j)
 		{
 			std::fill_n(gpZBuffer + j * SCREEN_WIDTH + x, w, 0);
 		}
 
 		RenderStaticWorldRect(x, y, x + w, y + h, TRUE);
-		SDL_BlitSurface(Frame, &StripRegions[i], Dest, &StripRegions[i]);
+		SDL_BlitSurface(FrameBuffer, &StripRegions[i], Dest, &StripRegions[i]);
 	}
 
 	// RESTORE SHIFTED
@@ -504,53 +475,30 @@ static void ScrollJA2Background(INT16 sScrollXIncrement, INT16 sScrollYIncrement
 
 	// BLIT NEW
 	ExecuteVideoOverlaysToAlternateBuffer(BACKBUFFER);
-
-	SDL_Texture* screenTexture = SDL_CreateTextureFromSurface(GameRenderer, ScreenBuffer);
-
-	SDL_Rect r;
-	r.x = gsVIEWPORT_START_X;
-	r.y = gsVIEWPORT_WINDOW_START_Y;
-	r.w = gsVIEWPORT_END_X - gsVIEWPORT_START_X;
-	r.h = gsVIEWPORT_WINDOW_END_Y - gsVIEWPORT_WINDOW_START_Y;
-	SDL_RenderCopy(GameRenderer, screenTexture, &r, &r);
-
-	SDL_DestroyTexture(screenTexture);
 }
-
 
 void RefreshScreen(void)
 {
-	if (guiVideoManagerState != VIDEO_ON) return;
-
-#if DEBUG_PRINT_FPS
-	{
-		static int32_t prevSecond = 0;
-		static int32_t fps = 0;
-
-		int32_t currentSecond = time(NULL);
-		if(currentSecond != prevSecond)
-		{
-			printf("fps: %d\n", fps);
-			fps = 0;
-			prevSecond = currentSecond;
-		}
-		else
-		{
-			fps++;
-		}
-	}
-#endif
-
-	SDL_BlitSurface(FrameBuffer, &MouseBackground, ScreenBuffer, &MouseBackground);
+	// Not initialised yet or already shut down?
+	if (!ScreenTexture) return;
 
 	const BOOLEAN scrolling = (gsScrollXIncrement != 0 || gsScrollYIncrement != 0);
+
+	auto const now = std::chrono::steady_clock::now();
+	if (!scrolling && now - LastRefresh < TimeBetweenRefreshScreens)
+	{
+		return;
+	}
+	LastRefresh = now;
+
+	SDL_BlitSurface(FrameBuffer, &MouseBackground, ScreenBuffer, &MouseBackground);
 
 	// This variable will hold the union of all modified regions.
 	struct rect : SDL_Rect {
 		void operator+=(SDL_Rect const& r) { SDL_UnionRect(this, &r, this); }
 	} ScreenTextureUpdateRect{ MouseBackground };
 
-	if (guiFrameBufferState == BUFFER_DIRTY)
+	if (gfForceFullScreenRefresh || guiDirtyRegionCount > 0 || guiDirtyRegionExCount > 0)
 	{
 		if (gfFadeInitialized && gfFadeInVideo)
 		{
@@ -598,7 +546,6 @@ void RefreshScreen(void)
 				gsVIEWPORT_WINDOW_END_Y - gsVIEWPORT_WINDOW_START_Y };
 		}
 		gfIgnoreScrollDueToCenterAdjust = FALSE;
-		guiFrameBufferState = BUFFER_READY;
 	}
 
 	SGPPoint cursorPos;
@@ -632,7 +579,7 @@ void RefreshScreen(void)
 		SDL_RenderCopy(GameRenderer, ScreenTexture, NULL, NULL);
 	}
 
-	SDL_RenderPresent(GameRenderer);
+	FPS::RenderPresentPtr(GameRenderer);
 
 	gfForceFullScreenRefresh = FALSE;
 	guiDirtyRegionCount = 0;
@@ -651,9 +598,9 @@ static void GetRGBDistribution()
 	/* Mask the highest bit of each component. This is used for alpha blending. */
 	guiTranslucentMask = (r & r >> 1) | (g & g >> 1) | (b & b >> 1);
 
-	gusRedMask   = r;
-	gusGreenMask = g;
-	gusBlueMask  = b;
+	gusRedMask   = static_cast<UINT16>(r);
+	gusGreenMask = static_cast<UINT16>(g);
+	gusBlueMask  = static_cast<UINT16>(b);
 
 	gusRedShift   = f.Rshift - f.Rloss;
 	gusGreenShift = f.Gshift - f.Gloss;
@@ -669,11 +616,6 @@ void SetMouseCursorProperties(INT16 sOffsetX, INT16 sOffsetY, UINT16 usCursorHei
 	gusMouseCursorHeight = usCursorHeight;
 }
 
-
-void EndFrameBufferRender(void)
-{
-	guiFrameBufferState = BUFFER_DIRTY;
-}
 
 static void SetPrimaryVideoSurfaces(void)
 {

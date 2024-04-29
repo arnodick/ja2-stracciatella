@@ -5,14 +5,11 @@
 #include "JAScreens.h"
 #include "TileDef.h"
 #include "Weapons.h"
-#include "Interface_Cursors.h"
 #include "Soldier_Control.h"
 #include "Overhead.h"
-#include "Handle_UI.h"
 #include "Points.h"
 #include "Sound_Control.h"
 #include "Isometric_Utils.h"
-#include "Animation_Data.h"
 #include "Random.h"
 #include "Campaign.h"
 #include "Interface.h"
@@ -22,10 +19,8 @@
 #include "WCheck.h"
 #include "Soldier_Profile.h"
 #include "SkillCheck.h"
-#include "LOS.h"
 #include "Message.h"
 #include "Text.h"
-#include "FOV.h"
 #include "ShopKeeper_Interface.h"
 #include "GamePolicy.h"
 #include "GameSettings.h"
@@ -34,8 +29,6 @@
 #include "Interface_Items.h"
 #include "Game_Clock.h"
 #include "Smell.h"
-#include "StrategicMap.h"
-#include "Campaign_Types.h"
 #include "Soldier_Macros.h"
 #include "Debug.h"
 
@@ -855,43 +848,41 @@ BOOLEAN ValidMerge( UINT16 usMerge, UINT16 usItem )
 }
 
 
-UINT8 CalculateObjectWeight(OBJECTTYPE const* const o)
+grams Weight(OBJECTTYPE const& object)
 {
-	const ItemModel *item  = GCM->getItem(o->usItem);
-	UINT16          weight = item->getWeight(); // Start with base weight
+	auto * const item = GCM->getItem(object.usItem);
+	grams weight = 100 * item->getWeight(); // Start with base weight
 
 	if (item->getPerPocket() <= 1)
 	{
 		// Account for any attachments
-		FOR_EACH(UINT16 const, i, o->usAttachItem)
+		for (auto const attachedItem : object.usAttachItem)
 		{
-			if (*i == NOTHING) continue;
-			weight += GCM->getItem(*i)->getWeight();
+			if (attachedItem == NONE) continue;
+			weight += 100 * GCM->getItem(attachedItem)->getWeight();
 		}
 
-		if (GCM->getItem(o->usItem)->getItemClass() == IC_GUN && o->ubGunShotsLeft > 0)
+		if (item->isGun() && object.ubGunShotsLeft > 0)
 		{ // Add in weight of ammo
-			weight += GCM->getItem(o->usGunAmmoItem)->getWeight();
+			weight += 100 * GCM->getItem(object.usGunAmmoItem)->getWeight();
 		}
 	}
 
-	// Make sure it really fits into that UINT8, in case we ever add anything real
-	// heavy with attachments/ammo
-	Assert(weight <= 255);
 	return weight;
 }
 
 
 UINT32 CalculateCarriedWeight(SOLDIERTYPE const* const s)
 {
-	UINT32 total_weight = 0;
-	CFOR_EACH_SOLDIER_INV_SLOT(i, *s)
+	grams total_weight = 0;
+
+	for (auto const& invItem : s->inv)
 	{
-		UINT16 weight = i->ubWeight;
-		if (GCM->getItem(i->usItem)->getPerPocket() > 1)
+		grams weight = Weight(invItem);
+		if (GCM->getItem(invItem.usItem)->getPerPocket() > 1)
 		{
 			// Account for # of items
-			weight *= i->ubNumberOfObjects;
+			weight *= invItem.ubNumberOfObjects;
 		}
 		total_weight += weight;
 	}
@@ -902,12 +893,9 @@ UINT32 CalculateCarriedWeight(SOLDIERTYPE const* const s)
 		strength_for_carrying += strength_for_carrying - 80;
 	}
 
-	// For now, assume soldiers can carry 1/2 their strength in kg without
-	// penalty. Instead of multiplying by 100 for percent, and then dividing by 10
-	// to account for weight units being in 10ths of kilos, not kilos... we just
-	// start with 10 instead of 100!
-	UINT32 const percent = 10 * total_weight / (strength_for_carrying / 2);
-	return percent;
+	// For now, assume soldiers can carry 500 grams per strength point
+	// without penalty. Multiply by 100 for the percentage.
+	return (100 * total_weight) / (strength_for_carrying * 500);
 }
 
 
@@ -973,7 +961,6 @@ void RemoveObjs( OBJECTTYPE * pObj, UINT8 ubNumberToRemove )
 		{
 			RemoveObjFrom( pObj, 0 );
 		}
-		pObj->ubWeight = CalculateObjectWeight( pObj );
 	}
 }
 
@@ -993,9 +980,7 @@ void GetObjFrom( OBJECTTYPE * pObj, UINT8 ubGetIndex, OBJECTTYPE * pDest )
 		pDest->usItem = pObj->usItem;
 		pDest->bStatus[0] = pObj->bStatus[ubGetIndex];
 		pDest->ubNumberOfObjects = 1;
-		pDest->ubWeight = CalculateObjectWeight( pDest );
 		RemoveObjFrom( pObj, ubGetIndex );
-		pObj->ubWeight = CalculateObjectWeight( pObj );
 	}
 }
 
@@ -1031,8 +1016,6 @@ void StackObjs(OBJECTTYPE* pSourceObj, OBJECTTYPE* pTargetObj, UINT8 ubNumberToC
 
 	pTargetObj->ubNumberOfObjects += ubNumberToCopy;
 	RemoveObjs( pSourceObj, ubNumberToCopy );
-	pSourceObj->ubWeight = CalculateObjectWeight( pSourceObj );
-	pTargetObj->ubWeight = CalculateObjectWeight( pTargetObj );
 }
 
 
@@ -1351,7 +1334,6 @@ BOOLEAN ReloadGun( SOLDIERTYPE * pSoldier, OBJECTTYPE * pGun, OBJECTTYPE * pAmmo
 	}
 
 	DeductPoints( pSoldier, bAPs, 0 );
-	pGun->ubWeight = CalculateObjectWeight( pGun );
 
 	if ( pGun->bGunAmmoStatus >= 0 )
 	{
@@ -1385,8 +1367,6 @@ BOOLEAN EmptyWeaponMagazine( OBJECTTYPE * pWeapon, OBJECTTYPE *pAmmo )
 		{
 			PlayJA2Sample(usReloadSound, HIGHVOLUME, 1, MIDDLEPAN);
 		}
-
-		pWeapon->ubWeight = CalculateObjectWeight( pWeapon );
 
 		return( TRUE );
 	}
@@ -1669,7 +1649,6 @@ bool AttachObject(SOLDIERTYPE* const s, OBJECTTYPE* const pTargetObj, OBJECTTYPE
 			}
 		}
 
-		target.ubWeight = CalculateObjectWeight(&target);
 		return true;
 	}
 
@@ -1763,7 +1742,6 @@ default_merge:
 				target.bStatus[0] = (target.bStatus[0] + attachment.bStatus[0]) / 2;
 			}
 			DeleteObj(&attachment);
-			target.ubWeight = CalculateObjectWeight(&target);
 			if (s && s->bTeam == OUR_TEAM)
 			{
 				DoMercBattleSound(s, BATTLE_SOUND_COOL1);
@@ -2585,7 +2563,6 @@ static void CreateGun(UINT16 usItem, INT8 bStatus, OBJECTTYPE* pObj)
 	pObj->ubNumberOfObjects = 1;
 	pObj->bGunStatus = bStatus;
 	pObj->ubImprintID = NO_PROFILE;
-	pObj->ubWeight = CalculateObjectWeight( pObj );
 
 	if (GCM->getWeapon( usItem )->ubWeaponClass == MONSTERCLASS)
 	{
@@ -2622,12 +2599,23 @@ static void CreateMagazine(UINT16 usItem, OBJECTTYPE* pObj)
 	pObj->usItem = usItem;
 	pObj->ubNumberOfObjects = 1;
 	pObj->ubShotsLeft[0] = GCM->getItem(usItem)->asAmmo()->capacity;
-	pObj->ubWeight = CalculateObjectWeight( pObj );
 }
 
 
 void CreateItem(UINT16 const usItem, INT8 const bStatus, OBJECTTYPE* const pObj)
 {
+	auto checkedStatus = [](INT8 status)
+	{
+		if (status < 1 || status > 100)
+		{
+			SLOGE("CreateItem: Status outside interval [1, 100]");
+			// Since we have no idea what was intended here, just
+			// choose some valid value instead.
+			status = 70;
+		}
+		return status;
+	};
+
 	*pObj = OBJECTTYPE{};
 	if (usItem >= MAXITEMS)
 	{
@@ -2636,7 +2624,7 @@ void CreateItem(UINT16 const usItem, INT8 const bStatus, OBJECTTYPE* const pObj)
 
 	if (GCM->getItem(usItem)->getItemClass() == IC_GUN)
 	{
-		CreateGun( usItem, bStatus, pObj );
+		CreateGun(usItem, checkedStatus(bStatus), pObj);
 	}
 	else if (GCM->getItem(usItem)->getItemClass() == IC_AMMO)
 	{
@@ -2655,9 +2643,8 @@ void CreateItem(UINT16 const usItem, INT8 const bStatus, OBJECTTYPE* const pObj)
 		}
 		else
 		{
-			pObj->bStatus[0] = bStatus;
+			pObj->bStatus[0] = checkedStatus(bStatus);
 		}
-		pObj->ubWeight = CalculateObjectWeight( pObj );
 	}
 
 	if (GCM->getItem(usItem)->getFlags() & ITEM_DEFAULT_UNDROPPABLE)
@@ -2870,13 +2857,11 @@ BOOLEAN RemoveAttachment( OBJECTTYPE * pObj, INT8 bAttachPos, OBJECTTYPE * pNewO
 			pNewObj->bAttachStatus[0] = pObj->bAttachStatus[bGrenade];
 			pObj->usAttachItem[bGrenade] = NOTHING;
 			pObj->bAttachStatus[bGrenade] = 0;
-			pNewObj->ubWeight = CalculateObjectWeight( pNewObj );
 		}
 	}
 
 	RenumberAttachments( pObj );
 
-	pObj->ubWeight = CalculateObjectWeight( pObj );
 	return( TRUE );
 }
 
@@ -3068,7 +3053,14 @@ static void RemoveInvObject(SOLDIERTYPE* pSoldier, UINT16 usItem)
 
 static INT8 CheckItemForDamage(UINT16 usItem, INT32 iMaxDamage)
 {
-	INT8 bDamage = 0;
+	// 10000 must match the number used in ObliterateSector (Turn_Based_Input.cc).
+	if (iMaxDamage == 10'000)
+	{
+		// If the poor guy got annihilated by the cheat key alt+O, we
+		// want to leave his items intact, so we pretend he died from
+		// stubbing his toe here.
+		iMaxDamage = 2;
+	}
 
 	// if the item is protective armour, reduce the amount of damage
 	// by its armour value
@@ -3087,9 +3079,10 @@ static INT8 CheckItemForDamage(UINT16 usItem, INT32 iMaxDamage)
 	}
 	if (iMaxDamage > 0)
 	{
-		bDamage = (INT8) PreRandom( iMaxDamage );
+		// Allow maximum 100 points of damage.
+		return static_cast<INT8>(std::min(PreRandom(iMaxDamage), 100U));
 	}
-	return( bDamage );
+	return 0;
 }
 
 

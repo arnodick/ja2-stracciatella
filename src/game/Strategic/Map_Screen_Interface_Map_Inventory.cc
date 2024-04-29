@@ -1,15 +1,14 @@
 #include "Auto_Resolve.h"
-#include "Buffer.h"
 #include "Directories.h"
 #include "Font.h"
 #include "HImage.h"
 #include "Handle_Items.h"
 #include "Interface.h"
 #include "Isometric_Utils.h"
+#include "ItemModel.h"
 #include "Map_Screen_Interface_Bottom.h"
 #include "Map_Screen_Interface_Map_Inventory.h"
 #include "MessageBoxScreen.h"
-#include "Render_Dirty.h"
 #include "Timer_Control.h"
 #include "VObject.h"
 #include "SysUtil.h"
@@ -18,7 +17,6 @@
 #include "Map_Screen_Interface_Map.h"
 #include "Items.h"
 #include "Interface_Items.h"
-#include "Cursor_Control.h"
 #include "Interface_Utils.h"
 #include "Text.h"
 #include "Font_Control.h"
@@ -26,12 +24,9 @@
 #include "World_Items.h"
 #include "Tactical_Save.h"
 #include "Soldier_Control.h"
-#include "Overhead.h"
 #include "English.h"
-#include "GameRes.h"
 #include "MapScreen.h"
 #include "Radar_Screen.h"
-#include "Message.h"
 #include "Interface_Panels.h"
 #include "WordWrap.h"
 #include "Button_System.h"
@@ -806,10 +801,7 @@ static BOOLEAN GetObjFromInventoryStashSlot(OBJECTTYPE* pInventorySlot, OBJECTTY
 		// find first unempty slot
 		pItemPtr->bStatus[0] = pInventorySlot->bStatus[0];
 		pItemPtr->ubNumberOfObjects = 1;
-		pItemPtr->ubWeight = CalculateObjectWeight( pItemPtr );
 		RemoveObjFrom( pInventorySlot, 0 );
-		pInventorySlot->ubWeight = CalculateObjectWeight( pInventorySlot );
-
 	}
 
 	return ( TRUE );

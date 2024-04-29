@@ -1,14 +1,11 @@
-#include "Directories.h"
+#include "SoundMan.h"
 #include "Types.h"
 #include "Music_Control.h"
-#include "Random.h"
-#include "GameScreen.h"
 #include "JAScreens.h"
 #include "Creature_Spreading.h"
 #include "Timer_Control.h"
 #include "StrategicMap.h"
 #include "ContentMusic.h"
-#include "Debug.h"
 #include "ScreenIDs.h"
 #include "Logger.h"
 
@@ -168,9 +165,6 @@ void MusicPoll(void)
 	// Handle Sound every sound overhead time....
 	if ( COUNTERDONE( MUSICOVERHEAD )  )
 	{
-		// Reset counter
-		RESETCOUNTER( MUSICOVERHEAD );
-
 		if(fMusicFadingIn)
 		{
 			if(uiMusicHandle!=NO_SAMPLE)

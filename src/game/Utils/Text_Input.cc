@@ -1,7 +1,6 @@
 #include "HImage.h"
 #include "Input.h"
 #include "Font.h"
-#include "English.h"
 #include "VObject.h"
 #include "VSurface.h"
 #include "Video.h"
@@ -14,6 +13,7 @@
 #include "MouseSystem.h"
 
 #include <string_theory/string>
+#include <utility>
 
 
 BOOLEAN gfNoScroll = FALSE;
@@ -59,6 +59,7 @@ struct TEXTINPUTNODE
 struct STACKTEXTINPUTNODE
 {
 	TEXTINPUTNODE *head;
+	TEXTINPUTNODE *tail;
 	TextInputColors *pColors;
 	STACKTEXTINPUTNODE* next;
 };
@@ -72,8 +73,20 @@ static TEXTINPUTNODE* gpActive = NULL;
 
 //Saving current mode
 static TEXTINPUTNODE* pSavedHead = NULL;
+static TEXTINPUTNODE* pSavedTail = NULL;
 static TextInputColors* pSavedColors = NULL;
 static UINT16 gusTextInputCursor = CURSOR_IBEAM;
+
+
+// Zap the four pointers that control text input. This is a separate
+// function because the tail pointer was often forgotten before.
+static void ZapTextInputPointers()
+{
+	gpTextInputHead = nullptr;
+	gpTextInputTail = nullptr;
+	gpActive = nullptr;
+	pColors = nullptr;
+}
 
 
 //Saves the current text input mode by pushing it onto our stack, then starts a new
@@ -82,6 +95,7 @@ static void PushTextInputLevel(void)
 {
 	STACKTEXTINPUTNODE* const pNewLevel = new STACKTEXTINPUTNODE{};
 	pNewLevel->head = gpTextInputHead;
+	pNewLevel->tail = gpTextInputTail;
 	pNewLevel->pColors = pColors;
 	pNewLevel->next = pInputStack;
 	pInputStack = pNewLevel;
@@ -96,6 +110,7 @@ static void PopTextInputLevel(void)
 {
 	STACKTEXTINPUTNODE *pLevel;
 	gpTextInputHead = pInputStack->head;
+	gpTextInputTail = pInputStack->tail;
 	pColors = pInputStack->pColors;
 	pLevel = pInputStack;
 	pInputStack = pInputStack->next;
@@ -146,7 +161,7 @@ void InitTextInputMode()
 		PushTextInputLevel();
 		//KillTextInputMode();
 	}
-	gpTextInputHead = NULL;
+	ZapTextInputPointers();
 	pColors = new TextInputColors{};
 	gfTextInputMode = TRUE;
 	SetEditingStatus(FALSE);
@@ -180,17 +195,13 @@ void KillTextInputMode()
 	if (!i) return;
 	while (i)
 	{
-		TEXTINPUTNODE* const del = i;
-		i = i->next;
-		if (del->maxCodepoints > 0)
+		if (i->maxCodepoints > 0)
 		{
-			MSYS_RemoveRegion(&del->region);
+			MSYS_RemoveRegion(&i->region);
 		}
-		delete del;
+		delete std::exchange(i, i->next);
 	}
 	delete pColors;
-	pColors         = 0;
-	gpTextInputHead = 0;
 
 	if (pInputStack)
 	{
@@ -201,9 +212,8 @@ void KillTextInputMode()
 	{
 		gfTextInputMode = FALSE;
 		SetEditingStatus(FALSE);
+		ZapTextInputPointers();
 	}
-
-	if (!gpTextInputHead) gpActive = 0;
 }
 
 
@@ -325,7 +335,7 @@ void SetInputFieldString(UINT8 ubField, const ST::string& str)
 	}
 	else if (!curr->fUserField)
 	{
-		curr->str = ST::null;
+		curr->str.clear();
 		curr->numCodepoints = 0;
 	}
 	else
@@ -338,7 +348,7 @@ void SetInputFieldString(UINT8 ubField, const ST::string& str)
 ST::string GetStringFromField(UINT8 const ubField)
 {
 	TEXTINPUTNODE const* const n = GetTextInputField(ubField);
-	return n ? n->str : ST::null;
+	return n ? n->str : ST::string();
 }
 
 
@@ -368,7 +378,7 @@ void SetInputFieldStringWithNumericStrictValue( UINT8 ubField, INT32 iNumber )
 	AssertMsg(!curr->fUserField, ST::format("Attempting to illegally set text into user field {}", curr->ubID));
 	if (iNumber < 0) //negative number converts to blank string
 	{
-		curr->str = ST::null;
+		curr->str.clear();
 		curr->numCodepoints = 0;
 	}
 	else
@@ -804,7 +814,7 @@ static void AddChar(char32_t c)
 	{
 		ST::utf32_buffer codepoints = n.str.to_utf32();
 		size_t i = 0;
-		n.str = ST::null;
+		n.str.clear();
 		while (i < gubCursorPos)
 		{
 			n.str += codepoints[i++];
@@ -842,7 +852,7 @@ static void RemoveChars(size_t const pos, size_t const n)
 	Assert(pos + n <= t.numCodepoints);
 	ST::utf32_buffer codepoints = t.str.to_utf32();
 	size_t i = 0;
-	t.str = ST::null;
+	t.str.clear();
 	while (i < pos)
 	{
 		t.str += codepoints[i++];
@@ -1122,6 +1132,7 @@ void EnableAllTextFields()
 		i->fEnabled = TRUE;
 	}
 	if (!gpActive) gpActive = gpTextInputHead;
+	SetEditingStatus(gpActive != nullptr);
 }
 
 
@@ -1134,6 +1145,7 @@ void DisableAllTextFields()
 		i->region.Disable();
 		i->fEnabled = FALSE;
 	}
+	SetEditingStatus(false);
 }
 
 
@@ -1159,22 +1171,23 @@ void SaveAndRemoveCurrentTextInputMode()
 	if( pInputStack )
 	{
 		gpTextInputHead = pInputStack->head;
+		gpTextInputTail = pInputStack->tail;
 		pColors = pInputStack->pColors;
+		gpActive = nullptr;
 	}
 	else
 	{
-		gpTextInputHead = NULL;
-		pColors = NULL;
+		ZapTextInputPointers();
 	}
 }
 
 void RestoreSavedTextInputMode()
 {
 	Assert(pSavedHead); // Attempting to restore saved text input stack head, when one doesn't exist?
-	gpTextInputHead = pSavedHead;
-	pColors = pSavedColors;
-	pSavedHead = NULL;
-	pSavedColors = NULL;
+	gpTextInputHead = std::exchange(pSavedHead, nullptr);
+	gpTextInputTail = std::exchange(pSavedTail, nullptr);
+	pColors = std::exchange(pSavedColors, nullptr);
+	gpActive = nullptr;
 }
 
 
@@ -1221,7 +1234,7 @@ void SetExclusive24HourTimeValue( UINT8 ubField, UINT16 usTime )
 	//First make sure the time is a valid time.  If not, then use 23:59
 	if( usTime == 0xffff )
 	{
-		SetInputFieldString(ubField, ST::null);
+		SetInputFieldString(ubField, {});
 		return;
 	}
 	usTime = std::min(1439, int(usTime));
@@ -1230,7 +1243,7 @@ void SetExclusive24HourTimeValue( UINT8 ubField, UINT16 usTime )
 	if (!curr) return;
 
 	AssertMsg(!curr->fUserField, ST::format("Attempting to illegally set text into user field {}", curr->ubID));
-	curr->str = ST::null;
+	curr->str.clear();
 	curr->str += static_cast<char>((usTime / 600) + 0x30); //10 hours
 	curr->str += static_cast<char>((usTime / 60 % 10) + 0x30); //1 hour
 	usTime %= 60;                                  //truncate the hours

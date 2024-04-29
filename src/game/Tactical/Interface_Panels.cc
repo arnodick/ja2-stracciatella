@@ -4,7 +4,6 @@
 #include "Boxing.h"
 #include "Button_System.h"
 #include "ContentManager.h"
-#include "Cursor_Control.h"
 #include "Cursors.h"
 #include "Debug.h"
 #include "Dialogue_Control.h"
@@ -37,7 +36,6 @@
 #include "Logger.h"
 #include "MapScreen.h"
 #include "Map_Screen_Interface.h"
-#include "Map_Screen_Interface_Map.h"
 #include "Message.h"
 #include "MessageBoxScreen.h"
 #include "MouseSystem.h"
@@ -48,14 +46,11 @@
 #include "PathAI.h"
 #include "Points.h"
 #include "Radar_Screen.h"
-#include "RenderWorld.h"
 #include "Render_Dirty.h"
 #include "ScreenIDs.h"
 #include "ShopKeeper_Interface.h"
-#include "Soldier_Add.h"
-#include "Soldier_Ani.h"
-#include "Soldier_Control.h"
 #include "Soldier_Functions.h"
+#include "Soldier_Ani.h"
 #include "Soldier_Macros.h"
 #include "Sound_Control.h"
 #include "Squads.h"
@@ -2407,7 +2402,7 @@ void RenderTEAMPanel(DirtyLevel const dirty_level)
 				}
 				else if (s->uiStatusFlags & SOLDIER_DEAD)
 				{
-					help = ST::null;
+					help.clear();
 				}
 				else
 				{
@@ -2423,7 +2418,7 @@ void RenderTEAMPanel(DirtyLevel const dirty_level)
 				}
 				else if (s->uiStatusFlags & SOLDIER_DEAD)
 				{
-					help = ST::null;
+					help.clear();
 				}
 				else
 				{
@@ -2945,8 +2940,7 @@ void HandlePanelFaceAnimations(SOLDIERTYPE* pSoldier)
 						RestoreExternBackgroundRect( pSoldier->sPanelFaceX, pSoldier->sPanelFaceY, TM_FACE_WIDTH, TM_FACE_HEIGHT );
 					}
 				}
-				}
-			RESETTIMECOUNTER( pSoldier->PanelAnimateCounter, 160 );
+			}
 		}
 	}
 
@@ -3001,7 +2995,6 @@ void HandlePanelFaceAnimations(SOLDIERTYPE* pSoldier)
 				HandlePlayerTeamMemberDeathAfterSkullAnimation( pSoldier );
 
 			}
-			RESETTIMECOUNTER( pSoldier->PanelAnimateCounter, 160 );
 		}
 	}
 
