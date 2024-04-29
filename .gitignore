@@ -1,4 +1,7 @@
-_bin
+src/
+___bin/
+__bin/
+_bin/
 .DS_Store
 .vagrant
 releases
