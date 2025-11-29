@@ -26,10 +26,17 @@ configure_file(
     @ONLY
 )
 
+# copy patch to build dir
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/getter/gcc-15.patch"
+    "${CMAKE_CURRENT_BINARY_DIR}/getter/gcc-15.patch"
+    @ONLY
+)
+
 # execute getter
 execute_process(COMMAND ${CMAKE_COMMAND} . "-G${CMAKE_GENERATOR}" "-DCMAKE_SYSTEM_VERSION=${CMAKE_SYSTEM_VERSION}" WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/getter")
 execute_process(COMMAND ${CMAKE_COMMAND} --build "${CMAKE_CURRENT_BINARY_DIR}/getter")
 
-set(SOL_INCLUDE_DIR ${SRC_DIR}/single/include PARENT_SCOPE)
+set(SOL_INCLUDE_DIR ${SRC_DIR}/include PARENT_SCOPE)
 
 message(STATUS "</sol2>")

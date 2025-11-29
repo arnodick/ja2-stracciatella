@@ -4,10 +4,10 @@
 #include "Laptop.h"
 #include "AIMPolicies.h"
 #include "AIM.h"
-#include "VObject.h"
 #include "WordWrap.h"
 #include "Text.h"
 #include "Button_System.h"
+#include "Object_Cache.h"
 #include "Video.h"
 #include "VSurface.h"
 #include "Font_Control.h"
@@ -155,7 +155,7 @@ static UINT8       gubCurPageNum;
 static BOOLEAN     gfInPolicyToc            = FALSE;
 static BOOLEAN     gfInAgreementPage        = FALSE;
 static BOOLEAN     gfAimPolicyMenuBarLoaded = FALSE;
-static SGPVObject* guiContentButton;
+static cache_key_t const guiContentButton{ LAPTOPDIR "/contentbutton.sti" };
 static BOOLEAN     gfExitingAimPolicy;
 static BOOLEAN     AimPoliciesSubPagesVisitedFlag[NUM_AIM_POLICY_PAGES];
 
@@ -183,9 +183,6 @@ void EnterAimPolicies()
 
 	gfInPolicyToc = FALSE;
 
-	// load the Content Buttons graphic and add it
-	guiContentButton = AddVideoObjectFromFile(LAPTOPDIR "/contentbutton.sti");
-
 	RenderAimPolicies();
 }
 
@@ -199,7 +196,7 @@ void ExitAimPolicies()
 {
 	gfExitingAimPolicy = TRUE;
 
-	DeleteVideoObject(guiContentButton);
+	RemoveVObject(guiContentButton);
 
 	if( gfAimPolicyMenuBarLoaded )
 		ExitAimPolicyMenuBar();
@@ -375,12 +372,12 @@ static void InitAimPolicyMenuBar()
 	UINT16  const   y    = AIM_POLICY_MENU_Y;
 	const ST::string* text = AimPolicyText.data();
 	INT32           idx  = 0;
-	FOR_EACHX(GUIButtonRef, i, guiPoliciesMenuButton, x += AIM_POLICY_GAP_X)
+	for (auto & b : guiPoliciesMenuButton)
 	{
-		GUIButtonRef const b = CreateIconAndTextButton(gfx, *text++, FONT10ARIAL, AIM_BUTTON_ON_COLOR, DEFAULT_SHADOW, AIM_BUTTON_OFF_COLOR, DEFAULT_SHADOW, x, y, MSYS_PRIORITY_HIGH, BtnPoliciesMenuButtonCallback);
+		b = CreateIconAndTextButton(gfx, *text++, FONT10ARIAL, AIM_BUTTON_ON_COLOR, DEFAULT_SHADOW, AIM_BUTTON_OFF_COLOR, DEFAULT_SHADOW, x, y, MSYS_PRIORITY_HIGH, BtnPoliciesMenuButtonCallback);
 		b->SetCursor(CURSOR_WWW);
 		b->SetUserData(idx++);
-		*i = b;
+		x += AIM_POLICY_GAP_X;
 	}
 }
 
@@ -439,12 +436,12 @@ static void InitAimPolicyTocMenu()
 	UINT16 const x    = AIM_POLICY_TOC_X;
 	UINT16       y    = AIM_POLICY_TOC_Y;
 	INT32        page = 2;
-	FOR_EACHX(MOUSE_REGION, i, gSelectedPolicyTocMenuRegion, y += AIM_POLICY_TOC_GAP_Y)
+	for (auto & r : gSelectedPolicyTocMenuRegion)
 	{
 		// Mouse region for the toc buttons
-		MOUSE_REGION& r = *i;
 		MSYS_DefineRegion(&r, x, y, x + AIM_CONTENTBUTTON_WIDTH, y + AIM_CONTENTBUTTON_HEIGHT, MSYS_PRIORITY_HIGH, CURSOR_WWW, MSYS_NO_CALLBACK, SelectPolicyTocMenuRegionCallBack);
 		MSYS_SetRegionUserData(&r, 0, page++);
+		y += AIM_POLICY_TOC_GAP_Y;
 	}
 }
 
@@ -512,12 +509,12 @@ static void InitAgreementRegion()
 	UINT16  const   y    = AIM_POLICY_AGREEMENT_Y;
 	const ST::string* text = &AimPolicyText[AIM_POLICIES_DISAGREE];
 	INT32           idx  = 0;
-	FOR_EACHX(GUIButtonRef, i, guiPoliciesAgreeButton, x += 125)
+	for (auto & b : guiPoliciesAgreeButton)
 	{
-		GUIButtonRef const b = CreateIconAndTextButton(gfx, *text++, AIM_POLICY_TOC_FONT, AIM_POLICY_AGREE_TOC_COLOR_ON, DEFAULT_SHADOW, AIM_POLICY_AGREE_TOC_COLOR_OFF, DEFAULT_SHADOW, x, y, MSYS_PRIORITY_HIGH, BtnPoliciesAgreeButtonCallback);
+		b = CreateIconAndTextButton(gfx, *text++, AIM_POLICY_TOC_FONT, AIM_POLICY_AGREE_TOC_COLOR_ON, DEFAULT_SHADOW, AIM_POLICY_AGREE_TOC_COLOR_OFF, DEFAULT_SHADOW, x, y, MSYS_PRIORITY_HIGH, BtnPoliciesAgreeButtonCallback);
 		b->SetCursor(CURSOR_WWW);
 		b->SetUserData(idx++);
-		*i = b;
+		x += 125;
 	}
 	gfInAgreementPage = TRUE;
 }

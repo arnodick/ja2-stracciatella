@@ -15,14 +15,14 @@ extern "C" {
 #include "smacker.h"
 }
 
-#include "externalized/ContentManager.h"
-#include "externalized/GameInstance.h"
-#include "game/Utils/Cinematics.h"
-#include "sgp/Debug.h"
-#include "sgp/HImage.h"
-#include "sgp/VObject.h"
-#include "sgp/VSurface.h"
-#include "sgp/SoundMan.h"
+#include "ContentManager.h"
+#include "GameInstance.h"
+#include "Cinematics.h"
+#include "Debug.h"
+#include "HImage.h"
+#include "VObject.h"
+#include "VSurface.h"
+#include "SoundMan.h"
 
 struct SMKFLIC
 {
@@ -35,7 +35,7 @@ struct SMKFLIC
 	UINT32 start_tick;
 	UINT32 frame_no;
 	double milliseconds_per_frame;
-	char status;
+	signed char status;
 };
 
 
@@ -285,7 +285,7 @@ static void SmkBlitVideoFrame(SMKFLIC* const sf, SGPVSurface* surface)
 	if (src == nullptr) return;
 	src_palette = smk_get_palette(sf->smacker);
 	if (src_palette == nullptr) return;
-	if (smk_info_video(sf->smacker, &src_width, &src_height, nullptr) < 0) return;
+	if (static_cast<signed char>(smk_info_video(sf->smacker, &src_width, &src_height, nullptr)) < 0) return;
 
 	// convert palette
 	UINT16 palette[256];

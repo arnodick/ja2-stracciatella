@@ -16,10 +16,10 @@ struct CalibreModel;
 struct MagazineModel : ItemModel
 {
 	MagazineModel(uint16_t itemIndex,
-			ST::string internalName,
-			ST::string shortName,
-			ST::string name,
-			ST::string description,
+			ST::string&& internalName,
+			ST::string&& shortName,
+			ST::string&& name,
+			ST::string&& description,
 			uint32_t  itemClass,
 			const CalibreModel *calibre,
 			uint16_t capacity,
@@ -34,7 +34,7 @@ struct MagazineModel : ItemModel
 	static MagazineModel* deserialize(const JsonValue &json,
 						const std::map<ST::string, const CalibreModel*> &calibreMap,
 						const std::map<ST::string, const AmmoTypeModel*> &ammoTypeMap,
-						const VanillaItemStrings& vanillaItemStrings);
+						const BinaryData& vanillaItemStrings);
 
 
 	/** Get standard replacement ammo name. */

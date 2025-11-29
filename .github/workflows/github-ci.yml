@@ -14,24 +14,35 @@ jobs:
       matrix:
         cfg:
         - name: Linux
-          os: ubuntu-20.04
+          os: ubuntu-22.04
           target: linux
 
         - name: Linux mingw64
-          os: ubuntu-22.04
+          os: ubuntu-24.04
           target: linux-mingw64
 
         - name: Mac
-          os: macos-11
+          os: macos-latest
           target: mac
 
         - name: Android
-          os: ubuntu-20.04
+          os: ubuntu-22.04
           target: android
 
     name: ${{ matrix.cfg.name }} ${{ github.ref }}
     runs-on: ${{ matrix.cfg.os }}
     steps:
+    - name: Free Disk Space (Ubuntu)
+      uses: jlumbroso/free-disk-space@main
+      if: ${{ startsWith(matrix.cfg.os, 'ubuntu') }}
+      with:
+        tool-cache: false
+        android: false
+        dotnet: true
+        haskell: true
+        large-packages: false
+        docker-images: true
+        swap-storage: true
 
     - name: Context in env
       env:
@@ -44,10 +55,10 @@ jobs:
       run: ''
 
     - name: Checkout
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Compiler cache (sccache)
-      uses: actions/cache@v2
+      uses: actions/cache@v4
       with:
         path: |
           ~/.cache/sccache
@@ -58,7 +69,7 @@ jobs:
           ${{ matrix.cfg.target }}-sccache-v1-refs/heads/master-
           ${{ matrix.cfg.target }}-sccache-v1-
     - name: Cache Rust deps and build output
-      uses: actions/cache@v2
+      uses: actions/cache@v4
       with:
         path: |
           ~/.cargo/bin
@@ -72,7 +83,7 @@ jobs:
           ${{ matrix.cfg.target }}-rust-v2-
 
     - name: Set up JDK 18
-      uses: actions/setup-java@v3
+      uses: actions/setup-java@v4
       if: matrix.cfg.target == 'android'
       with:
         distribution: temurin
@@ -80,7 +91,7 @@ jobs:
         cache: 'gradle'
 
     - name: Setup Android SDK
-      uses: android-actions/setup-android@v2
+      uses: android-actions/setup-android@v3
       if: matrix.cfg.target == 'android'
 
     - name: Set up environment
@@ -91,6 +102,7 @@ jobs:
       env:
         CI_TARGET: ${{ matrix.cfg.target }}
         ANDROID_KEYSTORE_FILE: ${{ secrets.ANDROID_KEYSTORE_FILE }}
+        TARGET_GCC_MAJOR_VERSION: 9
 
     - name: Build and run tests
       shell: bash
@@ -109,12 +121,13 @@ jobs:
       run: ${{ github.workspace }}/.ci/ci-publish.sh 2>&1
       env:
         CI_REF: ${{ github.ref }}
+        CI_TARGET: ${{ matrix.cfg.target }}
         GCLOUD_CREDENTIALS_SALT: ${{ secrets.GCLOUD_CREDENTIALS_SALT }}
         GCLOUD_CREDENTIALS_KEY: ${{ secrets.GCLOUD_CREDENTIALS_KEY }}
         GCLOUD_CREDENTIALS_IV: ${{ secrets.GCLOUD_CREDENTIALS_IV }}
 
     - name: Upload android cmake logs
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v4
       if: failure() && matrix.cfg.target == 'android'
       with:
         name: android-cmake-logs
@@ -132,9 +145,9 @@ jobs:
           cp "${file}" artifacts/
         done
     - name: Upload artifacts
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v4
       with:
-        name: artifacts
+        name: artifacts ${{ matrix.cfg.name }}
         path: ${{ github.workspace }}/artifacts
 
   ci-lint:
@@ -154,12 +167,12 @@ jobs:
     runs-on: ${{ matrix.cfg.os }}
     steps:
     - name: Checkout
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Install rustup
       shell: bash
       run: |
-        curl --proto '=https' --tlsv1.2 -sSfL https://sh.rustup.rs | sh -s -- -y --default-toolchain=$(cat ./rust-toolchain)
+        curl --proto '=https' --tlsv1.2 -sSfL https://sh.rustup.rs | sh -s -- -y --default-toolchain=$(cat ./min-rust-version)
 
     - name: Run cargo fmt
       shell: bash

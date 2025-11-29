@@ -1709,7 +1709,14 @@ static ScreenID UIHandleCMoveMerc(UI_EVENT* pUIEvent)
 			// We should not have null here if we are given this flag...
 			if (pIntTile != NULL)
 			{
-				sActionGridNo = FindAdjacentGridEx(sel, sIntTileGridNo, &ubDirection, NULL, FALSE, TRUE);
+				if (pStructure->fFlags & (STRUCTURE_ANYDOOR | STRUCTURE_SWITCH))
+				{
+					sActionGridNo = FindAdjacentGridExAdvanced(sel, *pStructure, sIntTileGridNo, &ubDirection);
+				}
+				else
+				{
+					sActionGridNo = FindAdjacentGridEx(sel, sIntTileGridNo, &ubDirection, NULL, FALSE, TRUE);
+				}
 				if (sActionGridNo != -1)
 				{
 					SetUIBusy(sel);
@@ -2122,7 +2129,7 @@ static void UIHandleMercAttack(SOLDIERTYPE* pSoldier, SOLDIERTYPE* pTargetSoldie
 			// go into turnbased for that person
 			CancelAIAction(pTargetSoldier);
 			AddToShouldBecomeHostileOrSayQuoteList(pTargetSoldier);
-			//MakeCivHostile( pTargetSoldier, 2 );
+			//MakeCivHostile( pTargetSoldier );
 			//TriggerNPCWithIHateYouQuote( pTargetSoldier->ubProfile );
 			return;
 		}
@@ -2715,7 +2722,7 @@ BOOLEAN UIHandleOnMerc( BOOLEAN fMovementMode )
 				{
 
 					// Check if this guy is on the enemy team....
-					if ( !pSoldier->bNeutral && (pSoldier->bSide != OUR_TEAM ) )
+					if ( !pSoldier->bNeutral && (pSoldier->bSide != Side::FRIENDLY ) )
 					{
 						gUIActionModeChangeDueToMouseOver = TRUE;
 
@@ -3120,6 +3127,7 @@ static INT8 DrawUIMovementPath(SOLDIERTYPE* const pSoldier, UINT16 usMapPos, Mov
 	LEVELNODE *pIntTile;
 	INT8 bReturnCode = 0;
 	BOOLEAN fPlot;
+	int8_t preservedDoorHandleCode;
 
 	if ((gTacticalStatus.uiFlags & INCOMBAT) || _KeyDown( SHIFT ))
 	{
@@ -3144,12 +3152,23 @@ static INT8 DrawUIMovementPath(SOLDIERTYPE* const pSoldier, UINT16 usMapPos, Mov
 		// We should not have null here if we are given this flag...
 		if ( pIntTile != NULL )
 		{
-			sActionGridNo = FindAdjacentGridEx(pSoldier, sIntTileGridNo, NULL, NULL, FALSE, TRUE);
+			if (pStructure->fFlags & (STRUCTURE_ANYDOOR | STRUCTURE_SWITCH))
+			{
+				preservedDoorHandleCode = pSoldier->ubDoorHandleCode;
+				sActionGridNo = FindAdjacentGridExAdvanced(pSoldier, *pStructure, sIntTileGridNo, nullptr);
+				sAPCost = doorAPs[pSoldier->ubDoorHandleCode];
+				pSoldier->ubDoorHandleCode = preservedDoorHandleCode;
+			}
+			else
+			{
+				sActionGridNo = FindAdjacentGridEx(pSoldier, sIntTileGridNo, NULL, NULL, FALSE, TRUE);
+				sAPCost = doorAPs[HANDLE_DOOR_OPEN];
+			}
+
 			if ( sActionGridNo == -1 )
 			{
 				sActionGridNo = sIntTileGridNo;
 			}
-			sAPCost  = AP_OPEN_DOOR;
 			sAPCost += UIPlotPath(pSoldier, sActionGridNo, NO_COPYROUTE, fPlot, pSoldier->usUIMovementMode, pSoldier->bActionPoints);
 
 			if ( sActionGridNo != pSoldier->sGridNo )
@@ -5208,9 +5227,8 @@ BOOLEAN ValidQuickExchangePosition(void)
 	if (pOverSoldier != NULL)
 	{
 		//KM: Replaced this older if statement for the new one which allows exchanging with militia
-		//if ((pOverSoldier->bSide != OUR_TEAM) && pOverSoldier->bNeutral)
 		if ((pOverSoldier->bTeam != OUR_TEAM && pOverSoldier->bNeutral) ||
-			(pOverSoldier->bTeam == MILITIA_TEAM && pOverSoldier->bSide == 0))
+			(pOverSoldier->bTeam == MILITIA_TEAM && pOverSoldier->bSide == Side::FRIENDLY))
 		{
 			// hehe - don't allow animals to exchange places
 			if ( !( pOverSoldier->uiStatusFlags & ( SOLDIER_ANIMAL ) ) )
@@ -5264,10 +5282,13 @@ BOOLEAN IsValidJumpLocation(const SOLDIERTYPE* pSoldier, INT16 sGridNo, BOOLEAN 
 	UINT8 sDirs[4] = { NORTH, EAST, SOUTH, WEST };
 	UINT8 cnt;
 	UINT8 ubMovementCost;
+	UINT8 ubOppMovementCost;
 
 	// First check that action point cost is zero so far
 	// ie: NO PATH!
-	if ( gsCurrentActionPoints != 0 && fCheckForPath )
+	// Or the cursor is in "select currently non-selected soldier" mode
+	if (gsSelectedGridNo == sGridNo ||
+		(gsCurrentActionPoints != 0 && guiCurrentUICursor != NO_UICURSOR && fCheckForPath))
 	{
 		return( FALSE );
 	}
@@ -5280,13 +5301,18 @@ BOOLEAN IsValidJumpLocation(const SOLDIERTYPE* pSoldier, INT16 sGridNo, BOOLEAN 
 
 		// ATE: Check our movement costs for going through walls!
 		ubMovementCost = gubWorldMovementCosts[ sIntSpot ][ sDirs[ cnt ] ][ pSoldier->bLevel ];
+		ubOppMovementCost = gubWorldMovementCosts[sIntSpot][OppositeDirection(sDirs[cnt])][pSoldier->bLevel];
 		if ( IS_TRAVELCOST_DOOR( ubMovementCost ) )
 		{
 			ubMovementCost = DoorTravelCost(pSoldier, sIntSpot, ubMovementCost, pSoldier->bTeam == OUR_TEAM, NULL);
 		}
+		if (IS_TRAVELCOST_DOOR(ubOppMovementCost))
+		{
+			ubOppMovementCost = DoorTravelCost(pSoldier, sIntSpot, ubOppMovementCost, pSoldier->bTeam == OUR_TEAM, NULL);
+		}
 
 		// If we have hit an obstacle, STOP HERE
-		if ( ubMovementCost >= TRAVELCOST_BLOCKED )
+		if (ubMovementCost >= TRAVELCOST_BLOCKED || ubOppMovementCost >= TRAVELCOST_BLOCKED)
 		{
 			// no good, continue
 			continue;

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "GamePolicy.h"
 #include "Item_Types.h"
 #include "ItemStrings.h"
 #include "InventoryGraphicsModel.h"
@@ -10,6 +11,8 @@
 
 class JsonObject;
 class JsonObject;
+struct ArmourModel;
+struct ExplosiveModel;
 struct MagazineModel;
 struct WeaponModel;
 
@@ -17,22 +20,22 @@ struct ItemModel
 {
 	ItemModel(
 		uint16_t itemIndex,
-		ST::string internalName,
+		ST::string&& internalName,
 		uint32_t usItemClass,
 		uint8_t classIndex=0,
 		ItemCursor cursor=INVALIDCURS);
 
 	ItemModel(
 		uint16_t   itemIndex,
-		ST::string internalName,
-		ST::string shortName,
-		ST::string name,
-		ST::string description,
+		ST::string&& internalName,
+		ST::string&& shortName,
+		ST::string&& name,
+		ST::string&& description,
 		uint32_t   usItemClass,
 		uint8_t    ubClassIndex,
 		ItemCursor ubCursor,
-		InventoryGraphicsModel inventoryGraphics,
-		TilesetTileIndexModel tileGraphic,
+		InventoryGraphicsModel&& inventoryGraphics,
+		TilesetTileIndexModel&& tileGraphic,
 		uint8_t    ubWeight, // In hectogram, so f.e. ubWeight==4 means 400 grams.
 		uint8_t    ubPerPocket,
 		uint16_t   usPrice,
@@ -88,17 +91,26 @@ struct ItemModel
 
 	virtual const WeaponModel* asWeapon() const   { return NULL; }
 	virtual const MagazineModel* asAmmo() const   { return NULL; }
+	virtual const ArmourModel* asArmour() const   { return NULL; }
+	virtual const ExplosiveModel* asExplosive() const   { return NULL; }
 
 	/** Check if the given attachment can be attached to the item. */
-	virtual bool canBeAttached(uint16_t attachment) const;
+	virtual bool canBeAttached(const GamePolicy* policy, const ItemModel* attachment) const;
+
+	struct InitData
+	{
+		JsonObject const& json;
+		BinaryData const& strings;
+	};
 
 	virtual JsonValue serialize() const;
+	static const ItemModel* deserialize(const JsonValue &json, const BinaryData& vanillaItemStrings);
 
-	static ST::string deserializeShortName(const JsonObject &obj, const VanillaItemStrings& vanillaItemStrings);
-	static ST::string deserializeName(const JsonObject &obj, const VanillaItemStrings& vanillaItemStrings);
-	static ST::string deserializeDescription(const JsonObject &obj, const VanillaItemStrings& vanillaItemStrings);
-	static const ItemModel* deserialize(const JsonValue &json, const VanillaItemStrings& vanillaItemStrings);
 protected:
+	static ST::string deserializeShortName(InitData const&);
+	static ST::string deserializeName(InitData const&);
+	static ST::string deserializeDescription(InitData const&);
+
 	uint16_t   itemIndex;
 	ST::string internalName;
 	ST::string shortName;
@@ -118,5 +130,5 @@ protected:
 	uint16_t   fFlags;
 
 	void serializeFlags(JsonObject &obj) const;
-	uint32_t deserializeFlags(JsonObject &obj) const;
+	static uint16_t deserializeFlags(const JsonObject &obj);
 };

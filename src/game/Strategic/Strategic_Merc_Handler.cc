@@ -1,3 +1,4 @@
+#include "ArmourModel.h"
 #include "Font_Control.h"
 #include "Types.h"
 #include "Soldier_Control.h"
@@ -443,21 +444,22 @@ BOOLEAN SoldierHasWorseEquipmentThanUsedTo( SOLDIERTYPE *pSoldier )
 		// Look for best gun/armour
 		if ( usItem != NOTHING )
 		{
+			auto item = GCM->getItem(usItem);
 			// Check if it's a gun
-			if ( GCM->getItem(usItem)->isGun())
+			if ( item->isGun())
 			{
-				if ( GCM->getWeapon( usItem )->ubDeadliness > bBestGun )
+				if ( item->asWeapon()->ubDeadliness > bBestGun )
 				{
-					bBestGun = GCM->getWeapon( usItem )->ubDeadliness;
+					bBestGun = item->asWeapon()->ubDeadliness;
 				}
 			}
 
 			// If it's armour
-			if ( GCM->getItem(usItem)->isArmour() )
+			if ( item->isArmour() )
 			{
-				if ( Armour[ GCM->getItem(usItem)->getClassIndex() ].ubProtection > bBestArmour )
+				if ( item->asArmour()->getProtection() > bBestArmour )
 				{
-					bBestArmour = Armour[ GCM->getItem(usItem)->getClassIndex() ].ubProtection;
+					bBestArmour = item->asArmour()->getProtection();
 				}
 			}
 		}
@@ -558,12 +560,12 @@ void UpdateBuddyAndHatedCounters(void)
 
 				ProfileID const ubOtherProfileID = other->ubProfile;
 
-				for (INT32 i = 0; i < 4; ++i)
+				for (INT32 i = HATED_SLOT1; i < NUM_HATED_SLOTS + 1; ++i)
 				{
 					switch (i)
 					{
-						case 0:
-						case 1:
+						case HATED_SLOT1:
+						case HATED_SLOT2:
 							if (p.bHated[i] == ubOtherProfileID)
 							{
 								// arrgs, we're on assignment with the person we loathe!
@@ -634,7 +636,7 @@ void UpdateBuddyAndHatedCounters(void)
 							}
 							break;
 
-						case 2:
+						case LEARNED_TO_HATE_SLOT:
 							if (p.bLearnToHate == ubOtherProfileID)
 							{
 								if (p.bLearnToHateCount > 0)
@@ -656,7 +658,7 @@ void UpdateBuddyAndHatedCounters(void)
 									}
 									else if (p.bLearnToHateCount == 0)
 									{ // Set as bHated[2];
-										p.bHated[2] = p.bLearnToHate;
+										p.bHated[LEARNED_TO_HATE_SLOT] = p.bLearnToHate;
 										p.bMercOpinion[ubOtherProfileID] = HATED_OPINION;
 
 										if (s->ubWhatKindOfMercAmI == MERC_TYPE__MERC || (
@@ -704,13 +706,13 @@ void UpdateBuddyAndHatedCounters(void)
 							}
 							break;
 
-						case 3:
+						case LEARNED_TO_LIKE_SLOT + 1:
 							if (p.bLearnToLikeCount > 0	&& p.bLearnToLike == ubOtherProfileID)
 							{
 								p.bLearnToLikeCount--;
 								if (p.bLearnToLikeCount == 0)
 								{ // Add to liked!
-									p.bBuddy[2] = p.bLearnToLike;
+									p.bBuddy[LEARNED_TO_LIKE_SLOT] = p.bLearnToLike;
 									p.bMercOpinion[ubOtherProfileID] = BUDDY_OPINION;
 								}
 								else if (p.bLearnToLikeCount < p.bLearnToLikeTime / 2)

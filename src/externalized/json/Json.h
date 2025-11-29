@@ -16,8 +16,10 @@ class JsonValue {
 		JsonValue(double value) : m_value(RustPointer<RJsonValue>(RJsonValue_fromDouble(value))) {}
 		JsonValue(bool value) : m_value(RustPointer<RJsonValue>(RJsonValue_fromBool(value))) {}
 		JsonValue(const ST::string& value) : m_value(RustPointer<RJsonValue>(RJsonValue_fromString(value.c_str()))) {}
+		JsonValue(char const * const value) : m_value{ RJsonValue_fromString(value) } {}
 
 		static JsonValue deserialize(const ST::string& str);
+		static JsonValue deserialize(const ST::string& vanillaStr, const ST::string& patchStr);
 
 		ST::string serialize(bool pretty = false) const;
 		bool isInt() const;
@@ -83,7 +85,7 @@ class JsonObject
 		double getOptionalDouble(const char* name, double defaultValue = 0) const;
 		int getOptionalInt(const char* name, int defaultValue = 0) const;
 		unsigned int getOptionalUInt(const char* name, unsigned int defaultValue = 0) const;
-		const ST::string getOptionalString(const char *name) const;
+		ST::string getOptionalString(const char* name, const ST::string defaultValue = {}) const;
 		bool has(const char* name) const;
 		std::vector<ST::string> keys() const;
 		void set(const char* name, JsonValue value);

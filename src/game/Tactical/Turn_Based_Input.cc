@@ -2031,7 +2031,6 @@ static void HandleModAltCheats(UINT32 const key, UIEventKind * const new_event)
 			break;
 
 		case 'g': *new_event = I_NEW_MERC;                  break;
-		case 'h': gfReportHitChances = !gfReportHitChances; break;
 		case 'i': CreateRandomItem();                       break;
 		case 'j': gfNextFireJam = TRUE;                     break;
 		case 'k': GrenadeTest(MUSTARD_GRENADE, -20, 20);    break;
@@ -2853,7 +2852,7 @@ static void ObliterateSector()
 	FOR_EACH_NON_PLAYER_SOLDIER(s)
 	{
 		// bloodcats and civilians are neutral
-		if ((s->bNeutral && s->ubBodyType != BLOODCAT) || s->bSide == OUR_TEAM) continue;
+		if ((s->bNeutral && s->ubBodyType != BLOODCAT) || s->bSide == Side::FRIENDLY) continue;
 		// a damage value like 0xFFFF seems to be too high and leads to weird
 		// calculations like 0 or 1 damage or even healing
 		EVENT_SoldierGotHit(s, STRUCTURE_EXPLOSION, 10000, 0, s->bDirection, 320, 0, FIRE_WEAPON_NO_SPECIAL, s->bAimShotLocation, NOWHERE);

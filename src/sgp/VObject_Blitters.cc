@@ -22,6 +22,21 @@ static uint16_t DoZ(int32_t const a, int32_t const b)
 	return a > b ? static_cast<uint16_t>(a - b) : 0;
 }
 
+namespace {
+// Helper function objects for blitters implemented using function templates.
+
+// This version is used by the blitters that do not have 'NB' in their name.
+// 'NB' probably means "no bleed through".
+struct UpdateZ { void operator()(UINT16 * zdst, UINT16 zval) { *zdst = zval; } };
+
+// This version does not update the ZBuffer and needs the following line
+// as a somewhat elaborate way to say NOP. Is is used by 'NB' blitters.
+struct DontUpdateZ { void operator()(UINT16 *, UINT16) {} };
+
+// An unrestrained clipping rect. This can be used to implement blitters
+// that do not use a clipping rect with their clipped siblings.
+SGPRect const gUnrestrained{ 0, 0, UINT16_MAX, UINT16_MAX };
+}
 
 /* Blit an image into the destination buffer, using an ETRLE brush as a source,
  * and a 16-bit buffer as a destination. As it is blitting, it checks the Z
@@ -768,14 +783,14 @@ void Blt8BPPDataTo16BPPBufferTransShadow(UINT16* pBuffer, UINT32 uiDestPitchBYTE
 				do
 				{
 					UINT8 px = *SrcPtr++;
-
+					auto DestPtr16{ reinterpret_cast<UINT16 *>(DestPtr) };
 					if (px == 254)
 					{
-						*(UINT16*)DestPtr = ShadeTable[2 * (*(UINT16*)DestPtr)];
+						*DestPtr16 = ShadeTable[*DestPtr16];
 					}
 					else
 					{
-						*(UINT16*)DestPtr = p16BPPPalette[2 * px];
+						*DestPtr16 = p16BPPPalette[px];
 					}
 					DestPtr += 2;
 				}
@@ -801,71 +816,7 @@ Blt8BPPDataTo16BPPBufferTransShadowZ
 **********************************************************************************************/
 void Blt8BPPDataTo16BPPBufferTransShadowZ(UINT16* pBuffer, UINT32 uiDestPitchBYTES, UINT16* pZBuffer, UINT16 usZValue, HVOBJECT hSrcVObject, INT32 iX, INT32 iY, UINT16 usIndex, const UINT16* p16BPPPalette)
 {
-	UINT8  *DestPtr, *ZPtr;
-	UINT32 LineSkip;
-
-	// Assertions
-	Assert( hSrcVObject != NULL );
-	Assert( pBuffer != NULL );
-
-	// Get Offsets from Index into structure
-	ETRLEObject const& pTrav = hSrcVObject->SubregionProperties(usIndex);
-	UINT32          usHeight = pTrav.usHeight;
-	UINT32    const usWidth  = pTrav.usWidth;
-
-	// Add to start position of dest buffer
-	INT32 const iTempX = iX + pTrav.sOffsetX;
-	INT32 const iTempY = iY + pTrav.sOffsetY;
-
-	// Validations
-	CHECKV(iTempX >= 0);
-	CHECKV(iTempY >= 0);
-
-	UINT8 const* SrcPtr = hSrcVObject->PixData(pTrav);
-	DestPtr = (UINT8 *)pBuffer + (uiDestPitchBYTES*iTempY) + (iTempX*2);
-	ZPtr = (UINT8 *)pZBuffer + (uiDestPitchBYTES*iTempY) + (iTempX*2);
-	LineSkip=(uiDestPitchBYTES-(usWidth*2));
-
-	do
-	{
-		for (;;)
-		{
-			UINT8 data = *SrcPtr++;
-
-			if (data == 0) break;
-			if (data & 0x80)
-			{
-				data &= 0x7F;
-				DestPtr += 2 * data;
-			}
-			else
-			{
-				do
-				{
-					UINT8 px = *SrcPtr++;
-
-					if (px == 254)
-					{
-						if (*(UINT16*)ZPtr < usZValue)
-						{
-							*(UINT16*)DestPtr = ShadeTable[2 * (*(UINT16*)DestPtr)];
-						}
-					}
-					else
-					{
-						if (*(UINT16*)ZPtr <= usZValue)
-						{
-							*(UINT16*)DestPtr = p16BPPPalette[2 * px];
-						}
-					}
-					DestPtr += 2;
-				}
-				while (--data > 0);
-			}
-		}
-		DestPtr += LineSkip;
-	}
-	while (--usHeight > 0);
+	Blt8BPPDataTo16BPPBufferTransShadowZClip(pBuffer, uiDestPitchBYTES, pZBuffer, usZValue, hSrcVObject, iX, iY, usIndex, &gUnrestrained, p16BPPPalette);
 }
 
 
@@ -882,74 +833,7 @@ Blt8BPPDataTo16BPPBufferTransShadowZNB
 **********************************************************************************************/
 void Blt8BPPDataTo16BPPBufferTransShadowZNB(UINT16* pBuffer, UINT32 uiDestPitchBYTES, UINT16* pZBuffer, UINT16 usZValue, HVOBJECT hSrcVObject, INT32 iX, INT32 iY, UINT16 usIndex, const UINT16* p16BPPPalette)
 {
-	UINT8  *DestPtr, *ZPtr;
-	UINT32 LineSkip;
-
-	// Assertions
-	Assert( hSrcVObject != NULL );
-	Assert( pBuffer != NULL );
-
-	// Get Offsets from Index into structure
-	ETRLEObject const& pTrav = hSrcVObject->SubregionProperties(usIndex);
-	UINT32             usHeight = pTrav.usHeight;
-	UINT32      const  usWidth  = pTrav.usWidth;
-
-	// Add to start position of dest buffer
-	INT32 const iTempX = iX + pTrav.sOffsetX;
-	INT32 const iTempY = iY + pTrav.sOffsetY;
-
-	// Validations
-	CHECKV(iTempX >= 0);
-	CHECKV(iTempY >= 0);
-
-	UINT8 const* SrcPtr = hSrcVObject->PixData(pTrav);
-	DestPtr = (UINT8 *)pBuffer + (uiDestPitchBYTES*iTempY) + (iTempX*2);
-	ZPtr = (UINT8 *)pZBuffer + (uiDestPitchBYTES*iTempY) + (iTempX*2);
-	LineSkip=(uiDestPitchBYTES-(usWidth*2));
-
-	do
-	{
-		for (;;)
-		{
-			UINT8 data = *SrcPtr++;
-
-			if (data == 0) break;
-			if (data & 0x80)
-			{
-				data &= 0x7F;
-				DestPtr += 2 * data;
-				ZPtr += 2 * data;
-			}
-			else
-			{
-				do
-				{
-					UINT8 px = *SrcPtr++;
-
-					if (px == 254)
-					{
-						if (*(UINT16*)ZPtr < usZValue)
-						{
-							*(UINT16*)DestPtr = ShadeTable[*(UINT16*)DestPtr];
-						}
-					}
-					else
-					{
-						if (*(UINT16*)ZPtr <= usZValue)
-						{
-							*(UINT16*)DestPtr = p16BPPPalette[px];
-						}
-					}
-					DestPtr += 2;
-					ZPtr += 2;
-				}
-				while (--data > 0);
-			}
-		}
-		DestPtr += LineSkip;
-		ZPtr += LineSkip;
-	}
-	while (--usHeight > 0);
+	Blt8BPPDataTo16BPPBufferTransShadowZNBClip(pBuffer, uiDestPitchBYTES, pZBuffer, usZValue, hSrcVObject, iX, iY, usIndex, &gUnrestrained, p16BPPPalette);
 }
 
 
@@ -1052,7 +936,8 @@ Blt8BPPDataTo16BPPBufferTransShadowZClip
 	254 are shaded instead of blitted.
 
 **********************************************************************************************/
-void Blt8BPPDataTo16BPPBufferTransShadowZClip(UINT16* pBuffer, UINT32 uiDestPitchBYTES, UINT16* pZBuffer, UINT16 usZValue, HVOBJECT hSrcVObject, INT32 iX, INT32 iY, UINT16 usIndex, SGPRect* clipregion, const UINT16* p16BPPPalette)
+template<typename UpdateZOrDont>
+void Blt8BPPDataTo16BPPBufferTransShadowZClip(UINT16* pBuffer, UINT32 uiDestPitchBYTES, UINT16* pZBuffer, UINT16 usZValue, SGPVObject const * hSrcVObject, INT32 iX, INT32 iY, UINT16 usIndex, SGPRect const * clipregion, const UINT16* p16BPPPalette)
 {
 	UINT8  *DestPtr, *ZPtr;
 	UINT32 LineSkip;
@@ -1110,13 +995,11 @@ void Blt8BPPDataTo16BPPBufferTransShadowZClip(UINT16* pBuffer, UINT32 uiDestPitc
 	ZPtr = (UINT8 *)pZBuffer + (uiDestPitchBYTES*(iTempY+TopSkip)) + ((iTempX+LeftSkip)*2);
 	LineSkip=(uiDestPitchBYTES-(BlitLength*2));
 
-	UINT8 PxCount, px = 0;
 	UINT32 Unblitted, LSCount;
-
 
 	while (TopSkip)
 	{
-		px = *SrcPtr++;
+		UINT8 const px = *SrcPtr++;
 		if (px & 0x80)  continue;
 		if (px)
 		{
@@ -1129,6 +1012,7 @@ void Blt8BPPDataTo16BPPBufferTransShadowZClip(UINT16* pBuffer, UINT32 uiDestPitc
 	do
 	{
 		Unblitted = 0;
+		UINT8 PxCount{};
 		for (LSCount = LeftSkip; LSCount > 0; LSCount -= PxCount)
 		{
 			PxCount = *SrcPtr++;
@@ -1145,7 +1029,7 @@ void Blt8BPPDataTo16BPPBufferTransShadowZClip(UINT16* pBuffer, UINT32 uiDestPitc
 			}
 			else
 			{
-				if (px > LSCount)
+				if (PxCount > LSCount)
 				{
 					SrcPtr += LSCount;
 					PxCount -= LSCount;
@@ -1186,20 +1070,20 @@ BlitNonTransLoop: // blit non-transparent pixels
 
 				do
 				{
-					if (*ZPtr < usZValue )
+					auto zptr16{ reinterpret_cast<UINT16 *>(ZPtr) };
+					UINT8 const px{ *SrcPtr++ };
+					if (*zptr16 < usZValue)
 					{
-						*ZPtr = usZValue;
-						px = *SrcPtr++;
-						if (px != 254)
-							*(UINT16*)DestPtr = p16BPPPalette[px];
-						else
-							*(UINT16*)DestPtr = ShadeTable[*(UINT16*)DestPtr];
+						// This will either become *zptr16 = usZValue or a NOP.
+						UpdateZOrDont{}(zptr16, usZValue);
+						auto dstPtr16{ reinterpret_cast<UINT16 *>(DestPtr) };
+						*dstPtr16 = (px != 254)	? p16BPPPalette[px] : ShadeTable[*dstPtr16];
 					}
 
 					DestPtr += 2;
 					ZPtr += 2;
 				}
-				while ( --px > 0 );
+				while (--PxCount > 0);
 				SrcPtr += Unblitted;
 			}
 		}
@@ -1209,6 +1093,30 @@ BlitNonTransLoop: // blit non-transparent pixels
 	}
 	while ( --BlitHeight > 0 );
 }
+
+
+void Blt8BPPDataTo16BPPBufferTransShadowZClip(UINT16* pBuffer, UINT32 uiDestPitchBYTES, UINT16* pZBuffer, UINT16 usZValue, SGPVObject const * hSrcVObject, INT32 iX, INT32 iY, UINT16 usIndex, SGPRect const * clipregion, const UINT16* p16BPPPalette)
+{
+	Blt8BPPDataTo16BPPBufferTransShadowZClip<UpdateZ>(pBuffer, uiDestPitchBYTES, pZBuffer, usZValue, hSrcVObject, iX, iY, usIndex, clipregion, p16BPPPalette);
+}
+
+/**********************************************************************************************
+Blt8BPPDataTo16BPPBufferTransShadowZNBClip
+
+	Blits an image into the destination buffer, using an ETRLE brush as a source, and a 16-bit
+	buffer as a destination. As it is blitting, it checks the Z value of the ZBuffer, and if the
+	pixel's Z level is below that of the current pixel, it is written on.
+	The Z-buffer is 16 bit, and	must be the same dimensions (including Pitch) as the
+	destination. Pixels with a value of	254 are shaded instead of blitted. The Z buffer is
+	NOT updated.
+
+**********************************************************************************************/
+
+void Blt8BPPDataTo16BPPBufferTransShadowZNBClip(UINT16* pBuffer, UINT32 uiDestPitchBYTES, UINT16* pZBuffer, UINT16 usZValue, SGPVObject const * hSrcVObject, INT32 iX, INT32 iY, UINT16 usIndex, SGPRect const * clipregion, const UINT16* p16BPPPalette)
+{
+	Blt8BPPDataTo16BPPBufferTransShadowZClip<DontUpdateZ>(pBuffer, uiDestPitchBYTES, pZBuffer, usZValue, hSrcVObject, iX, iY, usIndex, clipregion, p16BPPPalette);
+}
+
 
 /**********************************************************************************************
 Blt8BPPDataTo16BPPBufferTransShadowClip
@@ -1278,13 +1186,12 @@ void Blt8BPPDataTo16BPPBufferTransShadowClip(UINT16* pBuffer, UINT32 uiDestPitch
 	DestPtr = (UINT8 *)pBuffer + (uiDestPitchBYTES*(iTempY+TopSkip)) + ((iTempX+LeftSkip)*2);
 	LineSkip=(uiDestPitchBYTES-(BlitLength*2));
 
-	UINT8 PxCount, px = 0;
 	UINT32 Unblitted;
 	INT32 LSCount;
 
 	while (TopSkip)
 	{
-		px = *SrcPtr++;
+		UINT8 const px = *SrcPtr++;
 		if (px & 0x80)  continue;
 		if (px)
 		{
@@ -1297,6 +1204,7 @@ void Blt8BPPDataTo16BPPBufferTransShadowClip(UINT16* pBuffer, UINT32 uiDestPitch
 	do
 	{
 		Unblitted = 0;
+		UINT8 PxCount{};
 		for (LSCount = LeftSkip; LSCount > 0; LSCount -= PxCount)
 		{
 			PxCount = *SrcPtr++;
@@ -1313,7 +1221,7 @@ void Blt8BPPDataTo16BPPBufferTransShadowClip(UINT16* pBuffer, UINT32 uiDestPitch
 			}
 			else
 			{
-				if (px > LSCount)
+				if (PxCount > LSCount)
 				{
 					SrcPtr += LSCount;
 					PxCount -= LSCount;
@@ -1353,14 +1261,12 @@ BlitNonTransLoop: // blit non-transparent pixels
 
 				do
 				{
-					px = *SrcPtr++;
-					if (px != 254)
-						*(UINT16*)DestPtr = p16BPPPalette[px];
-					else
-						*(UINT16*)DestPtr = ShadeTable[*(UINT16*)DestPtr];
+					UINT8 const px{ *SrcPtr++ };
+					auto dstPtr16{ reinterpret_cast<UINT16 *>(DestPtr) };
+					*dstPtr16 = (px != 254)	? p16BPPPalette[px] : ShadeTable[*dstPtr16];
 					DestPtr += 2;
 				}
-				while ( --px > 0 );
+				while (--PxCount > 0);
 				SrcPtr += Unblitted;
 			}
 		}
@@ -1368,178 +1274,6 @@ BlitNonTransLoop: // blit non-transparent pixels
 		DestPtr += LineSkip;
 	}
 	while ( --BlitHeight > 0 );
-}
-
-/**********************************************************************************************
-Blt8BPPDataTo16BPPBufferTransShadowZNBClip
-
-	Blits an image into the destination buffer, using an ETRLE brush as a source, and a 16-bit
-	buffer as a destination. As it is blitting, it checks the Z value of the ZBuffer, and if the
-	pixel's Z level is below that of the current pixel, it is written on.
-	The Z-buffer is 16 bit, and	must be the same dimensions (including Pitch) as the
-	destination. Pixels with a value of	254 are shaded instead of blitted. The Z buffer is
-	NOT updated.
-
-**********************************************************************************************/
-void Blt8BPPDataTo16BPPBufferTransShadowZNBClip(UINT16* pBuffer, UINT32 uiDestPitchBYTES, UINT16* pZBuffer, UINT16 usZValue, HVOBJECT hSrcVObject, INT32 iX, INT32 iY, UINT16 usIndex, SGPRect* clipregion, const UINT16* p16BPPPalette)
-{
-	UINT32 Unblitted;
-	UINT8  *DestPtr, *ZPtr;
-	UINT32 LineSkip;
-	INT32  LeftSkip, RightSkip, TopSkip, BottomSkip, BlitLength, BlitHeight, LSCount;
-	INT32  ClipX1, ClipY1, ClipX2, ClipY2;
-
-	// Assertions
-	Assert( hSrcVObject != NULL );
-	Assert( pBuffer != NULL );
-
-	// Get Offsets from Index into structure
-	ETRLEObject const& pTrav = hSrcVObject->SubregionProperties(usIndex);
-	UINT32      const  usHeight = pTrav.usHeight;
-	UINT32      const  usWidth  = pTrav.usWidth;
-
-	// Add to start position of dest buffer
-	INT32 const iTempX = iX + pTrav.sOffsetX;
-	INT32 const iTempY = iY + pTrav.sOffsetY;
-
-	if(clipregion==NULL)
-	{
-		ClipX1=ClippingRect.iLeft;
-		ClipY1=ClippingRect.iTop;
-		ClipX2=ClippingRect.iRight;
-		ClipY2=ClippingRect.iBottom;
-	}
-	else
-	{
-		ClipX1=clipregion->iLeft;
-		ClipY1=clipregion->iTop;
-		ClipX2=clipregion->iRight;
-		ClipY2=clipregion->iBottom;
-	}
-
-	// Calculate rows hanging off each side of the screen
-	LeftSkip = std::min(ClipX1 - std::min(ClipX1, iTempX), (INT32)usWidth);
-	RightSkip = std::clamp(iTempX + (INT32)usWidth - ClipX2, 0, (INT32)usWidth);
-	TopSkip = std::min(ClipY1 - std::min(ClipY1, iTempY), (INT32)usHeight);
-	BottomSkip = std::clamp(iTempY + (INT32)usHeight - ClipY2, 0, (INT32)usHeight);
-
-	// calculate the remaining rows and columns to blit
-	BlitLength=((INT32)usWidth-LeftSkip-RightSkip);
-	BlitHeight=((INT32)usHeight-TopSkip-BottomSkip);
-
-	// check if whole thing is clipped
-	if((LeftSkip >=(INT32)usWidth) || (RightSkip >=(INT32)usWidth))
-		return;
-
-	// check if whole thing is clipped
-	if((TopSkip >=(INT32)usHeight) || (BottomSkip >=(INT32)usHeight))
-		return;
-
-	UINT8 const* SrcPtr = hSrcVObject->PixData(pTrav);
-	DestPtr = (UINT8 *)pBuffer + (uiDestPitchBYTES*(iTempY+TopSkip)) + ((iTempX+LeftSkip)*2);
-	ZPtr = (UINT8 *)pZBuffer + (uiDestPitchBYTES*(iTempY+TopSkip)) + ((iTempX+LeftSkip)*2);
-	LineSkip=(uiDestPitchBYTES-(BlitLength*2));
-
-	UINT32 PxCount;
-
-	while (TopSkip > 0)
-	{
-		for (;;)
-		{
-			PxCount = *SrcPtr++;
-			if (PxCount & 0x80) continue;
-			if (PxCount == 0) break;
-			SrcPtr += PxCount;
-		}
-		TopSkip--;
-	}
-
-	do
-	{
-		for (LSCount = LeftSkip; LSCount > 0; LSCount -= PxCount)
-		{
-			PxCount = *SrcPtr++;
-			if (PxCount & 0x80)
-			{
-				PxCount &= 0x7F;
-				if (PxCount > static_cast<UINT32>(LSCount))
-				{
-					PxCount -= LSCount;
-					LSCount = BlitLength;
-					goto BlitTransparent;
-				}
-			}
-			else
-			{
-				if (PxCount > static_cast<UINT32>(LSCount))
-				{
-					SrcPtr += LSCount;
-					PxCount -= LSCount;
-					LSCount = BlitLength;
-					goto BlitNonTransLoop;
-				}
-				SrcPtr += PxCount;
-			}
-		}
-
-		LSCount = BlitLength;
-		while (LSCount > 0)
-		{
-			PxCount = *SrcPtr++;
-			if (PxCount & 0x80)
-			{
-BlitTransparent: // skip transparent pixels
-				PxCount &= 0x7F;
-				if (PxCount > static_cast<UINT32>(LSCount)) PxCount = LSCount;
-				LSCount -= PxCount;
-				DestPtr += 2 * PxCount;
-				ZPtr    += 2 * PxCount;
-			}
-			else
-			{
-BlitNonTransLoop: // blit non-transparent pixels
-				if (PxCount > static_cast<UINT32>(LSCount))
-				{
-					Unblitted = PxCount - LSCount;
-					PxCount = LSCount;
-				}
-				else
-				{
-					Unblitted = 0;
-				}
-				LSCount -= PxCount;
-
-				do
-				{
-					UINT8 px = *SrcPtr++;
-
-					if (px == 254)
-					{
-						if (*(UINT16*)ZPtr < usZValue)
-						{
-							*(UINT16*)DestPtr = ShadeTable[*(UINT16*)DestPtr];
-						}
-					}
-					else
-					{
-						if (*(UINT16*)ZPtr <= usZValue)
-						{
-							*(UINT16*)DestPtr = p16BPPPalette[px];
-						}
-					}
-					DestPtr += 2;
-					ZPtr += 2;
-				}
-				while (--PxCount > 0);
-				SrcPtr += Unblitted;
-			}
-		}
-
-		while (*SrcPtr++ != 0) {} // skip along until we hit and end-of-line marker
-		DestPtr += LineSkip;
-		ZPtr += LineSkip;
-	}
-	while (--BlitHeight > 0);
 }
 
 
@@ -3754,9 +3488,6 @@ void Blt8BPPDataTo16BPPBufferOutlineZPixelateObscuredClip(UINT16* const pBuffer,
 
 	LineSkip=(uiDestPitchBYTES-(BlitLength*2));
 	UINT16 const* const p16BPPPalette = hSrcVObject->CurrentShade();
-	uiLineFlag=(iTempY&1);
-
-
 	uiLineFlag = (iTempY + TopSkip) & 1;
 
 	UINT32 PxCount;
@@ -5558,8 +5289,6 @@ void Blt8BPPDataTo16BPPBufferTransZClipPixelateObscured( UINT16 *pBuffer, UINT32
 	ZPtr = (UINT8 *)pZBuffer + (uiDestPitchBYTES*(iTempY+TopSkip)) + ((iTempX+LeftSkip)*2);
 	UINT16 const* const p16BPPPalette = hSrcVObject->CurrentShade();
 	LineSkip=(uiDestPitchBYTES-(BlitLength*2));
-	uiLineFlag=(iTempY&1);
-
 	uiLineFlag = (iTempY + TopSkip) & 1;
 
 	UINT32 PxCount;

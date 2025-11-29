@@ -7,7 +7,8 @@
  *
  * Field definitions:
  *  - entranceSector:    Sector of the mine entrance on the surface level.
- *  - associatedTownId:    ID of the associated town, refer to strategic-map-towns.json.
+ *  - associatedTownId:    DEPRECATED in favour of associatedTown. Present here only for backward compatibility with pre-22 version mods that don't have internalName property in strategic-map-towns.json.
+ *  - associatedTown:    Name of the associated town, refer to strategic-map-towns.json.
  *  - mineType:    Either "GOLD_MINE" or "SILVER_MINE".
  *  - headMinerAssigned:    True if there is a specific head miner assigned (in merc profile) to the entrance sector. If not, a head miner will be randomly assigned. Either way, the mine entrance sector must have the head miner slot(s) placed, unless it is abandoned.
  *  - noDepletion:    Mines (Alma in Vanilla) can be set to never deplete, so there will always be head miner giving quest. Defaults to false, so the mine may be randomly chosen for depletion.
@@ -17,18 +18,20 @@
  *  - faceDisplayYOffset:    Y-offset to the screen position, where the head miner's face and text box should be in order to not obscure the mine he's in as it flashes. See IssueHeadMinerQuote()
  */
 [
-    { // SAN_MONA
+    {
         "entranceSector": "D4",
-        "associatedTownId": 7,
+        "associatedTownId": 7, // deprecated
+        "associatedTown": "SAN_MONA",
         "mineType": "GOLD_MINE",
         "minimumMineProduction": 0, // abandoned
         "mineSectors": [
             ["D4", 1], ["D5", 1]
         ]
     },
-    { // DRASSEN
+    {
         "entranceSector": "D13",
-        "associatedTownId": 2,
+        "associatedTownId": 2, // deprecated
+        "associatedTown": "DRASSEN",
         "mineType": "SILVER_MINE",
         "delayDepletion": true,
         "minimumMineProduction": 1000,
@@ -37,9 +40,10 @@
         ],
         "faceDisplayYOffset": 135
     },
-    { // ALMA
+    {
         "entranceSector": "I14",
-        "associatedTownId": 3,
+        "associatedTownId": 3, // deprecated
+        "associatedTown": "ALMA",
         "mineType": "SILVER_MINE",
         "headMinerAssigned": true, // Matt is always the head miner here
         "noDepletion": true, // Alma mine can't run out for quest-related reasons
@@ -48,18 +52,20 @@
             ["I14", 1], ["J14", 1]
         ]
     },
-    { // CAMBRIA
+    {
         "entranceSector": "H8",
-        "associatedTownId": 6,
+        "associatedTownId": 6, // deprecated
+        "associatedTown": "CAMBRIA",
         "mineType": "SILVER_MINE",
         "minimumMineProduction": 1500,
         "mineSectors": [
             ["H8", 1], ["H9", 1]
         ]
     },
-    { // CHITZENA
+    {
         "entranceSector": "B2",
-        "associatedTownId": 12,
+        "associatedTownId": 12, // deprecated
+        "associatedTown": "CHITZENA",
         "mineType": "SILVER_MINE",
         "minimumMineProduction": 500,
         "mineSectors": [
@@ -67,9 +73,10 @@
         ],
         "faceDisplayYOffset": 117
     },
-    { // GRUMM
+    {
         "entranceSector": "H3",
-        "associatedTownId": 4,
+        "associatedTownId": 4, // deprecated
+        "associatedTown": "GRUMM",
         "mineType": "GOLD_MINE",
         "minimumMineProduction": 2000,
         "mineSectors": [

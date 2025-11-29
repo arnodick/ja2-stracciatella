@@ -1,7 +1,6 @@
 #include "Interface_Dialogue.h"
 
 #include "AI.h"
-#include "AIInternals.h"
 #include "Animation_Control.h"
 #include "Animation_Data.h"
 #include "Arms_Dealer_Init.h"
@@ -640,11 +639,9 @@ void RenderTalkingMenu()
 
 	// Render name
 	SetFontAttributes(MILITARYFONT1, tp->fOnName ? FONT_WHITE : 33);
-	ST::string name = GetProfile(pid).zNickname;
-	INT16 sFontX;
-	INT16 sFontY;
-	FindFontCenterCoordinates(tp->sX + TALK_PANEL_NAME_X, tp->sY + TALK_PANEL_NAME_Y, TALK_PANEL_NAME_WIDTH, TALK_PANEL_NAME_HEIGHT, name, MILITARYFONT1, &sFontX, &sFontY);
-	MPrint(sFontX, sFontY, name);
+	MPrint(tp->sX + TALK_PANEL_NAME_X, tp->sY + TALK_PANEL_NAME_Y,
+		GetProfile(pid).zNickname,
+		HCenterVCenterAlign(TALK_PANEL_NAME_WIDTH, TALK_PANEL_NAME_HEIGHT));
 
 	SetFontShadow(DEFAULT_SHADOW);
 
@@ -761,10 +758,7 @@ void RenderTalkingMenu()
 		{
 			str = zTalkMenuStrings[cnt];
 		}
-		INT16 sFontX;
-		INT16 sFontY;
-		FindFontCenterCoordinates(x, y, TALK_PANEL_MENUTEXT_WIDTH, TALK_PANEL_MENUTEXT_HEIGHT, str, MILITARYFONT1, &sFontX, &sFontY);
-		MPrint(sFontX, sFontY, str);
+		MPrint(x, y, str, HCenterVCenterAlign(TALK_PANEL_MENUTEXT_WIDTH, TALK_PANEL_MENUTEXT_HEIGHT));
 
 		y += TALK_PANEL_MENUTEXT_SPACEY;
 	}
@@ -1559,6 +1553,23 @@ static void DoneFadeOutActionBasement(void);
 static void DoneFadeOutActionLeaveBasement(void);
 static void CarmenLeavesSectorCallback(void);
 
+namespace {
+// Handles both NPC_ACTION_WALTER_GIVEN_MONEY_INITIALLY and
+// NPC_ACTION_WALTER_GIVEN_MONEY.
+void WalterGivenMoney(NPCAction actionCode, NpcActionParamsModel const& params)
+{
+	if (gMercProfiles[WALTER].iBalance >= params.getAmount(WALTER_BRIBE_AMOUNT))
+	{
+		TriggerNPCRecord(WALTER, 16);
+	}
+	else
+	{
+		TriggerNPCRecord(WALTER,
+			actionCode == NPC_ACTION_WALTER_GIVEN_MONEY_INITIALLY ? 14 : 15);
+	}
+}
+}
+
 
 void HandleNPCDoAction( UINT8 ubTargetNPC, UINT16 usActionCode, UINT8 ubQuoteNum )
 {
@@ -1732,11 +1743,13 @@ void HandleNPCDoAction( UINT8 ubTargetNPC, UINT16 usActionCode, UINT8 ubQuoteNum
 							if ( bOldSlot != NO_SLOT  )
 							{
 								// rearrange profile... NB # of guns can only be 1 so this is easy
-								p.inv[bOldSlot]        = NOTHING;
-								p.bInvNumber[bOldSlot] = 0;
-
 								p.inv[bNewSlot]        = usGun;
 								p.bInvNumber[bNewSlot] = 1;
+								p.bInvStatus[bNewSlot] = p.bInvStatus[bOldSlot];
+
+								p.inv[bOldSlot]        = NOTHING;
+								p.bInvNumber[bOldSlot] = 0;
+								p.bInvStatus[bOldSlot] = 0;
 							}
 						}
 					}
@@ -1858,7 +1871,7 @@ void HandleNPCDoAction( UINT8 ubTargetNPC, UINT16 usActionCode, UINT8 ubQuoteNum
 				}
 				else
 				{
-					//MakeCivHostile( pSoldier, 2 );
+					//MakeCivHostile( pSoldier );
 				}
 				if (pSoldier->ubProfile != NO_PROFILE && pSoldier->bLife >= OKLIFE)
 				{
@@ -2589,12 +2602,27 @@ void HandleNPCDoAction( UINT8 ubTargetNPC, UINT16 usActionCode, UINT8 ubQuoteNum
 					case JOHN:
 						UnRecruitEPC( MARY );
 						break;
+					case SKYRIDER:
+						if (ubQuoteNum == 15) // quote triggered by proximity to the helicopter
+						{
+							// make him always appear at his map editor placement spot in the airport sector
+							gMercProfiles[SKYRIDER].fUseProfileInsertionInfo = FALSE;
+						}
+						break;
+					case JOEY:
+						if (ubQuoteNum == 9) // quote triggered by proximity to Martha
+						{
+							// since he has no map editor placement in Cambria, make him spawn in the room he was sent to
+							gMercProfiles[JOEY].usStrategicInsertionData = 18326;
+						}
+						break;
 				}
-				break;
-
-			case NPC_ACTION_REMOVE_DOREEN:
-				// make Doreen disappear next time we do a sector traversal
-				gMercProfiles[ DOREEN ].sSector = SGPSector();
+				if ((ubTargetNPC == JOHN || ubTargetNPC == MARY) && ubQuoteNum == 13) // quote triggered by proximity to the airplane
+				{
+					// make them disappear after unloading the sector
+					gMercProfiles[JOHN].sSector = SGPSector();
+					gMercProfiles[MARY].sSector = SGPSector();
+				}
 				break;
 
 			case NPC_ACTION_FREE_KIDS:
@@ -2635,7 +2663,7 @@ void HandleNPCDoAction( UINT8 ubTargetNPC, UINT16 usActionCode, UINT8 ubQuoteNum
 					else
 					{
 						// make hostile
-						MakeCivHostile( pSoldier, 2 );
+						MakeCivHostile( pSoldier );
 					}
 					DeleteTalkingMenu();
 					if ( ! ( gTacticalStatus.uiFlags & INCOMBAT ) )
@@ -3805,7 +3833,7 @@ action_punch_pc:
 			case NPC_ACTION_REMOVE_MERC_FOR_MARRIAGE:
 			{
 				SOLDIERTYPE* pSoldier = FindSoldierByProfileID(ubTargetNPC);
-				assert(pSoldier);
+				Assert(pSoldier);
 
 				pSoldier = ChangeSoldierTeam(pSoldier, CIV_TEAM);
 				// remove profile from map
@@ -4026,24 +4054,8 @@ add_log:
 			}
 
 			case NPC_ACTION_WALTER_GIVEN_MONEY_INITIALLY:
-				if ( gMercProfiles[ WALTER ].iBalance >= params->getGridNo(WALTER_BRIBE_AMOUNT) )
-				{
-					TriggerNPCRecord( WALTER, 16 );
-				}
-				else
-				{
-					TriggerNPCRecord( WALTER, 14 );
-				}
-				break;
 			case NPC_ACTION_WALTER_GIVEN_MONEY:
-				if ( gMercProfiles[ WALTER ].iBalance >= params->getGridNo(WALTER_BRIBE_AMOUNT) )
-				{
-					TriggerNPCRecord( WALTER, 16 );
-				}
-				else
-				{
-					TriggerNPCRecord( WALTER, 15 );
-				}
+				WalterGivenMoney(static_cast<NPCAction>(usActionCode), *params);
 				break;
 			default:
 				SLOGD("No code support for NPC action {}", usActionCode);

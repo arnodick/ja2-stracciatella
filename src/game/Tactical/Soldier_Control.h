@@ -248,6 +248,8 @@ enum InvSlotPos
 	NUM_INV_SLOTS,
 };
 
+extern UINT8 gubItemDroppableFlag[NUM_INV_SLOTS];
+
 //used for color codes, but also shows the enemy type for debugging purposes
 enum SoldierClass
 {
@@ -426,7 +428,7 @@ struct SOLDIERTYPE
 	AnimationSurfaceCacheType AnimCache;
 
 	INT8 bLife; // current life (hit points or health)
-	UINT8 bSide;
+	Side bSide;
 	INT8 bNewOppCnt;
 
 	UINT16 usAniCode;

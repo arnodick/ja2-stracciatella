@@ -24,7 +24,7 @@ struct TacticalTeamType
 	UINT8        bFirstID;
 	UINT8        bLastID;
 	COLORVAL     RadarColor;
-	INT8         bSide;
+	Side         bSide;
 	INT8         bMenInSector;
 	INT8         bAwareOfOpposition;
 	INT8         bHuman;
@@ -264,6 +264,7 @@ void HandleNPCTeamMemberDeath( SOLDIERTYPE *pSoldier );
 BOOLEAN UIOKMoveDestination(const SOLDIERTYPE* pSoldier, UINT16 usMapPos);
 
 INT16 FindAdjacentGridEx(SOLDIERTYPE* pSoldier, INT16 sGridNo, UINT8* pubDirection, INT16* psAdjustedGridNo, BOOLEAN fForceToPerson, BOOLEAN fDoor);
+GridNo FindAdjacentGridExAdvanced(SOLDIERTYPE* soldier, STRUCTURE& intStruct, GridNo gridNo, uint8_t* dirToTurnTo);
 INT16 FindNextToAdjacentGridEx( SOLDIERTYPE *pSoldier, INT16 sGridNo, UINT8 *pubDirection, INT16 *psAdjustedGridNo, BOOLEAN fForceToPerson, BOOLEAN fDoor );
 
 
@@ -318,7 +319,7 @@ void RemoveManFromTeam( INT8 bTeam );
 
 void RemoveSoldierFromTacticalSector(SOLDIERTYPE&);
 
-void MakeCivHostile( SOLDIERTYPE *pSoldier, INT8 bNewSide );
+void MakeCivHostile(SOLDIERTYPE *pSoldier);
 
 #define REASON_NORMAL_ATTACK		1
 #define REASON_EXPLOSION		2

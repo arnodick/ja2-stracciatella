@@ -1,10 +1,10 @@
-add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/Editor")
-add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/Laptop")
-add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/Strategic")
-add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/Tactical")
-add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/TacticalAI")
-add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/TileEngine")
-add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/Utils")
+add_and_include_subdirectory("Editor")
+add_and_include_subdirectory("Laptop")
+add_and_include_subdirectory("Strategic")
+add_and_include_subdirectory("Tactical")
+add_and_include_subdirectory("TacticalAI")
+add_and_include_subdirectory("TileEngine")
+add_and_include_subdirectory("Utils")
 
 file(GLOB LOCAL_JA2_HEADERS ${CMAKE_CURRENT_SOURCE_DIR}/*.h)
 set(LOCAL_JA2_SOURCES
@@ -39,20 +39,23 @@ set(LOCAL_JA2_SOURCES
 if (WITH_UNITTESTS)
     set(LOCAL_JA2_SOURCES
         ${LOCAL_JA2_SOURCES}
+        ${CMAKE_CURRENT_SOURCE_DIR}/LoadSaveTacticalStatusType_unittest.cc
         ${CMAKE_CURRENT_SOURCE_DIR}/SaveLoadGame_unittest.cc
         ${CMAKE_CURRENT_SOURCE_DIR}/SaveLoadGameStates_unittest.cc
-        ${CMAKE_CURRENT_SOURCE_DIR}/VanillaDataStructures_unittest.cc
     )
 endif()
+
+set_property(
+    SOURCE
+        ${CMAKE_CURRENT_SOURCE_DIR}/LoadSaveEMail.cc
+        ${CMAKE_CURRENT_SOURCE_DIR}/LoadSaveTacticalStatusType.cc
+    DIRECTORY ${CMAKE_SOURCE_DIR}
+    PROPERTY UNITY_GROUP "LoadSaveDataTypes"
+)
 
 set(JA2_SOURCES
     ${JA2_SOURCES}
     ${LOCAL_JA2_SOURCES}
     ${LOCAL_JA2_HEADERS}
-    PARENT_SCOPE
-)
-set(JA2_INCLUDES
-    ${JA2_INCLUDES}
-    ${CMAKE_CURRENT_SOURCE_DIR}
     PARENT_SCOPE
 )

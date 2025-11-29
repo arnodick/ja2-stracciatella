@@ -16,6 +16,7 @@
 #include "MessageBoxScreen.h"
 #include "Music_Control.h"
 #include "ContentMusic.h"
+#include "Object_Cache.h"
 #include "Options_Screen.h"
 #include "Render_Dirty.h"
 #include "SGP.h"
@@ -51,8 +52,10 @@ enum
 static BUTTON_PICS* iMenuImages[NUM_MENU_ITEMS];
 static GUIButtonRef iMenuButtons[NUM_MENU_ITEMS];
 
-static SGPVObject* guiMainMenuBackGroundImage;
-static SGPVObject* guiJa2LogoImage;
+namespace {
+cache_key_t const guiMainMenuBackGroundImage{ LOADSCREENSDIR "/mainmenubackground.sti" };
+cache_key_t const guiJa2LogoImage{ LOADSCREENSDIR "/ja2logo.sti" };
+}
 
 static INT8    gbHandledMainMenu = 0;
 static BOOLEAN fInitialRender    = FALSE;
@@ -72,6 +75,42 @@ static void HandleMainMenuScreen(void);
 static void RenderMainMenu(void);
 static void RenderGameVersion(void);
 static void RenderCopyright(void);
+
+
+static void CaptureButtonAreaBackground() {
+	SGPBox
+		buttonArea = {
+			std::numeric_limits<UINT16>().max(), std::numeric_limits<UINT16>().max(),
+			0, 0
+		};
+
+	for( const auto &curButton : iMenuButtons ) {
+		buttonArea.x = std::min( buttonArea.x, static_cast<UINT16>( curButton->Area.RegionTopLeftX ));
+		buttonArea.y = std::min( buttonArea.y, static_cast<UINT16>( curButton->Area.RegionTopLeftY ));
+		buttonArea.w = std::max( buttonArea.w, static_cast<UINT16>( curButton->Area.RegionBottomRightX ));
+		buttonArea.h = std::max( buttonArea.h, static_cast<UINT16>( curButton->Area.RegionBottomRightY ));
+	}
+
+	buttonArea.w -= buttonArea.x;
+	buttonArea.h -= buttonArea.y;
+
+	BltVideoSurface( guiEXTRABUFFER, FRAME_BUFFER, buttonArea.x, buttonArea.y, &buttonArea );
+}
+
+
+static void RedrawActiveButtonBackgrounds() {
+	for( const auto &curButton : iMenuButtons ) {
+		if(( curButton->uiFlags ^ curButton->uiOldFlags ) & ( BUTTON_CLICKED_ON | BUTTON_ENABLED )) {
+			const SGPBox
+				buttonRect = {
+					static_cast<UINT16>( curButton->X()), static_cast<UINT16>( curButton->Y()),
+					static_cast<UINT16>( curButton->W()), static_cast<UINT16>( curButton->H())
+				};
+
+			BltVideoSurface( FRAME_BUFFER, guiEXTRABUFFER, buttonRect.x, buttonRect.y, &buttonRect );
+		}
+	}
+}
 
 
 ScreenID MainMenuScreenHandle(void)
@@ -121,9 +160,12 @@ ScreenID MainMenuScreenHandle(void)
 		RenderMainMenu();
 		RenderGameVersion();
 		RenderCopyright();
+		CaptureButtonAreaBackground();
 
 		fInitialRender = FALSE;
 	}
+
+	RedrawActiveButtonBackgrounds();
 
 	RenderButtons();
 
@@ -187,9 +229,6 @@ void InitMainMenu(void)
 {
 	CreateDestroyMainMenuButtons(TRUE);
 
-	guiMainMenuBackGroundImage = AddVideoObjectFromFile(LOADSCREENSDIR "/mainmenubackground.sti");
-	guiJa2LogoImage            = AddVideoObjectFromFile(LOADSCREENSDIR "/ja2logo.sti");
-
 	// If there are no saved games, disable the button
 	if (!AreThereAnySavedGameFiles()) DisableButton(iMenuButtons[LOAD_GAME]);
 
@@ -208,8 +247,8 @@ void InitMainMenu(void)
 static void ExitMainMenu(void)
 {
 	CreateDestroyMainMenuButtons(FALSE);
-	DeleteVideoObject(guiMainMenuBackGroundImage);
-	DeleteVideoObject(guiJa2LogoImage);
+	RemoveVObject(guiMainMenuBackGroundImage);
+	RemoveVObject(guiJa2LogoImage);
 	gMsgBox.uiExitScreen = MAINMENU_SCREEN;
 }
 

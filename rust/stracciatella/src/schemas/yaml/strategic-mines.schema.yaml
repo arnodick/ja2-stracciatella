@@ -16,8 +16,12 @@ items:
       $ref: types/sector-id.schema.yaml
     associatedTownId:
       title: Associated Town ID
-      description: ID of the associated town, refer to strategic-map-towns.json.
+      description: Deprecated.
       $ref: types/uint8.schema.yaml
+    associatedTown:
+      title: Associated Town Name
+      description: Name of the associated town, refer to strategic-map-towns.json.
+      type: string
     mineType:
       title: Mine Type
       description: Type of mine.
@@ -70,7 +74,7 @@ items:
       type: boolean
   required:
   - entranceSector
-  - associatedTownId
+  - associatedTown
   - mineType
   - minimumMineProduction
   - mineSectors

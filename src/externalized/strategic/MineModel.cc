@@ -2,7 +2,7 @@
 
 #include "JsonUtility.h"
 #include "Strategic_Mines.h"
-#include <utility>
+#include "TownModel.h"
 
 MineModel::MineModel(const uint8_t mineId_, const uint8_t entranceSector_, const uint8_t associatedTownId_,
 	const uint8_t mineType_, const uint16_t minimumMineProduction_, const bool headMinerAssigned_,
@@ -46,16 +46,19 @@ std::vector<std::array<uint8_t, 2>> readMineSectors(const JsonValue& sectorsJson
 	return sectors;
 }
 
-MineModel* MineModel::deserialize(uint8_t index, const JsonValue& json)
+MineModel* MineModel::deserialize(uint8_t index, const JsonValue& json, const ContentManager* contentManager, const bool jsonIsOnModLayer)
 {
 	auto obj = json.toObject();
 	auto entrance = JsonUtility::parseSectorID(obj["entranceSector"]);
 	auto mineSectors = readMineSectors(obj["mineSectors"]);
 
+	uint8_t townId = obj.getOptionalUInt("associatedTownId");
+	if (townId && jsonIsOnModLayer) SLOGW("Property `associatedTownId` in strategic-mines.json has been deprecated. Use `associatedTown` instead.");
+
 	return new MineModel(
 		index,
 		entrance,
-		obj.GetUInt("associatedTownId"),
+		townId ? townId : contentManager->getTownByName(obj.GetString("associatedTown"))->townId,
 		mineTypeFromString(obj.GetString("mineType")),
 		obj.GetUInt("minimumMineProduction"),
 		obj.getOptionalBool("headMinerAssigned"),

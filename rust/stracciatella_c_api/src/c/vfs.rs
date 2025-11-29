@@ -11,16 +11,19 @@ use stracciatella::vfs::{Vfs, VfsLayer};
 use crate::c::common::*;
 use crate::c::vec::VecCString;
 
+use super::json::RJsonValue;
+use super::vec::VecUSize;
+
 /// Creates a virtual filesystem.
 /// coverity[+alloc]
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn Vfs_create() -> *mut Vfs {
     into_ptr(Vfs::new())
 }
 
 /// Destroys the virtual filesystem.
 /// coverity[+free : arg-0]
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn Vfs_destroy(vfs: *mut Vfs) {
     let _drop_me = from_ptr(vfs);
 }
@@ -28,7 +31,7 @@ pub extern "C" fn Vfs_destroy(vfs: *mut Vfs) {
 /// Initializes the VFS based on the information in engine_options
 /// Returns true if successful, false otherwise.
 /// Sets the rust error.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn Vfs_init(
     vfs: *mut Vfs,
     engine_options: *const EngineOptions,
@@ -47,7 +50,7 @@ pub extern "C" fn Vfs_init(
 /// Adds an overlay filesystem backed by a filesystem directory.
 /// Returns true if successful, false otherwise.
 /// Sets the rust error.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn Vfs_addDir(vfs: *mut Vfs, path: *const c_char) -> bool {
     forget_rust_error();
     let vfs = unsafe_mut(vfs);
@@ -62,7 +65,7 @@ pub extern "C" fn Vfs_addDir(vfs: *mut Vfs, path: *const c_char) -> bool {
 /// Returns a list of files on success and null otherwise
 /// Sets the rust error.
 /// coverity[+alloc]
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn Vfs_readDir(
     vfs: *mut Vfs,
     path: *const c_char,
@@ -84,7 +87,7 @@ pub extern "C" fn Vfs_readDir(
     };
     match res {
         Err(err) => {
-            remember_rust_error(format!("VfsFile_readDir {:?}: {}", path, err));
+            remember_rust_error(format!("Vfs_readDir {:?}: {}", path, err));
             std::ptr::null_mut()
         }
         Ok(files) => {
@@ -99,16 +102,74 @@ pub extern "C" fn Vfs_readDir(
 /// Returns the file on success, null otherwise.
 /// Sets the rust error.
 /// coverity[+alloc]
-#[no_mangle]
-pub extern "C" fn VfsFile_open(vfs: *mut Vfs, path: *const c_char) -> *mut VFile {
+#[unsafe(no_mangle)]
+pub extern "C" fn Vfs_open(vfs: *mut Vfs, path: *const c_char) -> *mut VFile {
     forget_rust_error();
     let vfs = unsafe_mut(vfs);
     let path = str_from_c_str_or_panic(unsafe_c_str(path));
     match vfs.open(&Nfc::caseless_path(path)) {
         Err(err) => {
-            remember_rust_error(format!("VfsFile_open {:?}: {}", path, err));
+            remember_rust_error(format!("Vfs_open {:?}: {}", path, err));
             std::ptr::null_mut()
         }
         Ok(file) => into_ptr(file.into()),
+    }
+}
+
+/// Opens a virtual file for reading in a specific layer.
+/// Returns the file on success, null otherwise.
+/// Sets the rust error.
+/// coverity[+alloc]
+#[unsafe(no_mangle)]
+pub extern "C" fn Vfs_openInLayer(
+    vfs: *mut Vfs,
+    layer_index: usize,
+    path: *const c_char,
+) -> *mut VFile {
+    forget_rust_error();
+    let vfs = unsafe_mut(vfs);
+    let path = str_from_c_str_or_panic(unsafe_c_str(path));
+    match vfs.open_in_layer(layer_index, &Nfc::caseless_path(path)) {
+        Err(err) => {
+            remember_rust_error(format!("Vfs_openInLayer {:?}: {}", path, err));
+            std::ptr::null_mut()
+        }
+        Ok(file) => into_ptr(file.into()),
+    }
+}
+
+/// Opens a json file with patches applied.
+/// Returns the json value on success, null otherwise.
+/// Sets the rust error.
+/// coverity[+alloc]
+#[unsafe(no_mangle)]
+pub extern "C" fn Vfs_readPatchedJson(vfs: *mut Vfs, path: *const c_char) -> *mut RJsonValue {
+    forget_rust_error();
+    let vfs = unsafe_mut(vfs);
+    let path = str_from_c_str_or_panic(unsafe_c_str(path));
+    match vfs.read_patched_json(&Nfc::caseless_path(path)) {
+        Err(err) => {
+            remember_rust_error(format!("Vfs_readPatchedJson {:?}: {}", path, err));
+            std::ptr::null_mut()
+        }
+        Ok(file) => into_ptr(RJsonValue::from_value(file)),
+    }
+}
+
+/// Returns a vector of all VFS layers a file can be found in.
+/// Returns the vector on success, null otherwise.
+/// Sets the rust error.
+/// coverity[+alloc]
+#[unsafe(no_mangle)]
+pub extern "C" fn Vfs_readLayers(vfs: *mut Vfs, path: *const c_char) -> *mut VecUSize {
+    forget_rust_error();
+    let vfs = unsafe_mut(vfs);
+    let path = str_from_c_str_or_panic(unsafe_c_str(path));
+    match vfs.read_layers(&Nfc::caseless_path(path)) {
+        Err(err) => {
+            remember_rust_error(format!("Vfs_open {:?}: {}", path, err));
+            std::ptr::null_mut()
+        }
+        Ok(v) => into_ptr(v.into()),
     }
 }

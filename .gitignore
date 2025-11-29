@@ -6,9 +6,10 @@ TAGS
 .cproject
 .project
 .idea
+.vs
 .vscode
-rust/.vscode
 .clangd
 .clang-tidy
+.zed
 /compile_commands.json
 /*/CMakeUserPresets.json

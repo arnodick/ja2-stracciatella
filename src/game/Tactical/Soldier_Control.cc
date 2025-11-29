@@ -2067,7 +2067,7 @@ static void SetSoldierGridNo(SOLDIERTYPE& s, GridNo new_grid_no, BOOLEAN const f
 	}
 
 	// Are we now standing in tear gas without a decently working gas mask?
-	if (GetSmokeEffectOnTile(new_grid_no, s.bLevel) != NO_SMOKE_EFFECT &&
+	if (GetSmokeEffectOnTile(new_grid_no, s.bLevel) != SmokeEffectID::NOTHING &&
 		(s.inv[HEAD1POS].usItem != GASMASK || s.inv[HEAD1POS].bStatus[0] < GASMASK_MIN_STATUS) &&
 		(s.inv[HEAD2POS].usItem != GASMASK || s.inv[HEAD2POS].bStatus[0] < GASMASK_MIN_STATUS))
 	{
@@ -2106,15 +2106,6 @@ static void SetSoldierGridNo(SOLDIERTYPE& s, GridNo new_grid_no, BOOLEAN const f
 
 	// Adjust speed based on terrain, etc
 	SetSoldierAniSpeed(&s);
-
-	if (s.bTeam == ENEMY_TEAM &&
-		(!gpWorldLevelData[s.sGridNo].pMercHead ||
-	     !gpWorldLevelData[s.sGridNo].pMercHead->pStructureData))
-	{
-		// Debug help for issue #1681: set a break point here and check who
-		// is calling this function without calling InternalIsValidStance first.
-		SLOGW("SetSoldierGridNo: ID {} ({}) has no structure", s.ubID, s.name);
-	}
 }
 
 
@@ -2146,7 +2137,8 @@ void EVENT_FireSoldierWeapon( SOLDIERTYPE *pSoldier, INT16 sTargetGridNo )
 	//pSoldier->sLastTarget = sTargetGridNo;
 	pSoldier->target = WhoIsThere2(sTargetGridNo, pSoldier->bTargetLevel);
 
-	if (GCM->getItem(pSoldier->inv[HANDPOS].usItem)->isGun())
+	auto item = GCM->getItem(pSoldier->inv[HANDPOS].usItem);
+	if (item->isGun())
 	{
 		if (pSoldier->bDoBurst)
 		{
@@ -2199,13 +2191,8 @@ void EVENT_FireSoldierWeapon( SOLDIERTYPE *pSoldier, INT16 sTargetGridNo )
 				}
 
 				// Check if our weapon has no intermediate anim...
-				switch( pSoldier->inv[ HANDPOS ].usItem )
-				{
-					case ROCKET_LAUNCHER:
-					case MORTAR:
-					case GLAUNCHER:
-						fDoFireRightAway = TRUE;
-						break;
+				if (item->isLauncher() || item->getItemIndex() == ROCKET_LAUNCHER) {
+					fDoFireRightAway = TRUE;
 				}
 
 				if ( fDoFireRightAway )
@@ -2517,8 +2504,8 @@ UINT16 PickSoldierReadyAnimation(SOLDIERTYPE* pSoldier, BOOLEAN fEndReady)
 	}
 
 	// Check if we have a gun.....
-	if ( GCM->getItem(pSoldier->inv[ HANDPOS ].usItem)->getItemClass() != IC_GUN &&
-		pSoldier->inv[ HANDPOS ].usItem != GLAUNCHER )
+	auto item = GCM->getItem(pSoldier->inv[ HANDPOS ].usItem);
+	if (item->getItemClass() != IC_GUN && !item->isLauncher())
 	{
 		return( INVALID_ANIMATION );
 	}
@@ -3271,7 +3258,8 @@ static void SoldierGotHitExplosion(SOLDIERTYPE* const pSoldier, const UINT16 usW
 
 	if ( gGameSettings.fOptions[ TOPTION_BLOOD_N_GORE ] )
 	{
-		if ( Explosive[ GCM->getItem(usWeaponIndex)->getClassIndex() ].ubRadius >= 3 &&
+		auto blastEffect = GCM->getExplosive(usWeaponIndex)->getBlastEffect();
+		if ( blastEffect && blastEffect->radius >= 3 &&
 			pSoldier->bLife == 0 && gAnimControl[ pSoldier->usAnimState ].ubEndHeight != ANIM_PRONE )
 		{
 			if ( sRange >= 2 && sRange <= 4 )
@@ -4051,7 +4039,7 @@ void EVENT_BeginMercTurn(SOLDIERTYPE& s)
 	{
 		// Must get a gas mask or leave the gassed area to get over it
 		if (IsWearingHeadGear(s, GASMASK) ||
-			GetSmokeEffectOnTile(s.sGridNo, s.bLevel) == NO_SMOKE_EFFECT)
+			GetSmokeEffectOnTile(s.sGridNo, s.bLevel) == SmokeEffectID::NOTHING)
 		{
 			// Turn off gassed flag
 			s.uiStatusFlags &= ~SOLDIER_GASSED;
@@ -5611,7 +5599,7 @@ UINT8 SoldierTakeDamage(SOLDIERTYPE* const pSoldier, INT16 sLifeDeduct, INT16 sB
 
 	// ATE: Put some logic in here to allow enemies to die quicker.....
 	// Are we an enemy?
-	if ( pSoldier->bSide != OUR_TEAM && !pSoldier->bNeutral && pSoldier->ubProfile == NO_PROFILE )
+	if ( pSoldier->bSide != Side::FRIENDLY && !pSoldier->bNeutral && pSoldier->ubProfile == NO_PROFILE )
 	{
 		// ATE: Give them a chance to fall down...
 		if ( pSoldier->bLife > 0 && pSoldier->bLife < ( OKLIFE - 1 ) )
@@ -6580,9 +6568,7 @@ void EVENT_SoldierBeginGiveItem( SOLDIERTYPE *pSoldier )
 	else
 	{
 		UnSetEngagedInConvFromPCAction( pSoldier );
-
-		delete pSoldier->pTempObject;
-		pSoldier->pTempObject = nullptr;
+		ClearTempObject(pSoldier);
 	}
 }
 
@@ -7309,8 +7295,7 @@ void HaultSoldierFromSighting( SOLDIERTYPE *pSoldier, BOOLEAN fFromSightingEnemy
 	{
 		// Place it back into inv....
 		AutoPlaceObject( pSoldier, pSoldier->pTempObject, FALSE );
-		delete pSoldier->pTempObject;
-		pSoldier->pTempObject        = NULL;
+		ClearTempObject(pSoldier);
 		pSoldier->usPendingAnimation = NO_PENDING_ANIMATION;
 	}
 
@@ -7947,12 +7932,7 @@ static void SoldierBleed(SOLDIERTYPE* const s, const BOOLEAN fBandagedBleed)
 
 void SoldierCollapse( SOLDIERTYPE *pSoldier )
 {
-	BOOLEAN fMerc = FALSE;
-
-	if ( pSoldier->ubBodyType <= REGFEMALE )
-	{
-		fMerc = TRUE;
-	}
+	bool fMerc{ pSoldier->ubBodyType <= REGFEMALE };
 
 	// If we are an animal, etc, don't do anything....
 	switch( pSoldier->ubBodyType )
@@ -7976,6 +7956,14 @@ void SoldierCollapse( SOLDIERTYPE *pSoldier )
 
 	// CC has requested - handle sight here...
 	HandleSight(*pSoldier, SIGHT_LOOK);
+
+	// Handle edge case where we're collapsing while trying to
+	// give an item, issue #2265.
+	if (pSoldier->ubPendingAction == MERC_GIVEITEM)
+	{
+		ClearTempObject(pSoldier);
+		UnSetEngagedInConvFromPCAction(pSoldier);
+	}
 
 	// Check height
 	switch( gAnimControl[ pSoldier->usAnimState ].ubEndHeight )
@@ -8816,8 +8804,7 @@ void HandleSystemNewAISituation(SOLDIERTYPE* const pSoldier)
 				{
 					// Place it back into inv....
 					AutoPlaceObject( pSoldier, pSoldier->pTempObject, FALSE );
-					delete pSoldier->pTempObject;
-					pSoldier->pTempObject        = NULL;
+					ClearTempObject(pSoldier);
 					pSoldier->usPendingAnimation = NO_PENDING_ANIMATION;
 
 					// Decrement attack counter...
@@ -9002,8 +8989,19 @@ static void SetSoldierPersonalLightLevel(SOLDIERTYPE* const s)
 }
 
 
+void SetTempObject(SOLDIERTYPE * const pSoldier, OBJECTTYPE const& objectToCopy)
+{
+	pSoldier->pTempObject = new OBJECTTYPE{ objectToCopy };
+}
+
+
+void ClearTempObject(SOLDIERTYPE * const pSoldier)
+{
+	delete std::exchange(pSoldier->pTempObject, nullptr);
+}
+
+
 #ifdef WITH_UNITTESTS
-#undef FAIL
 #include "gtest/gtest.h"
 
 TEST(SoldierControl, asserts)

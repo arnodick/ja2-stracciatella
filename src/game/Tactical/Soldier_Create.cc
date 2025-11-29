@@ -39,8 +39,8 @@
 
 #include "ContentManager.h"
 #include "GameInstance.h"
-#include "policy/GamePolicy.h"
-#include "externalized/strategic/BloodCatSpawnsModel.h"
+#include "GamePolicy.h"
+#include "BloodCatSpawnsModel.h"
 
 #include <string_theory/string>
 
@@ -71,8 +71,6 @@ BOOLEAN gfProfiledEnemyAdded = FALSE;
 
 UINT32 guiCurrentUniqueSoldierId = 1;
 
-// CJC note: trust me, it's easiest just to put this here; this is the only
-// place it should need to be used
 UINT8 gubItemDroppableFlag[NUM_INV_SLOTS] =
 {
 	0x01,

@@ -1,7 +1,6 @@
 #ifdef WITH_UNITTESTS
 #include "gtest/gtest.h"
 
-#include "game/Tactical/Items.h"
 
 #include "AmmoTypeModel.h"
 #include "CalibreModel.h"
@@ -9,6 +8,7 @@
 #include "DefaultContentManagerUT.h"
 #include "GameInstance.h"
 #include "GamePolicy.h"
+#include "Items.h"
 #include "MagazineModel.h"
 #include "Weapons.h"
 #include "WeaponModels.h"
@@ -109,6 +109,11 @@ TEST(Items, bug120_spas15DefaultMag)
 
 TEST(Items, ValidLaunchable)
 {
+	DefaultContentManager * cm = DefaultContentManagerUT::createDefaultCMForTesting();
+	ASSERT_TRUE(cm->loadGameData());
+
+	GCM = cm;
+
 	EXPECT_TRUE(ValidLaunchable(MORTAR_SHELL, MORTAR));
 	EXPECT_FALSE(ValidLaunchable(MORTAR_SHELL, MORTAR_SHELL));
 	EXPECT_FALSE(ValidLaunchable(MORTAR_SHELL, TANK_CANNON));
@@ -119,10 +124,17 @@ TEST(Items, ValidLaunchable)
 	// Check if the function handles some random garbage input
 	EXPECT_FALSE(ValidLaunchable(BATTERIES, WINE));
 	EXPECT_FALSE(ValidLaunchable(0xf123, 0x97b2));
+
+	delete cm;
 }
 
 TEST(Items, GetLauncherFromLaunchable)
 {
+	DefaultContentManager * cm = DefaultContentManagerUT::createDefaultCMForTesting();
+	ASSERT_TRUE(cm->loadGameData());
+
+	GCM = cm;
+
 	EXPECT_EQ(GetLauncherFromLaunchable(GL_TEARGAS_GRENADE), GLAUNCHER);
 	EXPECT_EQ(GetLauncherFromLaunchable(MORTAR_SHELL), MORTAR);
 	EXPECT_EQ(GetLauncherFromLaunchable(TANK_SHELL), TANK_CANNON);
@@ -131,6 +143,8 @@ TEST(Items, GetLauncherFromLaunchable)
 	// Check if the function handles some random garbage input
 	EXPECT_EQ(GetLauncherFromLaunchable(G11), NOTHING);
 	EXPECT_EQ(GetLauncherFromLaunchable(0xe941), NOTHING);
+
+	delete cm;
 }
 
 TEST(Items, ValidAttachment)
@@ -189,6 +203,25 @@ TEST(Items, CompatibleFaceItem)
 	{
 		EXPECT_FALSE(CompatibleFaceItem(i, ITEMDEFINE::STEEL_HELMET));
 	}
+}
+
+TEST(Items, Invalid_ItemIndex_Exception)
+{
+	std::unique_ptr<DefaultContentManager> cm(DefaultContentManagerUT::createDefaultCMForTesting());
+	ASSERT_TRUE(cm->loadGameData());
+	auto const oldGCM = std::exchange(GCM, cm.release());
+
+	EXPECT_NO_THROW(GCM->getItem(MAXITEMS - 1));
+	for (uint16_t i = UINT16_MAX; i >= MAXITEMS; --i)
+	{
+		EXPECT_THROW(GCM->getItem(i), std::out_of_range);
+	}
+
+	EXPECT_NO_THROW(GCM->getItem(57000, ItemSystem::nothrow));
+	EXPECT_EQ(GCM->getItem(38000, ItemSystem::nothrow), nullptr);
+
+	delete GCM;
+	GCM = oldGCM;
 }
 
 #endif

@@ -1,7 +1,9 @@
 #include "DefaultContentManagerUT.h"
 
-#include "sgp/FileMan.h"
-#include "externalized/TestUtils.h"
+#include "DefaultContentManager.h"
+#include "ItemStrings.h"
+#include "FileMan.h"
+#include "TestUtils.h"
 #include <utility>
 
 DefaultContentManagerUT::DefaultContentManagerUT(RustPointer<EngineOptions> engineOptions)
@@ -18,4 +20,9 @@ DefaultContentManagerUT* DefaultContentManagerUT::createDefaultCMForTesting()
 	EngineOptions_setVanillaGameDir(engineOptions.get(), gameResRootPath.c_str());
 
 	return new DefaultContentManagerUT(std::move(engineOptions));
+}
+
+bool DefaultContentManagerUT::loadGameData()
+{
+	return DefaultContentManager::loadGameData(BinaryData{});
 }

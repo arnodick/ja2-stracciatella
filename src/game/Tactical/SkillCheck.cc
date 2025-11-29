@@ -35,13 +35,9 @@ INT8 EffectiveWisdom(const SOLDIERTYPE* s)
 
 INT8 EffectiveAgility(const SOLDIERTYPE* s)
 {
-	INT32 iEffAgility = EffectStatForBeingDrunk(s, s->bAgility);
-	if (s->sWeightCarriedAtTurnStart > 100)
-	{
-		iEffAgility = (iEffAgility * 100) / s->sWeightCarriedAtTurnStart;
-	}
+	int32_t iEffAgility = EffectStatForBeingDrunk(s, s->bAgility);
 
-	return( (INT8) iEffAgility );
+	return s->sWeightCarriedAtTurnStart > 100 ? (iEffAgility * 100) / s->sWeightCarriedAtTurnStart : iEffAgility;
 }
 
 
@@ -65,20 +61,7 @@ INT8 EffectiveMedical(const SOLDIERTYPE* s)
 
 INT8 EffectiveLeadership(const SOLDIERTYPE* s)
 {
-	INT32 iEffLeadership;
-	INT8  bDrunkLevel;
-
-	iEffLeadership = s->bLeadership;
-
-	// if we are drunk, effect leader ship in a +ve way...
-	bDrunkLevel = GetDrunkLevel(s);
-
-	if ( bDrunkLevel == FEELING_GOOD )
-	{
-		iEffLeadership = ( iEffLeadership * 120 / 100 );
-	}
-
-	return( (INT8) iEffLeadership );
+	return GetDrunkLevel(s) == FEELING_GOOD ? s->bLeadership * 120 / 100 : s->bLeadership;
 }
 
 
@@ -123,25 +106,13 @@ INT8 EffectiveExpLevel(const SOLDIERTYPE* s)
 
 INT8 EffectiveMarksmanship(const SOLDIERTYPE* s)
 {
-	INT32	iEffMarksmanship;
-
-	iEffMarksmanship = s->bMarksmanship;
-
-	iEffMarksmanship = EffectStatForBeingDrunk(s, iEffMarksmanship);
-
-	return( (INT8) iEffMarksmanship );
+	return EffectStatForBeingDrunk(s, s->bMarksmanship);
 }
 
 
 INT8 EffectiveDexterity(const SOLDIERTYPE* s)
 {
-	INT32 iEffDexterity;
-
-	iEffDexterity = s->bDexterity;
-
-	iEffDexterity = EffectStatForBeingDrunk(s, iEffDexterity);
-
-	return( (INT8) iEffDexterity );
+	return EffectStatForBeingDrunk(s, s->bDexterity);
 }
 
 
@@ -425,20 +396,20 @@ INT32 SkillCheck( SOLDIERTYPE * pSoldier, INT8 bReason, INT8 bChanceMod )
 			{
 				if (!OkControllableMerc(s)) continue;
 
-				const INT8 bBuddyIndex = WhichBuddy(s->ubProfile, pSoldier->ubProfile);
-				if (bBuddyIndex >= 0 && SpacesAway(pSoldier->sGridNo, s->sGridNo) < 15)
+				const BuddySlot bBuddyIndex = WhichBuddy(s->ubProfile, pSoldier->ubProfile);
+				if (bBuddyIndex != BUDDY_NOT_FOUND && SpacesAway(pSoldier->sGridNo, s->sGridNo) < 15)
 				{
 					switch (bBuddyIndex)
 					{
-						case 0:
+						case BUDDY_SLOT1:
 							// buddy #1 did something good!
 							TacticalCharacterDialogue(s, QUOTE_BUDDY_1_GOOD);
 							break;
-						case 1:
+						case BUDDY_SLOT2:
 							// buddy #2 did something good!
 							TacticalCharacterDialogue(s, QUOTE_BUDDY_2_GOOD);
 							break;
-						case 2:
+						case LEARNED_TO_LIKE_SLOT:
 							// learn to like buddy did something good!
 							TacticalCharacterDialogue(s, QUOTE_LEARNED_TO_LIKE_WITNESSED);
 							break;

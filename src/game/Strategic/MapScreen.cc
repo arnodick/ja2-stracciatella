@@ -47,6 +47,7 @@
 #include "Merc_Hiring.h"
 #include "Message.h"
 #include "NewStrings.h"
+#include "Object_Cache.h"
 #include "Options_Screen.h"
 #include "Overhead.h"
 #include "Player_Command.h"
@@ -59,6 +60,7 @@
 #include "RenderWorld.h"
 #include "SAM_Sites.h"
 #include "SaveLoadScreen.h"
+#include "ScreenIDs.h"
 #include "Soldier_Control.h"
 #include "Soldier_Macros.h"
 #include "Squads.h"
@@ -228,10 +230,6 @@
 #define SOLDIER_HAND_X (STD_SCREEN_X + 6)
 #define SOLDIER_HAND_Y (STD_SCREEN_Y + 81)
 
-#define CLOCK_X (STD_SCREEN_X + 554)
-#define CLOCK_Y (STD_SCREEN_Y + 459)
-
-
 #define RGB_WHITE	( FROMRGB( 255, 255, 255 ) )
 #define RGB_YELLOW	( FROMRGB( 255, 255,   0 ) )
 #define RGB_NEAR_BLACK	( FROMRGB(   0,   0,   1 ) )
@@ -335,13 +333,14 @@ UINT32 guiFlashContractBaseTime = 0;
 UINT32 guiFlashCursorBaseTime = 0;
 UINT32 guiPotCharPathBaseTime = 0;
 
-static SGPVObject* guiCHARLIST;
-static SGPVObject* guiCHARINFO;
-static SGPVObject* guiSleepIcon;
-static SGPVObject* guiMAPINV;
-static SGPVObject* guiULICONS;
-static SGPVObject* guiNewMailIcons;
-
+namespace {
+cache_key_t const guiSleepIcon { INTERFACEDIR "/sleepicon.sti" };
+cache_key_t const guiCHARINFO { INTERFACEDIR "/charinfo.sti" };
+cache_key_t const guiCHARLIST { INTERFACEDIR "/newgoldpiece3.sti" };
+cache_key_t const guiMAPINV { INTERFACEDIR "/mapinv.sti" };
+cache_key_t const guiULICONS { INTERFACEDIR "/top_left_corner_icons.sti" };
+cache_key_t const guiNewMailIcons{ INTERFACEDIR "/newemail.sti" };
+}
 
 // misc mouse regions
 static MOUSE_REGION gCharInfoFaceRegion;
@@ -375,7 +374,6 @@ static bool fLockOutMapScreenInterface = false;
 
 
 extern BOOLEAN fDeletedNode;
-extern BOOLEAN gfStartedFromMapScreen;
 
 
 extern PathSt* pTempCharacterPath;
@@ -1241,7 +1239,7 @@ static void DisplayCharacterList(void)
 			CharacterIsGettingPathPlotted(i) ? FONT_LTBLUE    :
 			/* Not in current sector? */
 			s.sSector.x != sSelMap.x ||
-			s.sSector.x != sSelMap.y ||
+			s.sSector.y != sSelMap.y ||
 			s.sSector.z != iCurrentMapSectorZ ? 5              :
 			/* Mobile? */
 			s.bAssignment < ON_DUTY ||
@@ -1460,7 +1458,7 @@ ScreenID MapScreenHandle(void)
 		else	// no loaded sector
 		{
 			// Only select start sector, if there is no current selection, otherwise leave it as is.
-			if (!sSelMap.IsValid() || iCurrentMapSectorZ == -1)
+			if (!sSelMap.IsValid())
 			{
 				ChangeSelectedMapSector(startSector);
 			}
@@ -1818,7 +1816,7 @@ ScreenID MapScreenHandle(void)
 	if (!fDisableDueToBattleRoster)
 	{
 		// remove the move box once user leaves it
-		CreateDestroyMovementBox( 0,0,0 );
+		CreateDestroyMovementBox();
 
 		// this updates the move box contents when changes took place
 		ReBuildMoveBox( );
@@ -1864,7 +1862,7 @@ ScreenID MapScreenHandle(void)
 
 
 	// display town info
-	DisplayTownInfo(SGPSector(sSelMap.x, sSelMap.y, iCurrentMapSectorZ));
+	DisplayTownInfo(sSelMap);
 
 	if (fShowTownInfo)
 	{
@@ -2097,7 +2095,7 @@ void DrawStringRight(const ST::string& str, UINT16 x, UINT16 y, UINT16 w, UINT16
 }
 
 
-static void RenderMapHighlight(const SGPSector& sMap, UINT16 usLineColor, BOOLEAN fStationary);
+static void RenderMapHighlight(const SGPSector& sMap, UINT16 usLineColor);
 static void RestoreMapSectorCursor(const SGPSector& sMap);
 
 
@@ -2137,7 +2135,7 @@ static void RenderMapCursorsIndexesAnims(void)
 			}
 
 			// draw WHITE highlight rectangle
-			RenderMapHighlight(gsHighlightSector, Get16BPPColor(RGB_WHITE), FALSE);
+			RenderMapHighlight(gsHighlightSector, Get16BPPColor(RGB_WHITE));
 
 			sPrevHighlightedMap = gsHighlightSector;
 			fHighlightChanged = TRUE;
@@ -2189,7 +2187,7 @@ static void RenderMapCursorsIndexesAnims(void)
 		}
 
 		// always render this one, it's too much of a pain detecting overlaps with the white cursor otherwise
-		RenderMapHighlight(sSelMap, usCursorColor, TRUE);
+		RenderMapHighlight(sSelMap, usCursorColor);
 
 		if (sPrevSelectedMap != sSelMap)
 		{
@@ -2362,9 +2360,7 @@ static UINT32 HandleMapUI(void)
 					if ( gpItemPointerSoldier != NULL )
 					{
 						// make sure it's the owner's sector that's selected
-						if ( (gpItemPointerSoldier->sSector.x != sSelMap.x ) ||
-							( gpItemPointerSoldier->sSector.y != sSelMap.y ) ||
-							( gpItemPointerSoldier->sSector.z != iCurrentMapSectorZ ) )
+						if (gpItemPointerSoldier->sSector != sSelMap)
 						{
 							ChangeSelectedMapSector(gpItemPointerSoldier->sSector);
 						}
@@ -3125,7 +3121,7 @@ void EndMapScreen( BOOLEAN fDuringFade )
 	if ( fShowMapScreenMovementList )
 	{
 		fShowMapScreenMovementList = FALSE;
-		CreateDestroyMovementBox( 0, 0, 0 );
+		CreateDestroyMovementBox();
 	}
 
 	// the remove merc from team box
@@ -3254,10 +3250,8 @@ static SGPSector GetSectorAtXY(INT16 relX, INT16 relY)
 }
 
 
-static void RenderMapHighlight(const SGPSector& sMap, UINT16 usLineColor, BOOLEAN fStationary)
+static void RenderMapHighlight(const SGPSector& sMap, UINT16 usLineColor)
 {
-	Assert(sMap.IsValid());
-
 	// if we are not allowed to highlight, leave
 	if (!IsTheCursorAllowedToHighLightThisSector(sMap))
 	{
@@ -6081,29 +6075,7 @@ static bool AnyMercsLeavingRealSoon()
 
 void HandlePreloadOfMapGraphics(void)
 {
-	guiSleepIcon                = AddVideoObjectFromFile(INTERFACEDIR "/sleepicon.sti");
-	guiCHARINFO                 = AddVideoObjectFromFile(INTERFACEDIR "/charinfo.sti");
-	guiCHARLIST                 = AddVideoObjectFromFile(INTERFACEDIR "/newgoldpiece3.sti");
-
-	guiMAPINV                   = AddVideoObjectFromFile(INTERFACEDIR "/mapinv.sti");
-
-	// the upper left corner piece icons
-	guiULICONS                  = AddVideoObjectFromFile(INTERFACEDIR "/top_left_corner_icons.sti");
-
-	HandleLoadOfMapBottomGraphics( );
-
-	//Kris:  Added this because I need to blink the icons button.
-	guiNewMailIcons             = AddVideoObjectFromFile(INTERFACEDIR "/newemail.sti");
-
-	// graphic for pool inventory
-	LoadInventoryPoolGraphic( );
-
-	// load border graphics
-	LoadMapBorderGraphics( );
-
 	LoadInterfaceItemsGraphics();
-	LoadInterfaceUtilsGraphics();
-	LoadMapScreenInterfaceGraphics();
 	LoadMapScreenInterfaceMapGraphics();
 }
 
@@ -6111,16 +6083,16 @@ void HandlePreloadOfMapGraphics(void)
 void HandleRemovalOfPreLoadedMapGraphics( void )
 {
 	DeleteMapBottomGraphics();
-	DeleteVideoObject(guiSleepIcon);
+	RemoveVObject(guiSleepIcon);
 
-	DeleteVideoObject(guiCHARLIST);
-	DeleteVideoObject(guiCHARINFO);
+	RemoveVObject(guiCHARLIST);
+	RemoveVObject(guiCHARINFO);
 
-	DeleteVideoObject(guiMAPINV);
-	DeleteVideoObject(guiULICONS);
+	RemoveVObject(guiMAPINV);
+	RemoveVObject(guiULICONS);
 
 	//Kris:  Remove the email icons.
-	DeleteVideoObject(guiNewMailIcons);
+	RemoveVObject(guiNewMailIcons);
 
 	// remove inventory pool graphic
 	RemoveInventoryPoolGraphic();
@@ -6743,7 +6715,6 @@ void ChangeSelectedMapSector(const SGPSector& sMap)
 		return;
 
 	sSelMap = sMap;
-	iCurrentMapSectorZ = sMap.z;
 
 	// if going underground while in airspace mode
 	if (sMap.z > 0 && fShowAircraftFlag)
@@ -7451,7 +7422,7 @@ static void DestinationPlottingCompleted(void)
 static void HandleMilitiaRedistributionClick(void)
 {
 	ST::string sString;
-	SGPSector sector(sSelMap.x, sSelMap.y, iCurrentMapSectorZ);
+	auto const& sector{ sSelMap };
 
 	// if on the surface
 	if (sector.z == 0)
@@ -7597,8 +7568,9 @@ static void HandlePostAutoresolveMessages(void)
 	if( gsCiviliansEatenByMonsters >= 1 )
 	{
 		SGPSector sSector(gsEnemyGainedControlOfSectorID);
-		AdjustLoyaltyForCivsEatenByMonsters(sSector, gsCiviliansEatenByMonsters);
-		gsCiviliansEatenByMonsters = -2;
+		// We must set gsCiviliansEatenByMonsters to its new value before
+		// calling this function to avoid infinite recursion.
+		AdjustLoyaltyForCivsEatenByMonsters(sSector, std::exchange(gsCiviliansEatenByMonsters, -2));
 	}
 	else if( gsCiviliansEatenByMonsters == -2 )
 	{
@@ -7869,9 +7841,9 @@ BOOLEAN CanDrawSectorCursor(void)
 		GetNumberOfMercsInUpdateList() == 0 &&
 		sSelectedMilitiaTown == 0           &&
 		!gfMilitiaPopupCreated              &&
-		!gfStartedFromMapScreen             &&
 		!fShowMapScreenMovementList         &&
 		ghMoveBox == NO_POPUP_BOX           &&
+		guiPendingScreen != MSG_BOX_SCREEN  &&
 		!fMapInventoryItem;
 }
 

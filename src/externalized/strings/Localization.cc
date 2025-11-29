@@ -52,13 +52,12 @@ void GetArray(ST::string * const arrayBegin,
 		[](JsonValue const& jval) { return jval.toString(); });
 }
 
+#define GetString(stringname) stringname = json.GetString(#stringname)
+#define GetArray(arrayname) GetArray(arrayname.data(), arrayname.size(), json, #arrayname)
 
 L10n_t::L10n_t(SGPFile * const translationFile)
 {
 	auto const json{ JsonValue::deserialize(translationFile->readStringToEnd()).toObject() };
-
-#define GetString(stringname) stringname = json.GetString(#stringname)
-#define GetArray(arrayname) GetArray(arrayname.data(), arrayname.size(), json, #arrayname)
 
 	GetArray(WeaponType);
 	GetArray(Message);
@@ -278,8 +277,33 @@ L10n_t::L10n_t(SGPFile * const translationFile)
 	GetArray(gs_dead_is_dead_mode_tab_name);
 	GetArray(gzIMPSkillTraitsText);
 
+}
+
+L10n_tooltips::L10n_tooltips(SGPFile * const tooltipsFile)
+{
+	auto const json{ JsonValue::deserialize(tooltipsFile->readStringToEnd()).toObject() };
+
+	GetArray(demarcationStrings);
+	GetArray(booleanStrings);
+	GetArray(segmentHeaderStrings);
+	GetArray(skillPossessionStrings);
+	GetArray(personalityTraitStrings);
+	GetArray(effectiveStatStrings);
+	GetArray(toolModifierStrings);
+	GetArray(statusStrings);
+	GetArray(lockStrings);
+	GetArray(vitalSignStrings);
+	GetArray(rangeStrings);
+	GetArray(trapStrings);
+	GetArray(attemptStrings);
+	GetArray(commentStrings);
+	GetArray(possessiveStrings);
+	GetArray(drugStrings);
+	GetArray(inventoryStrings);
+	GetArray(locationStrings);
+}
+
 #undef GetString
 #undef GetArray
-}
 
 } // namespace

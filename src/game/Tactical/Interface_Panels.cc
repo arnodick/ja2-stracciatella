@@ -39,6 +39,8 @@
 #include "Message.h"
 #include "MessageBoxScreen.h"
 #include "MouseSystem.h"
+#include "NewStrings.h"
+#include "Object_Cache.h"
 #include "OppList.h"
 #include "Options_Screen.h"
 #include "Overhead.h"
@@ -311,13 +313,14 @@ static SGPVSurface* guiTEAMPanel;
 static SGPVObject* guiTEAMObjects;
 static SGPVObject* guiVEHINV;
 
-static SGPVObject* guiCLOSE;
+static cache_key_t const guiCLOSE{ INTERFACEDIR "/p_close.sti" };
 
 // Globals for various mouse regions
 static MOUSE_REGION gSM_SELMERCPanelRegion;
 static MOUSE_REGION gSM_SELMERCBarsRegion;
 MOUSE_REGION        gSM_SELMERCMoneyRegion;
 static MOUSE_REGION gSM_SELMERCEnemyIndicatorRegion;
+static MOUSE_REGION gSM_SELMERCStatsRegion[NUM_ATTRIBUTES];
 static MOUSE_REGION gTEAM_PanelRegion;
 
 static std::unique_ptr<SGPVSurface> CreateVideoSurfaceFromObjectFile(const ST::string& filename, UINT16 usRegionIndex);
@@ -842,6 +845,7 @@ static void SMInvMoveCamoCallback(MOUSE_REGION* pRegion, UINT32 iReason);
 static void SelectedMercButtonCallbackPrimary(MOUSE_REGION* pRegion, UINT32 iReason);
 static void SelectedMercButtonCallbackSecondary(MOUSE_REGION* pRegion, UINT32 iReason);
 static void SelectedMercButtonMoveCallback(MOUSE_REGION* pRegion, UINT32 iReason);
+static void SelectedMercPopupMoveCallback(MOUSE_REGION* pRegion, uint32_t iReason);
 static void SelectedMercEnemyIndicatorCallback(MOUSE_REGION* pRegion, UINT32 iReason);
 
 
@@ -865,6 +869,11 @@ static void DrawFillerOnSurface(SGPVSurface* vsSurface, SGPBox const &dest)
 	// clip and blit the big panel from the overheadinterface graphics
 	SGPBox const src  = {80, 42, (UINT16) std::min(int(dest.w), 560), (UINT16) std::min(int(dest.h), 112)};
 	BltStretchVideoSurface(vsSurface, vsFiller.get(), &src, &dest);
+}
+
+static void MakeRegionForAttributeHelpText(Attributes attr, uint16_t tlx, uint16_t tly, uint16_t brx, uint16_t bry)
+{
+	MSYS_DefineRegion(&gSM_SELMERCStatsRegion[attr], tlx, tly, brx, bry, MSYS_PRIORITY_HIGH, MSYS_NO_CURSOR, SelectedMercPopupMoveCallback, MSYS_NO_CALLBACK);
 }
 
 void InitializeSMPanel()
@@ -945,6 +954,21 @@ void InitializeSMPanel()
 	MOUSE_CALLBACK smInvClickCallback = MouseCallbackPrimarySecondary(SMInvClickCallbackPrimary, SMInvClickCallbackSecondary, MSYS_NO_CALLBACK, true);
 	InitInvSlotInterface(g_ui.m_invSlotPositionTac, &g_ui.m_invCamoRegion, SMInvMoveCallback, smInvClickCallback, SMInvMoveCamoCallback, SMInvClickCamoCallback);
 	InitKeyRingInterface(KeyRingItemPanelButtonCallback);
+
+	if (gamepolicy(informative_tooltips))
+	{	//Define regions for the informative tooltips displaying effective attribute values
+		MakeRegionForAttributeHelpText(ATTR_AGILITY,      dx + SM_AGI_X - 10,    dy + SM_AGI_Y,    dx + SM_AGI_X + SM_STATS_WIDTH,    dy + SM_AGI_Y + 10);
+		MakeRegionForAttributeHelpText(ATTR_DEXTERITY,    dx + SM_DEX_X - 10,    dy + SM_DEX_Y,    dx + SM_DEX_X + SM_STATS_WIDTH,    dy + SM_DEX_Y + 10);
+		MakeRegionForAttributeHelpText(ATTR_STRENGTH,     dx + SM_STR_X - 10,    dy + SM_STR_Y,    dx + SM_STR_X + SM_STATS_WIDTH,    dy + SM_STR_Y + 10);
+		MakeRegionForAttributeHelpText(ATTR_LEADERSHIP,   dx + SM_CHAR_X - 10,   dy + SM_CHAR_Y,   dx + SM_CHAR_X + SM_STATS_WIDTH,   dy + SM_CHAR_Y + 10);
+		MakeRegionForAttributeHelpText(ATTR_WISDOM,       dx + SM_WIS_X - 10,    dy + SM_WIS_Y,    dx + SM_WIS_X + SM_STATS_WIDTH,    dy + SM_WIS_Y + 10);
+		//column 2
+		MakeRegionForAttributeHelpText(ATTR_EXPLEVEL,     dx + SM_EXPLVL_X - 10, dy + SM_EXPLVL_Y, dx + SM_EXPLVL_X + SM_STATS_WIDTH, dy + SM_EXPLVL_Y + 10);
+		MakeRegionForAttributeHelpText(ATTR_MARKSMANSHIP, dx + SM_MRKM_X - 10,   dy + SM_MRKM_Y,   dx + SM_MRKM_X + SM_STATS_WIDTH,   dy + SM_MRKM_Y + 10);
+		MakeRegionForAttributeHelpText(ATTR_EXPLOSIVES,   dx + SM_EXPL_X - 10,   dy + SM_EXPL_Y,   dx + SM_EXPL_X + SM_STATS_WIDTH,   dy + SM_EXPL_Y + 10);
+		MakeRegionForAttributeHelpText(ATTR_MECHANICAL,   dx + SM_MECH_X - 10,   dy + SM_MECH_Y,   dx + SM_MECH_X + SM_STATS_WIDTH,   dy + SM_MECH_Y + 10);
+		MakeRegionForAttributeHelpText(ATTR_MEDICAL,      dx + SM_MED_X - 10,    dy + SM_MED_Y,    dx + SM_MED_X + SM_STATS_WIDTH,    dy + SM_MED_Y + 10);
+	}
 
 	// this is important! It will disable buttons like SM_MAP_SCREEN_BUTTON when they're supposed to be
 	// disabled - the previous disabled state is lost everytime panel is reinitialized, because all the
@@ -1114,6 +1138,11 @@ void ShutdownSMPanel()
 	MSYS_RemoveRegion(&gSM_SELMERCBarsRegion);
 	MSYS_RemoveRegion(&gSM_SELMERCMoneyRegion);
 	MSYS_RemoveRegion(&gSM_SELMERCEnemyIndicatorRegion);
+	if (gamepolicy(informative_tooltips)) {
+		for (auto& i : gSM_SELMERCStatsRegion) {
+			MSYS_RemoveRegion(&i);
+		}
+	}
 
 	HandleMouseOverSoldierFaceForContMove(gpSMCurrentMerc, FALSE);
 
@@ -1141,11 +1170,7 @@ static void PrintAP(SOLDIERTYPE* const s, INT16 const x, INT16 const y, INT16 co
 	SetFontAttributes(TINYFONT1, foreground);
 
 	RestoreExternBackgroundRect(x, y, w, h);
-	ST::string buf = ST::format("{}", ap);
-	INT16 sFontX;
-	INT16 sFontY;
-	FindFontCenterCoordinates(x, y, w, h, buf, TINYFONT1, &sFontX, &sFontY);
-	MPrint(sFontX, sFontY, buf);
+	MPrint(x, y, ST::string::from_int(ap), HCenterVCenterAlign(w, h));
 }
 
 
@@ -1350,10 +1375,7 @@ no_plate:
 		INT16 const w = SM_SELMERCNAME_WIDTH;
 		INT16 const h = SM_SELMERCNAME_HEIGHT;
 		RestoreExternBackgroundRect(x, y, w, h);
-		INT16 sFontX;
-		INT16 sFontY;
-		FindFontCenterCoordinates(x, y, w, h, s.name, BLOCKFONT2, &sFontX, &sFontY);
-		MPrint(sFontX, sFontY, s.name);
+		MPrint(x, y, s.name, HCenterVCenterAlign(w, h));
 	}
 
 	if (*dirty_level != DIRTYLEVEL0)
@@ -1926,6 +1948,16 @@ static void SelectedMercButtonMoveCallback(MOUSE_REGION* pRegion, UINT32 iReason
 	}
 }
 
+static void SelectedMercPopupMoveCallback(MOUSE_REGION* pRegion, uint32_t iReason)
+{
+	if (gpSMCurrentMerc == nullptr)
+		return;
+
+	if (iReason & MSYS_CALLBACK_REASON_GAIN_MOUSE) {
+		Attributes attr = static_cast<Attributes>(pRegion - gSM_SELMERCStatsRegion);
+		pRegion->SetFastHelpText(GetModifiersForEffectiveAttributes(gpSMCurrentMerc, attr));
+	}
+}
 
 static void SelectedMercButtonCallbackPrimary(MOUSE_REGION* pRegion, UINT32 iReason)
 {
@@ -2435,11 +2467,8 @@ void RenderTEAMPanel(DirtyLevel const dirty_level)
 
 				// RENDER ON SAVE BUFFER!
 				SetFontDestBuffer(guiSAVEBUFFER);
-				INT16 sFontX;
-				INT16 sFontY;
-				FindFontCenterCoordinates(dx + TM_NAME_X, dy + TM_NAME_Y, TM_NAME_WIDTH, TM_NAME_HEIGHT,
-								s->name, BLOCKFONT2, &sFontX, &sFontY);
-				MPrint(sFontX, sFontY, s->name);
+				MPrint(dx + TM_NAME_X, dy + TM_NAME_Y, s->name,
+					HCenterVCenterAlign(TM_NAME_WIDTH, TM_NAME_HEIGHT));
 				// reset to frame buffer!
 				SetFontDestBuffer(FRAME_BUFFER);
 			}
@@ -3189,14 +3218,12 @@ static void RemovePlayerFromInterfaceTeamSlot(TeamPanelSlot& tp)
 
 void RenderTownIDString(void)
 {
-	INT16 sFontX, sFontY;
-
 	// Render town, position
 	SetFontAttributes(COMPFONT, 183);
 	ST::string zTownIDString = GetSectorIDString(gWorldSector, TRUE);
 	zTownIDString = ReduceStringLength(zTownIDString, 80, COMPFONT);
-	FindFontCenterCoordinates(INTERFACE_START_X + g_ui.m_teamPanelSlotsTotalWidth + 50, SCREEN_HEIGHT - 55, 80, 16, zTownIDString, COMPFONT, &sFontX, &sFontY);
-	MPrint(sFontX, sFontY, zTownIDString);
+	MPrint(INTERFACE_START_X + g_ui.m_teamPanelSlotsTotalWidth + 50,
+		SCREEN_HEIGHT - 55, zTownIDString, HCenterVCenterAlign(80, 16));
 }
 
 
@@ -3588,7 +3615,8 @@ void ShopKeeperInterface_SetSMpanelButtonsState(bool const enabled)
 	//Make sure the options button is disabled
 	EnableButton( iSMPanelButtons[ OPTIONS_BUTTON ], enabled );
 
-	//Make sure the mapscreen button is disabled
+	//Make sure the done and mapscreen buttons are disabled
+	EnableButton( iSMPanelButtons[ SM_DONE_BUTTON ], enabled );
 	EnableButton( iSMPanelButtons[ SM_MAP_SCREEN_BUTTON ], enabled );
 
 	EnableButton( iSMPanelButtons[ STANCEUP_BUTTON ], enabled );
@@ -3773,17 +3801,6 @@ void HandleTacticalEffectsOfEquipmentChange(SOLDIERTYPE* pSoldier, UINT32 uiInvP
 	}
 }
 
-
-void LoadInterfacePanelGraphics()
-{
-	guiCLOSE = AddVideoObjectFromFile(INTERFACEDIR "/p_close.sti");
-}
-
-
-void DeleteInterfacePanelGraphics()
-{
-	DeleteVideoObject(guiCLOSE);
-}
 
 static std::unique_ptr<SGPVSurface> CreateVideoSurfaceFromObjectFile(const ST::string& filename, UINT16 usRegionIndex)
 {

@@ -642,10 +642,16 @@ static void StartInterrupt(void)
 
 
 		// here we have to rebuilt the AI list!
-		BuildAIListForTeam( bTeam );
+		if (!BuildAIListForTeam(bTeam))
+		{
+			// Nobody on that team matched the conditions to get added to the
+			// AI list which means we don't have anyone left for this interrupt.
+			return EndInterrupt(false);
+		}
 
 		// set to the new first interrupter
 		SOLDIERTYPE* const pSoldier = RemoveFirstAIListEntry();
+		AssertMsg(pSoldier, "BuildAIListForTeam returned true but list is empty");
 
 		//if ( gTacticalStatus.ubCurrentTeam == OUR_TEAM)
 		if ( pSoldier->bTeam != OUR_TEAM )
@@ -1109,12 +1115,6 @@ BOOLEAN StandardInterruptConditionsMet(const SOLDIERTYPE* const pSoldier, const 
 	{
 		return(FALSE);
 	}
-
-
-#ifdef RECORDINTERRUPT
-	// this usually starts a new series of logs, so that's why the blank line
-	fprintf(InterruptFile, "\nStandardInterruptConditionsMet by %d vs. %d\n", pSoldier->guynum, pOpponent->ubID);
-#endif
 
 	return(TRUE);
 }

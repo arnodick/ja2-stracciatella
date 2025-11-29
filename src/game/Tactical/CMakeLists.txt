@@ -82,17 +82,45 @@ if (WITH_UNITTESTS)
     set(LOCAL_JA2_SOURCES
         ${LOCAL_JA2_SOURCES}
         ${CMAKE_CURRENT_SOURCE_DIR}/LoadSaveMercProfile_unittest.cc
+        ${CMAKE_CURRENT_SOURCE_DIR}/LoadSaveSoldierType_unittest.cc
+        ${CMAKE_CURRENT_SOURCE_DIR}/Weapons_unittest.cc
     )
 endif()
+
+set_property(
+    SOURCE ${LOCAL_JA2_SOURCES}
+    DIRECTORY ${CMAKE_SOURCE_DIR}
+    PROPERTY UNITY_GROUP "Tactical"
+)
+
+# Interface_Panels has enum values that clash with Interface.cc
+# PathAI defines some macros that cause problems in other source files.
+set_property(
+    SOURCE
+        ${CMAKE_CURRENT_SOURCE_DIR}/FOV.cc
+        ${CMAKE_CURRENT_SOURCE_DIR}/Interface_Panels.cc
+        ${CMAKE_CURRENT_SOURCE_DIR}/PathAI.cc
+    DIRECTORY ${CMAKE_SOURCE_DIR}
+    PROPERTY UNITY_GROUP "Tactical_Others"
+)
+
+set_property(
+    SOURCE
+        ${CMAKE_CURRENT_SOURCE_DIR}/LoadSaveBasicSoldierCreateStruct.cc
+        ${CMAKE_CURRENT_SOURCE_DIR}/LoadSaveBullet.cc
+        ${CMAKE_CURRENT_SOURCE_DIR}/LoadSaveMercProfile.cc
+        ${CMAKE_CURRENT_SOURCE_DIR}/LoadSaveObjectType.cc
+        ${CMAKE_CURRENT_SOURCE_DIR}/LoadSaveRottingCorpse.cc
+        ${CMAKE_CURRENT_SOURCE_DIR}/LoadSaveSoldierCreate.cc
+        ${CMAKE_CURRENT_SOURCE_DIR}/LoadSaveSoldierType.cc
+        ${CMAKE_CURRENT_SOURCE_DIR}/LoadSaveVehicleType.cc
+    DIRECTORY ${CMAKE_SOURCE_DIR}
+    PROPERTY UNITY_GROUP "LoadSaveDataTypes"
+)
 
 set(JA2_SOURCES
     ${JA2_SOURCES}
     ${LOCAL_JA2_SOURCES}
     ${LOCAL_JA2_HEADERS}
-    PARENT_SCOPE
-)
-set(JA2_INCLUDES
-    ${JA2_INCLUDES}
-    ${CMAKE_CURRENT_SOURCE_DIR}
     PARENT_SCOPE
 )

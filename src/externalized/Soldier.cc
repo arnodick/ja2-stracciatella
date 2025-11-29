@@ -1,15 +1,15 @@
 #include "Soldier.h"
 
-#include "game/Tactical/Animation_Control.h"
-#include "game/Tactical/Handle_Items.h"
-#include "game/Tactical/Interface.h"
-#include "game/Tactical/Items.h"
-#include "game/Tactical/Overhead.h"
-#include "game/Tactical/Soldier_Control.h"
-#include "game/Tactical/Soldier_Functions.h"
-#include "game/TacticalAI/AI.h"
-#include "game/Utils/Font_Control.h"
-#include "game/Utils/Message.h"
+#include "Animation_Control.h"
+#include "Handle_Items.h"
+#include "Interface.h"
+#include "Items.h"
+#include "Overhead.h"
+#include "Soldier_Control.h"
+#include "Soldier_Functions.h"
+#include "AI.h"
+#include "Font_Control.h"
+#include "Message.h"
 
 #include "ContentManager.h"
 #include "GameInstance.h"
@@ -277,9 +277,9 @@ void Soldier::putDayHeadGear()
 
 void Soldier::switchHeadGear(int switchDirection)
 {
-	if (IsWearingHeadGear(*mSoldier, GASMASK))
+	if (IsWearingHeadGear(*mSoldier, GASMASK) || IsWearingHeadGear(*mSoldier, ROBOT_REMOTE_CONTROL))
 	{
-		// Gas mask is not compatible with eye gears
+		// Equipped items incompatible with eye gears
 		return;
 	}
 

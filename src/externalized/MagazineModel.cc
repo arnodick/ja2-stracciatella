@@ -2,13 +2,14 @@
 
 #include "AmmoTypeModel.h"
 #include "CalibreModel.h"
+#include "ItemModel.h"
 #include <utility>
 
 MagazineModel::MagazineModel(uint16_t itemIndex_,
-				ST::string internalName_,
-				ST::string shortName_,
-				ST::string name_,
-				ST::string description_,
+				ST::string&& internalName_,
+				ST::string&& shortName_,
+				ST::string&& name_,
+				ST::string&& description_,
 				uint32_t itemClass_,
 				const CalibreModel *calibre_,
 				uint16_t capacity_,
@@ -19,9 +20,9 @@ MagazineModel::MagazineModel(uint16_t itemIndex_,
 	calibre(calibre_), capacity(capacity_), ammoType(ammoType_),
 	dontUseAsDefaultMagazine(dontUseAsDefaultMagazine_)
 {
-	this->shortName = shortName_;
-	this->name = name_;
-	this->description = description_;
+	this->shortName = std::move(shortName_);
+	this->name = std::move(name_);
+	this->description = std::move(description_);
 }
 
 
@@ -60,25 +61,26 @@ MagazineModel* MagazineModel::deserialize(
 	const JsonValue &json,
 	const std::map<ST::string, const CalibreModel*> &calibreMap,
 	const std::map<ST::string, const AmmoTypeModel*> &ammoTypeMap,
-	const VanillaItemStrings& vanillaItemStrings)
+	const BinaryData& vanillaItemStrings)
 {
 	auto obj = json.toObject();
+	ItemModel::InitData const initData{ obj, vanillaItemStrings };
 	int itemIndex                 = obj.GetInt("itemIndex");
 	ST::string internalName       = obj.GetString("internalName");
 	const CalibreModel *calibre   = getCalibre(obj.GetString("calibre"), calibreMap);
-	uint32_t itemClass            = (calibre->index != NOAMMO) ? IC_AMMO : IC_NONE;
+	uint32_t itemClass            = (calibre->index != CalibreModel::NOAMMO) ? IC_AMMO : IC_NONE;
 	uint16_t capacity             = obj.GetInt("capacity");
 	const AmmoTypeModel *ammoType = getAmmoType(obj.GetString("ammoType"), ammoTypeMap);
 	bool dontUseAsDefaultMagazine = obj.getOptionalBool("dontUseAsDefaultMagazine");
-	auto shortName = ItemModel::deserializeShortName(obj, vanillaItemStrings);
-	auto name = ItemModel::deserializeName(obj, vanillaItemStrings);
-	auto description = ItemModel::deserializeDescription(obj, vanillaItemStrings);
+	auto shortName = ItemModel::deserializeShortName(initData);
+	auto name = ItemModel::deserializeName(initData);
+	auto description = ItemModel::deserializeDescription(initData);
 	MagazineModel *mag = new MagazineModel(
 		itemIndex,
-		internalName,
-		shortName,
-		name,
-		description,
+		std::move(internalName),
+		std::move(shortName),
+		std::move(name),
+		std::move(description),
 		itemClass,
 		calibre,
 		capacity,
@@ -86,7 +88,7 @@ MagazineModel* MagazineModel::deserialize(
 		dontUseAsDefaultMagazine
 	);
 
-	mag->fFlags = mag->deserializeFlags(obj);
+	mag->fFlags = ItemModel::deserializeFlags(obj);
 
 	const auto inventoryGraphics = InventoryGraphicsModel::deserialize(obj["inventoryGraphics"]);
 	const auto tileGraphic = TilesetTileIndexModel::deserialize(obj["tileGraphic"]);

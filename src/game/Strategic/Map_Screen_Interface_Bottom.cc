@@ -5,6 +5,7 @@
 #include "Map_Screen_Interface_Bottom.h"
 #include "Map_Screen_Interface_Border.h"
 #include "MessageBoxScreen.h"
+#include "Object_Cache.h"
 #include "Timer_Control.h"
 #include "Types.h"
 #include "VObject.h"
@@ -119,8 +120,10 @@ static UINT8 gubFirstMapscreenMessageIndex = 0;
 UINT32 guiCompressionStringBaseTime = 0;
 
 // graphics
-static SGPVObject* guiMAPBOTTOMPANEL;
-static SGPVObject* guiSliderBar;
+namespace {
+cache_key_t const guiMAPBOTTOMPANEL{ INTERFACEDIR "/map_screen_bottom.sti" };
+cache_key_t const guiSliderBar{ INTERFACEDIR "/map_screen_bottom_arrows.sti" };
+}
 
 // buttons
 GUIButtonRef        guiMapBottomExitButtons[3];
@@ -144,21 +147,6 @@ static void BtnTimeCompressLessMapScreenCallback(GUI_BUTTON *btn, UINT32 reason)
 static void BtnMessageDownMapScreenCallback(GUI_BUTTON *btn, UINT32 reason);
 static void BtnMessageUpMapScreenCallback(GUI_BUTTON *btn, UINT32 reason);
 
-
-static void LoadMessageSliderBar(void);
-
-
-void HandleLoadOfMapBottomGraphics( void )
-{
-	// will load the graphics needed for the mapscreen interface bottom
-	// will create buttons for interface bottom
-	guiMAPBOTTOMPANEL = AddVideoObjectFromFile(INTERFACEDIR "/map_screen_bottom.sti");
-
-	// load slider bar icon
-	LoadMessageSliderBar( );
-}
-
-
 static void CreateButtonsForMapScreenInterfaceBottom(void);
 static void CreateCompressModePause(void);
 static void CreateMapScreenBottomMessageScrollBarRegion(void);
@@ -174,14 +162,10 @@ void LoadMapScreenInterfaceBottom(void)
 }
 
 
-static void DeleteMessageSliderBar(void);
-
-
 void DeleteMapBottomGraphics( void )
 {
-	DeleteVideoObject(guiMAPBOTTOMPANEL);
-	// delete slider bar icon
-	DeleteMessageSliderBar( );
+	RemoveVObject(guiMAPBOTTOMPANEL);
+	RemoveVObject(guiSliderBar);
 }
 
 
@@ -218,7 +202,7 @@ void RenderMapScreenInterfaceBottom( void )
 	if (fMapScreenBottomDirty)
 	{
 		BltVideoObject(guiSAVEBUFFER, guiMAPBOTTOMPANEL, 0, MAP_BOTTOM_X, MAP_BOTTOM_Y);
-		SGPSector sMap(sSelMap.x, sSelMap.y, iCurrentMapSectorZ);
+		auto const& sMap{ sSelMap };
 
 		if (GetSectorFlagStatus(sMap, SF_ALREADY_VISITED))
 		{
@@ -346,13 +330,10 @@ static void DrawNameOfLoadedSector()
 	SGPFont const font = COMPFONT;
 	SetFontAttributes(font, 183);
 
-	ST::string buf = GetSectorIDString(SGPSector(sSelMap.x, sSelMap.y, iCurrentMapSectorZ), TRUE);
+	ST::string buf = GetSectorIDString(sSelMap, TRUE);
 	buf = ReduceStringLength(buf, 80, font);
 
-	INT16 x;
-	INT16 y;
-	FindFontCenterCoordinates(STD_SCREEN_X + 548, STD_SCREEN_Y + 426, 80, 16, buf, font, &x, &y);
-	MPrint(x, y, buf);
+	MPrint(STD_SCREEN_X + 548, STD_SCREEN_Y + 426, buf, HCenterVCenterAlign(80, 16));
 }
 
 
@@ -523,7 +504,6 @@ static void EnableDisableMessageScrollButtonsAndRegions(void)
 
 static void DisplayCompressMode(void)
 {
-	INT16 sX, sY;
 	static UINT8 usColor = FONT_LTGREEN;
 
 	// get compress speed
@@ -556,8 +536,8 @@ static void DisplayCompressMode(void)
 	}
 
 	SetFontAttributes(COMPFONT, usColor);
-	FindFontCenterCoordinates(STD_SCREEN_X + 489, STD_SCREEN_Y + 457, 522 - 489, 467 - 454, Time, COMPFONT, &sX, &sY);
-	MPrint(sX, sY, Time);
+	MPrint(STD_SCREEN_X + 489, STD_SCREEN_Y + 457, Time,
+		HCenterVCenterAlign(522 - 489, 467 - 454));
 }
 
 
@@ -572,20 +552,6 @@ static void CreateCompressModePause(void)
 static void RemoveCompressModePause(void)
 {
 	MSYS_RemoveRegion( &gMapPauseRegion );
-}
-
-
-static void LoadMessageSliderBar(void)
-{
-	// this function will load the message slider bar
-	guiSliderBar = AddVideoObjectFromFile(INTERFACEDIR "/map_screen_bottom_arrows.sti");
-}
-
-
-static void DeleteMessageSliderBar(void)
-{
-	// this function will delete message slider bar
-	DeleteVideoObject(guiSliderBar);
 }
 
 
@@ -877,19 +843,12 @@ BOOLEAN AllowedToTimeCompress( void )
 
 static void DisplayCurrentBalanceTitleForMapBottom(void)
 {
-	ST::string sString;
-	INT16 sFontX, sFontY;
-
 	SetFontDestBuffer(guiSAVEBUFFER);
 	SetFontAttributes(COMPFONT, MAP_BOTTOM_FONT_COLOR);
+	HCenterVCenterAlign const alignment{ 437 - 359, 10 };
 
-	sString = pMapScreenBottomText;
-	FindFontCenterCoordinates(STD_SCREEN_X + 359, STD_SCREEN_Y + 387 - 14,  437 - 359, 10, sString, COMPFONT, &sFontX, &sFontY);
-	MPrint(sFontX, sFontY, sString);
-
-	sString = zMarksMapScreenText[2];
-	FindFontCenterCoordinates(STD_SCREEN_X + 359, STD_SCREEN_Y + 433 - 14,  437 - 359, 10, sString, COMPFONT, &sFontX, &sFontY);
-	MPrint(sFontX, sFontY, sString);
+	MPrint(STD_SCREEN_X + 359, STD_SCREEN_Y + 387 - 14, pMapScreenBottomText, alignment);
+	MPrint(STD_SCREEN_X + 359, STD_SCREEN_Y + 433 - 14, zMarksMapScreenText[2], alignment);
 
 	SetFontDestBuffer(FRAME_BUFFER);
 }
@@ -898,13 +857,11 @@ static void DisplayCurrentBalanceTitleForMapBottom(void)
 static void DisplayCurrentBalanceForMapBottom(void)
 {
 	// show the current balance for the player on the map panel bottom
-	INT16 sFontX, sFontY;
-
 	SetFontDestBuffer(FRAME_BUFFER);
 	SetFontAttributes(COMPFONT, 183);
-	ST::string sString = SPrintMoney(LaptopSaveInfo.iCurrentBalance);
-	FindFontCenterCoordinates(STD_SCREEN_X + 359, STD_SCREEN_Y + 387 + 2,  437 - 359, 10, sString, COMPFONT, &sFontX, &sFontY);
-	MPrint(sFontX, sFontY, sString);
+	MPrint(STD_SCREEN_X + 359, STD_SCREEN_Y + 387 + 2,
+		SPrintMoney(LaptopSaveInfo.iCurrentBalance),
+		HCenterVCenterAlign(437 - 359, 10));
 }
 
 
@@ -946,7 +903,6 @@ static void DisplayProjectedDailyMineIncome(void)
 {
 	INT32 iRate = 0;
 	static INT32 iOldRate = -1;
-	INT16 sFontX, sFontY;
 
 	// grab the rate from the financial system
 	iRate = GetProjectedTotalDailyIncome( );
@@ -962,9 +918,8 @@ static void DisplayProjectedDailyMineIncome(void)
 
 	SetFontDestBuffer(FRAME_BUFFER);
 	SetFontAttributes(COMPFONT, 183);
-	ST::string sString = SPrintMoney(iRate);
-	FindFontCenterCoordinates(STD_SCREEN_X + 359, STD_SCREEN_Y + 433 + 2,  437 - 359, 10, sString, COMPFONT, &sFontX, &sFontY);
-	MPrint(sFontX, sFontY, sString);
+	MPrint(STD_SCREEN_X + 359, STD_SCREEN_Y + 433 + 2,
+		SPrintMoney(iRate), HCenterVCenterAlign(437 - 359, 10));
 }
 
 
@@ -1093,7 +1048,7 @@ BOOLEAN AllowedToExitFromMapscreenTo(ExitToWhere const bExitToWhere)
 	if ( bExitToWhere == MAP_EXIT_TO_TACTICAL )
 	{
 		// if in battle or bloodcat ambush, the ONLY sector we can go tactical in is the one that's loaded
-		SGPSector sector(sSelMap.x, sSelMap.y, iCurrentMapSectorZ);
+		auto const& sector{ sSelMap };
 		BOOLEAN fBattleGoingOn = gTacticalStatus.uiFlags & INCOMBAT || gTacticalStatus.fEnemyInSector || (gubEnemyEncounterCode == BLOODCAT_AMBUSH_CODE && HostileBloodcatsPresent());
 		BOOLEAN fCurrentSectorSelected = sector == gWorldSector;
 		if (fBattleGoingOn && !fCurrentSectorSelected)
@@ -1147,7 +1102,7 @@ void HandleExitsFromMapScreen( void )
 				break;
 
 			case MAP_EXIT_TO_TACTICAL:
-				SetCurrentWorldSector(SGPSector(sSelMap.x, sSelMap.y, iCurrentMapSectorZ));
+				SetCurrentWorldSector(sSelMap);
 				break;
 
 			case MAP_EXIT_TO_OPTIONS:

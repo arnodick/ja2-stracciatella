@@ -6,8 +6,8 @@
 #include "Fade_Screen.h"
 #include "Font.h"
 #include "Font_Control.h"
+#include "Object_Cache.h"
 #include "Options_Screen.h"
-#include "GameInitOptionsScreen.h"
 #include "GameSettings.h"
 #include "Input.h"
 #include "Intro.h"
@@ -17,10 +17,10 @@
 #include "ContentMusic.h"
 #include "Options_Screen.h"
 #include "Render_Dirty.h"
+#include "ScreenIDs.h"
 #include "SysUtil.h"
 #include "Text.h"
 #include "Types.h"
-#include "VObject.h"
 #include "VSurface.h"
 #include "Video.h"
 #include "WordWrap.h"
@@ -133,7 +133,7 @@ static UINT8 gubGameOptionScreenHandler = GIO_NOTHING;
 
 static ScreenID gubGIOExitScreen = GAME_INIT_OPTIONS_SCREEN;
 
-static SGPVObject* guiGIOMainBackGroundImage;
+static cache_key_t const guiGIOMainBackGroundImage{ INTERFACEDIR "/optionsscreenbackground.sti" };
 
 
 // Done Button
@@ -186,7 +186,7 @@ static void ConfirmGioDeadIsDeadMessageBoxCallBack(MessageBoxReturnValue);
 static void ConfirmGioDeadIsDeadGoToSaveMessageBoxCallBack(MessageBoxReturnValue);
 
 
-ScreenID GameInitOptionsScreenHandle(void)
+template<> ScreenID HandleScreen<GAME_INIT_OPTIONS_SCREEN>()
 {
 	if (gfGIOScreenEntry)
 	{
@@ -263,8 +263,6 @@ static void EnterGIOScreen()
 
 	SetCurrentCursorFromDatabase(CURSOR_NORMAL);
 
-	guiGIOMainBackGroundImage = AddVideoObjectFromFile(INTERFACEDIR "/optionsscreenbackground.sti");
-
 	// Ok button
 	giGIODoneBtnImage = LoadButtonImage(INTERFACEDIR "/preferencesbuttons.sti", 0, 2);
 	guiGIODoneButton  = MakeButton(giGIODoneBtnImage, gzGIOScreenText[GIO_OK_TEXT], GIO_BTN_OK_X, BtnGIODoneCallback);
@@ -329,7 +327,7 @@ static void ExitGIOScreen()
 	gfGIOButtonsAllocated = FALSE;
 
 	// Delete the main options screen background.
-	DeleteVideoObject(guiGIOMainBackGroundImage);
+	RemoveVObject(guiGIOMainBackGroundImage);
 
 	RemoveButton(guiGIOCancelButton);
 	RemoveButton(guiGIODoneButton);

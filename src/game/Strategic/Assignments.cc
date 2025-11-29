@@ -1400,7 +1400,7 @@ static UINT16 HealPatient(SOLDIERTYPE* pPatient, SOLDIERTYPE* pDoctor, UINT16 us
 		// go through doctor's pockets and heal, starting at with his in-hand item
 		for (bPocket = HANDPOS; bPocket <= SMALLPOCK8POS; bPocket++)
 		{
-			OBJECTTYPE o = pDoctor->inv[bPocket];
+			auto & o = pDoctor->inv[bPocket];
 			if (IsMedicalKitItem(&o))
 			{
 				// ok, we have med kit in this pocket, use it
@@ -3332,6 +3332,10 @@ static void MakeSureToolKitIsInHand(SOLDIERTYPE* pSoldier)
 			if( pSoldier -> inv[ bPocket ].usItem == TOOLKIT )
 			{
 				SwapObjs( &pSoldier -> inv[ HANDPOS ], &pSoldier -> inv[ bPocket ] );
+				if (pSoldier->inv[SECONDHANDPOS].usItem == NOTHING && pSoldier->inv[bPocket].usItem != NOTHING)
+				{
+					SwapObjs(&pSoldier->inv[SECONDHANDPOS], &pSoldier->inv[bPocket]);
+				}
 				break;
 			}
 		}
@@ -3358,6 +3362,10 @@ static BOOLEAN MakeSureMedKitIsInHand(SOLDIERTYPE* pSoldier)
 		{
 			fCharacterInfoPanelDirty = TRUE;
 			SwapObjs( &pSoldier -> inv[ HANDPOS ], &pSoldier -> inv[ bPocket ] );
+			if (pSoldier->inv[SECONDHANDPOS].usItem == NOTHING && pSoldier->inv[bPocket].usItem != NOTHING)
+			{
+				SwapObjs(&pSoldier->inv[SECONDHANDPOS], &pSoldier->inv[bPocket]);
+			}
 			return(TRUE);
 		}
 	}

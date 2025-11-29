@@ -15,15 +15,16 @@ env:
 
 jobs:
   coverity_scan:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Set up environment
         shell: bash
         run: ${{ github.workspace }}/.ci/ci-setup.sh 2>&1
         env:
           CI_TARGET: linux
+          TARGET_GCC_MAJOR_VERSION: 13
 
       - name: Download and install Coverity Build Tool
         run: |
@@ -62,7 +63,7 @@ jobs:
               https://scan.coverity.com/builds?project=${COVERITY_PROJECT}
 
       - name: Upload scan logs as artifacts
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: scan-logs
           path: |

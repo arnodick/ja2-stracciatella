@@ -1,3 +1,4 @@
+#include "ArmourModel.h"
 #include "Font_Control.h"
 #include "Handle_Items.h"
 #include "Items.h"
@@ -90,8 +91,6 @@ static std::map<UINT16, std::set<UINT16> const> const g_attachments
 {
 	{DETONATOR, {TNT, HMX, C1, C4}},
 	{REMDETONATOR, {TNT, HMX, C1, C4}},
-	{CERAMIC_PLATES, {FLAK_JACKET, FLAK_JACKET_18, FLAK_JACKET_Y, KEVLAR_VEST, KEVLAR_VEST_18, KEVLAR_VEST_Y,
-	                  KEVLAR2_VEST, KEVLAR2_VEST_18, KEVLAR2_VEST_Y, SPECTRA_VEST, SPECTRA_VEST_18, SPECTRA_VEST_Y}},
 	{SPRING, {ALUMINUM_ROD}},
 	{QUICK_GLUE, {STEEL_ROD}},
 	{DUCT_TAPE, {STEEL_ROD}},
@@ -99,31 +98,6 @@ static std::map<UINT16, std::set<UINT16> const> const g_attachments
 	{CHEWING_GUM, {FUMBLE_PAK}},
 	{BATTERIES, {XRAY_DEVICE}},
 	{COPPER_WIRE, {LAME_BOY}}
-};
-
-// additional possible attachments if the extra_attachments game policy is set
-static std::set<UINT16> const g_helmets {STEEL_HELMET, KEVLAR_HELMET, KEVLAR_HELMET_18, KEVLAR_HELMET_Y, SPECTRA_HELMET, SPECTRA_HELMET_18, SPECTRA_HELMET_Y};
-static std::set<UINT16> const g_leggings {KEVLAR_LEGGINGS, KEVLAR_LEGGINGS_18, KEVLAR_LEGGINGS_Y, SPECTRA_LEGGINGS, SPECTRA_LEGGINGS_18, SPECTRA_LEGGINGS_Y};
-static std::map<UINT16, decltype(g_helmets) *> const g_attachments_mod
-{
-	{NIGHTGOGGLES, &g_helmets},
-	{UVGOGGLES, &g_helmets},
-	{SUNGOGGLES, &g_helmets},
-	{ROBOT_REMOTE_CONTROL, &g_helmets},
-
-	{BREAK_LIGHT, &g_leggings},
-	{REGEN_BOOSTER, &g_leggings},
-	{ADRENALINE_BOOSTER, &g_leggings}
-};
-
-static std::map<UINT16, std::set<UINT16> const> const Launchable
-{
-	{GL_HE_GRENADE, {GLAUNCHER, UNDER_GLAUNCHER}},
-	{GL_TEARGAS_GRENADE, {GLAUNCHER, UNDER_GLAUNCHER}},
-	{GL_STUN_GRENADE, {GLAUNCHER, UNDER_GLAUNCHER}},
-	{GL_SMOKE_GRENADE, {GLAUNCHER, UNDER_GLAUNCHER}},
-	{MORTAR_SHELL, {MORTAR}},
-	{TANK_SHELL, {TANK_CANNON}}
 };
 
 static std::initializer_list<std::array<UINT16, 2> const> const CompatibleFaceItems
@@ -508,36 +482,6 @@ INT8 FindEmptySlotWithin( const SOLDIERTYPE * pSoldier, INT8 bLower, INT8 bUpper
 	return( ITEM_NOT_FOUND );
 }
 
-
-static BOOLEAN GLGrenadeInSlot(const SOLDIERTYPE* pSoldier, INT8 bSlot)
-{
-	switch (pSoldier->inv[bSlot].usItem)
-	{
-		case GL_HE_GRENADE:
-		case GL_TEARGAS_GRENADE:
-		case GL_STUN_GRENADE:
-		case GL_SMOKE_GRENADE:
-			return(TRUE);
-		default:
-			return(FALSE);
-	}
-}
-
-// for grenade launchers
-INT8 FindGLGrenade( const SOLDIERTYPE * pSoldier )
-{
-	INT8 bLoop;
-
-	for (bLoop = 0; bLoop < NUM_INV_SLOTS; bLoop++)
-	{
-		if (GLGrenadeInSlot( pSoldier, bLoop ))
-		{
-			return( bLoop );
-		}
-	}
-	return( NO_SLOT );
-}
-
 INT8 FindThrowableGrenade( const SOLDIERTYPE * pSoldier )
 {
 	INT8 bLoop;
@@ -566,22 +510,23 @@ INT8 FindThrowableGrenade( const SOLDIERTYPE * pSoldier )
 
 	for (bLoop = 0; bLoop < NUM_INV_SLOTS; bLoop++)
 	{
-		if ( (GCM->getItem(pSoldier->inv[ bLoop ].usItem)->isGrenade()) && !GLGrenadeInSlot( pSoldier, bLoop ) )
-		{
-			return( bLoop );
+		if (GCM->getItem(pSoldier->inv[ bLoop ].usItem)->isGrenade()) {
+			auto explosive = GCM->getExplosive(pSoldier->inv[ bLoop ].usItem);
+
+			if (!explosive->isLaunchable()) {
+				return bLoop;
+			}
 		}
 	}
 	return( NO_SLOT );
 }
 
-
-INT8 FindAttachment(const OBJECTTYPE* pObj, UINT16 usItem)
+template <typename Filter>
+INT8 FindAttachmentByFunction(const OBJECTTYPE* const pObj, const Filter&& func)
 {
-	INT8 bLoop;
-
-	for (bLoop = 0; bLoop < MAX_ATTACHMENTS; bLoop++)
+	for (INT8 bLoop = 0; bLoop < MAX_ATTACHMENTS; bLoop++)
 	{
-		if (pObj->usAttachItem[bLoop] == usItem)
+		if (func(pObj->usAttachItem[bLoop]))
 		{
 			return( bLoop );
 		}
@@ -589,19 +534,24 @@ INT8 FindAttachment(const OBJECTTYPE* pObj, UINT16 usItem)
 	return( ITEM_NOT_FOUND );
 }
 
+INT8 FindAttachment(const OBJECTTYPE* pObj, UINT16 usItem)
+{
+	return FindAttachmentByFunction(pObj, [usItem](UINT16 item) { return item == usItem; });
+}
+
 
 INT8 FindAttachmentByClass(OBJECTTYPE const* const pObj, UINT32 const uiItemClass)
 {
-	INT8 bLoop;
+	return FindAttachmentByFunction(pObj, [uiItemClass](UINT16 item) {
+		return GCM->getItem(item)->getItemClass() == uiItemClass;
+	});
+}
 
-	for (bLoop = 0; bLoop < MAX_ATTACHMENTS; bLoop++)
-	{
-		if (GCM->getItem(pObj->usAttachItem[bLoop])->getItemClass() == uiItemClass)
-		{
-			return( bLoop );
-		}
-	}
-	return( ITEM_NOT_FOUND );
+INT8 FindPlatesAttachment(OBJECTTYPE const* pObj)
+{
+	return FindAttachmentByFunction(pObj, [](UINT16 item) {
+		return GCM->getItem(item)->isArmour() && GCM->getItem(item)->asArmour()->getArmourClass() == ARMOURCLASS_PLATE;
+	});
 }
 
 INT8 FindLaunchable( const SOLDIERTYPE * pSoldier, UINT16 usWeapon )
@@ -674,8 +624,9 @@ static const AttachmentInfoStruct* GetAttachmentInfo(const UINT16 usItem)
 
 bool ValidAttachment(UINT16 const attachment, UINT16 const item)
 {
-	const ItemModel *itemModel = GCM->getItem(item);
-	if (itemModel && itemModel->canBeAttached(attachment))
+	auto * attachmentModel{ GCM->getItem(attachment, ItemSystem::nothrow) };
+	auto * itemModel{ GCM->getItem(item, ItemSystem::nothrow) };
+	if (attachmentModel && itemModel && itemModel->canBeAttached(GCM->getGamePolicy(), attachmentModel))
 	{
 		return true;
 	}
@@ -683,12 +634,6 @@ bool ValidAttachment(UINT16 const attachment, UINT16 const item)
 	{
 		auto const it = g_attachments.find(attachment);
 		if (it != g_attachments.end() && it->second.count(item) == 1) return true;
-	}
-
-	if (gamepolicy(extra_attachments))
-	{
-		auto const it = g_attachments_mod.find(attachment);
-		if (it != g_attachments_mod.end() && (*it->second).count(item) == 1) return true;
 	}
 
 	return false;
@@ -798,20 +743,45 @@ BOOLEAN CompatibleFaceItem(UINT16 const item1, UINT16 const item2)
 
 BOOLEAN ValidLaunchable( UINT16 usLaunchable, UINT16 usItem )
 {
-	auto const it = Launchable.find(usLaunchable);
-	if (it != Launchable.end())
-	{
-		return it->second.count(usItem) == 1;
+	auto launchable = GCM->getItem(usLaunchable, ItemSystem::nothrow);
+	if (!launchable || !launchable->asExplosive()) {
+		return false;
+	}
+	auto explosiveCalibre = launchable->asExplosive()->getExplosiveCalibre();
+	if (!explosiveCalibre) {
+		return false;
+	}
+	auto item = GCM->getItem(usItem, ItemSystem::nothrow);
+	if (!item || !item->isWeapon()) {
+		return false;
 	}
 
-	return FALSE;
+	return item->asWeapon()->matches(explosiveCalibre);
 }
 
 
 UINT16 GetLauncherFromLaunchable( UINT16 usLaunchable )
 {
-	auto const it = Launchable.find(usLaunchable);
-	return it != Launchable.end() ? *it->second.begin() : NOTHING;
+	auto launchable = GCM->getItem(usLaunchable, ItemSystem::nothrow);
+	if (!launchable || !launchable->asExplosive()) {
+		return NOTHING;
+	}
+	auto explosiveCalibre = launchable->asExplosive()->getExplosiveCalibre();
+	if (!explosiveCalibre) {
+		return NOTHING;
+	}
+
+	for (auto item : GCM->getItems()) {
+		auto weapon = item->asWeapon();
+		if (!weapon) {
+			continue;
+		}
+
+		if (weapon->matches(explosiveCalibre)) {
+			return weapon->getItemIndex();
+		}
+	}
+	return NOTHING;
 }
 
 
@@ -1400,10 +1370,15 @@ INT8 FindAmmoToReload( const SOLDIERTYPE * pSoldier, INT8 bWeaponIn, INT8 bExclu
 
 	if (pSoldier == NULL)
 	{
-		return( NO_SLOT );
+		return NO_SLOT;
 	}
 	pObj = &(pSoldier->inv[bWeaponIn]);
-	if ( GCM->getItem(pObj->usItem)->getItemClass() == IC_GUN && pObj->usItem != TANK_CANNON )
+	auto item = GCM->getItem(pObj->usItem, ItemSystem::nothrow);
+	if ( !item || !item->isWeapon() ) {
+		return NO_SLOT;
+	}
+	auto weapon = item->asWeapon();
+	if ( weapon->getItemClass() == IC_GUN && !weapon->shootsExplosiveCalibre() )
 	{
 		// look for same ammo as before
 		bSlot = FindObjExcludingSlot( pSoldier, pObj->usGunAmmoItem, bExcludeSlot );
@@ -1413,7 +1388,7 @@ INT8 FindAmmoToReload( const SOLDIERTYPE * pSoldier, INT8 bWeaponIn, INT8 bExclu
 			return( bSlot );
 		}
 		// look for any ammo that matches which is of the same calibre and magazine size
-		bSlot = FindAmmo( pSoldier, GCM->getWeapon(pObj->usItem)->calibre, GCM->getWeapon(pObj->usItem)->ubMagSize, bExcludeSlot );
+		bSlot = FindAmmo( pSoldier, weapon->calibre, weapon->ubMagSize, bExcludeSlot );
 		if (bSlot != NO_SLOT)
 		{
 			return( bSlot );
@@ -1421,24 +1396,25 @@ INT8 FindAmmoToReload( const SOLDIERTYPE * pSoldier, INT8 bWeaponIn, INT8 bExclu
 		else
 		{
 			// look for any ammo that matches which is of the same calibre (different size okay)
-			return( FindAmmo( pSoldier, GCM->getWeapon(pObj->usItem)->calibre, ANY_MAGSIZE, bExcludeSlot ) );
+			return( FindAmmo( pSoldier, weapon->calibre, ANY_MAGSIZE, bExcludeSlot ) );
 		}
 	}
-	else
+	else if (weapon->shootsExplosiveCalibre())
 	{
-		switch( pObj->usItem )
-		{
-			case MORTAR:
-				return( FindObj( pSoldier, MORTAR_SHELL ) );
-			case TANK_CANNON:
-				return( FindObj( pSoldier, TANK_SHELL ) );
-			case GLAUNCHER:
-			case UNDER_GLAUNCHER:
-				return( FindObjInObjRange( pSoldier, GL_HE_GRENADE, GL_SMOKE_GRENADE ) );
-			default:
-				return( NO_SLOT );
+		for (auto item : GCM->getItems()) {
+			auto explosive = item->asExplosive();
+			if (explosive && explosive->isLaunchable()) {
+				if (explosive->getExplosiveCalibre()->getID() == weapon->explosiveCalibre->getID()) {
+					auto slot = FindObj(pSoldier, explosive->getItemIndex());
+					if (slot != NO_SLOT) {
+						return slot;
+					}
+				}
+			}
 		}
 	}
+
+	return NO_SLOT;
 }
 
 BOOLEAN AutoReload( SOLDIERTYPE * pSoldier )
@@ -1542,13 +1518,14 @@ bool AttachObject(SOLDIERTYPE* const s, OBJECTTYPE* const pTargetObj, OBJECTTYPE
 {
 	OBJECTTYPE& target     = *pTargetObj;
 	OBJECTTYPE& attachment = *pAttachment;
-	bool const valid_launchable = ValidLaunchable(attachment.usItem, target.usItem);
-	if (valid_launchable || ValidItemAttachment(&target, attachment.usItem, TRUE))
+	bool const validLaunchable = ValidLaunchable(attachment.usItem, target.usItem);
+	bool validUGGrenade = ValidLaunchable(attachment.usItem, UNDER_GLAUNCHER);
+	if (validLaunchable || ValidItemAttachment(&target, attachment.usItem, TRUE))
 	{
 		// find an attachment position...
 		// second half of this 'if' is for attaching GL grenades to a gun
 		INT8 attach_pos;
-		if (valid_launchable || (GL_HE_GRENADE <= attachment.usItem && attachment.usItem <= GL_SMOKE_GRENADE))
+		if (validLaunchable || validUGGrenade)
 		{
 			// try replacing if possible
 			attach_pos = FindAttachmentByClass(&target, GCM->getItem(attachment.usItem)->getItemClass());
@@ -1757,6 +1734,7 @@ BOOLEAN CanItemFitInPosition(SOLDIERTYPE* pSoldier, OBJECTTYPE* pObj, INT8 bPos,
 	UINT8 ubSlotLimit;
 	INT8  bNewPos;
 
+	auto item = GCM->getItem(pObj->usItem);
 	switch( bPos )
 	{
 		case SECONDHANDPOS:
@@ -1766,7 +1744,7 @@ BOOLEAN CanItemFitInPosition(SOLDIERTYPE* pSoldier, OBJECTTYPE* pObj, INT8 bPos,
 			}
 			break;
 		case HANDPOS:
-			if (GCM->getItem(pObj->usItem)->isTwoHanded())
+			if (item->isTwoHanded())
 			{
 				if (pSoldier->inv[HANDPOS].usItem != NOTHING && pSoldier->inv[SECONDHANDPOS].usItem != NOTHING)
 				{
@@ -1797,26 +1775,26 @@ BOOLEAN CanItemFitInPosition(SOLDIERTYPE* pSoldier, OBJECTTYPE* pObj, INT8 bPos,
 		case VESTPOS:
 		case HELMETPOS:
 		case LEGPOS:
-			if (GCM->getItem(pObj->usItem)->getItemClass() != IC_ARMOUR)
+			if (!item->isArmour())
 			{
 				return( FALSE );
 			}
 			switch (bPos)
 			{
 				case VESTPOS:
-					if (Armour[GCM->getItem(pObj->usItem)->getClassIndex()].ubArmourClass != ARMOURCLASS_VEST)
+					if (item->asArmour()->getArmourClass() != ARMOURCLASS_VEST)
 					{
 						return( FALSE );
 					}
 					break;
 				case HELMETPOS:
-					if (Armour[GCM->getItem(pObj->usItem)->getClassIndex()].ubArmourClass != ARMOURCLASS_HELMET)
+					if (item->asArmour()->getArmourClass() != ARMOURCLASS_HELMET)
 					{
 						return( FALSE );
 					}
 					break;
 				case LEGPOS:
-					if (Armour[GCM->getItem(pObj->usItem)->getClassIndex()].ubArmourClass != ARMOURCLASS_LEGGINGS)
+					if (item->asArmour()->getArmourClass() != ARMOURCLASS_LEGGINGS)
 					{
 						return( FALSE );
 					}
@@ -1827,7 +1805,7 @@ BOOLEAN CanItemFitInPosition(SOLDIERTYPE* pSoldier, OBJECTTYPE* pObj, INT8 bPos,
 			break;
 		case HEAD1POS:
 		case HEAD2POS:
-			if (GCM->getItem(pObj->usItem)->getItemClass() != IC_FACE)
+			if (item->getItemClass() != IC_FACE)
 			{
 				return( FALSE );
 			}
@@ -2130,7 +2108,7 @@ static BOOLEAN InternalAutoPlaceObject(SOLDIERTYPE* pSoldier, OBJECTTYPE* pObj, 
 			break;
 
 		case IC_ARMOUR:
-			switch (Armour[GCM->getItem(pObj->usItem)->getClassIndex()].ubArmourClass)
+			switch (pItem->asArmour()->getArmourClass())
 			{
 				case ARMOURCLASS_VEST:
 					if (pSoldier->inv[VESTPOS].usItem == NONE)
@@ -2391,24 +2369,6 @@ void CreateKeyObject(OBJECTTYPE* const pObj, UINT8 const ubNumberOfKeys, UINT8 c
 }
 
 
-void AllocateObject(OBJECTTYPE** const pObj)
-{
-	// create a key object
-	*pObj = new OBJECTTYPE{};
-}
-
-
-BOOLEAN DeleteKeyObject( OBJECTTYPE * pObj )
-{
-	if (pObj == NULL) return FALSE;
-
-	// free up space
-	delete pObj;
-
-	return( TRUE );
-}
-
-
 UINT16 TotalPoints(const OBJECTTYPE* const pObj)
 {
 	UINT16 usPoints = 0;
@@ -2463,7 +2423,7 @@ UINT16 DefaultMagazine(UINT16 const gun)
 	const std::vector<const MagazineModel*>& magazines = GCM->getMagazines();
 	for (const MagazineModel* mag : magazines)
 	{
-		if (mag->calibre->index == NOAMMO)      break;
+		if (mag->calibre->index == CalibreModel::NOAMMO) break;
 		if (mag->dontUseAsDefaultMagazine) continue;
 		if (mag->calibre->index != w->calibre->index) continue;
 		if (mag->capacity != w->ubMagSize) continue;
@@ -2480,7 +2440,7 @@ UINT16 FindReplacementMagazine(const CalibreModel * calibre, UINT8 const mag_siz
 	const std::vector<const MagazineModel*>& magazines = GCM->getMagazines();
 	for (const MagazineModel* mag : magazines)
 	{
-		if (mag->calibre->index == NOAMMO)   break;
+		if (mag->calibre->index == CalibreModel::NOAMMO) break;
 		if (mag->calibre->index != calibre->index)  continue;
 		if (mag->capacity != mag_size) continue;
 
@@ -2616,17 +2576,13 @@ void CreateItem(UINT16 const usItem, INT8 const bStatus, OBJECTTYPE* const pObj)
 		return status;
 	};
 
+	auto item = GCM->getItem(usItem);
 	*pObj = OBJECTTYPE{};
-	if (usItem >= MAXITEMS)
-	{
-		throw std::logic_error("Tried to create item with invalid ID");
-	}
-
-	if (GCM->getItem(usItem)->getItemClass() == IC_GUN)
+	if (item->getItemClass() == IC_GUN)
 	{
 		CreateGun(usItem, checkedStatus(bStatus), pObj);
 	}
-	else if (GCM->getItem(usItem)->getItemClass() == IC_AMMO)
+	else if (item->getItemClass() == IC_AMMO)
 	{
 		CreateMagazine(usItem, pObj);
 	}
@@ -2647,7 +2603,7 @@ void CreateItem(UINT16 const usItem, INT8 const bStatus, OBJECTTYPE* const pObj)
 		}
 	}
 
-	if (GCM->getItem(usItem)->getFlags() & ITEM_DEFAULT_UNDROPPABLE)
+	if (item->getFlags() & ITEM_DEFAULT_UNDROPPABLE)
 	{
 		pObj->fFlags |= OBJECT_UNDROPPABLE;
 	}
@@ -2693,6 +2649,13 @@ BOOLEAN ArmBomb( OBJECTTYPE * pObj, INT8 bSetting )
 	BOOLEAN fTimed = FALSE;
 	[[maybe_unused]] BOOLEAN fSwitch = FALSE; // only used as a code hint to improve readability
 
+	// Get explosive if applicable
+	auto item = GCM->getItem(pObj->usItem, ItemSystem::nothrow);
+	const ExplosiveModel* explosive = nullptr;
+	if (item) {
+		explosive = item->asExplosive();
+	}
+
 	if (pObj->usItem == ACTION_ITEM)
 	{
 		switch( pObj->bActionValue )
@@ -2715,7 +2678,7 @@ BOOLEAN ArmBomb( OBJECTTYPE * pObj, INT8 bSetting )
 	{
 		fRemote = TRUE;
 	}
-	else if ( pObj->usItem == MINE || pObj->usItem == TRIP_FLARE || pObj->usItem == TRIP_KLAXON || pObj->usItem == ACTION_ITEM )
+	else if ( (explosive && explosive->isPressureTriggered()) || pObj->usItem == ACTION_ITEM )
 	{
 		fPressure = TRUE;
 	}
@@ -3062,14 +3025,15 @@ static INT8 CheckItemForDamage(UINT16 usItem, INT32 iMaxDamage)
 		iMaxDamage = 2;
 	}
 
+	auto item = GCM->getItem(usItem);
 	// if the item is protective armour, reduce the amount of damage
 	// by its armour value
-	if (GCM->getItem(usItem)->getItemClass() == IC_ARMOUR)
+	if (item->isArmour())
 	{
-		iMaxDamage -= (iMaxDamage * Armour[GCM->getItem(usItem)->getClassIndex()].ubProtection) / 100;
+		iMaxDamage -= (iMaxDamage * item->asArmour()->getProtection()) / 100;
 	}
 	// metal items are tough and will be damaged less
-	if (GCM->getItem(usItem)->getFlags() & ITEM_METAL)
+	if (item->getFlags() & ITEM_METAL)
 	{
 		iMaxDamage /= 2;
 	}
@@ -3090,7 +3054,7 @@ static BOOLEAN CheckForChainReaction(UINT16 usItem, INT8 bStatus, INT8 bDamage, 
 {
 	INT32 iChance;
 
-	iChance = Explosive[GCM->getItem(usItem)->getClassIndex()].ubVolatility;
+	iChance = GCM->getExplosive(usItem)->getVolatility();
 	if (iChance > 0)
 	{
 
@@ -3522,9 +3486,9 @@ bool ItemIsCool(OBJECTTYPE const& o)
 	{
 		if (GCM->getWeapon(o.usItem)->ubDeadliness >= 30) return true;
 	}
-	else if (item->isArmour())
+	else if (item->asArmour())
 	{
-		if (Armour[item->getClassIndex()].ubProtection >= 20) return true;
+		if (item->asArmour()->getProtection() >= 20) return true;
 	}
 
 	return false;

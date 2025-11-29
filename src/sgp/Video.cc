@@ -60,7 +60,6 @@ static SDL_Texture* ScaledScreenTexture;
 static Uint32       g_window_flags = 0;
 static VideoScaleQuality ScaleQuality = VideoScaleQuality::LINEAR;
 static std::chrono::steady_clock::duration TimeBetweenRefreshScreens;
-static std::chrono::steady_clock::time_point LastRefresh;
 
 static void DeletePrimaryVideoSurfaces(void);
 
@@ -100,7 +99,6 @@ void VideoToggleFullScreen(void)
 	{
 		SDL_SetWindowFullscreen(g_game_window, SDL_WINDOW_FULLSCREEN_DESKTOP);
 	}
-	SDL_RenderClear(GameRenderer);
 }
 
 void VideoSetBrightness(float brightness)
@@ -120,7 +118,6 @@ static void GetRGBDistribution();
 void InitializeVideoManager(const VideoScaleQuality quality,
                             const int32_t targetFPS)
 {
-	SLOGD("Initializing the video manager");
 	SDL_SetHint(SDL_HINT_RENDER_DRIVER, "opengl");
 
 	ScaleQuality = quality;
@@ -242,8 +239,6 @@ void InitializeVideoManager(const VideoScaleQuality quality,
 
 void ShutdownVideoManager(void)
 {
-	SLOGD("Shutting down the video manager");
-
 	// ScreenBuffer SDL surface freed by its SGPVSurface wrapper.
 	ScreenBuffer = nullptr;
 
@@ -271,7 +266,10 @@ void ShutdownVideoManager(void)
 }
 
 
-void InvalidateRegion(INT32 iLeft, INT32 iTop, INT32 iRight, INT32 iBottom)
+namespace {
+void AddToGivenRegionsList(INT32 iLeft, INT32 iTop, INT32 iRight, INT32 iBottom,
+	decltype(DirtyRegions) & regions,
+	decltype(guiDirtyRegionCount) & regionCount)
 {
 	if (gfForceFullScreenRefresh)
 	{
@@ -279,7 +277,7 @@ void InvalidateRegion(INT32 iLeft, INT32 iTop, INT32 iRight, INT32 iBottom)
 		return;
 	}
 
-	if (guiDirtyRegionCount < MAX_DIRTY_REGIONS)
+	if (regionCount < MAX_DIRTY_REGIONS)
 	{
 		// Well we haven't broken the MAX_DIRTY_REGIONS limit yet, so we register the new region
 
@@ -293,11 +291,13 @@ void InvalidateRegion(INT32 iLeft, INT32 iTop, INT32 iRight, INT32 iBottom)
 		if (iRight - iLeft <= 0) return;
 		if (iBottom - iTop <= 0) return;
 
-		DirtyRegions[guiDirtyRegionCount].x = iLeft;
-		DirtyRegions[guiDirtyRegionCount].y = iTop;
-		DirtyRegions[guiDirtyRegionCount].w = iRight  - iLeft;
-		DirtyRegions[guiDirtyRegionCount].h = iBottom - iTop;
-		guiDirtyRegionCount++;
+		auto & newRegion{ regions[regionCount] };
+
+		newRegion.x = iLeft;
+		newRegion.y = iTop;
+		newRegion.w = iRight  - iLeft;
+		newRegion.h = iBottom - iTop;
+		++regionCount;
 	}
 	else
 	{
@@ -307,8 +307,17 @@ void InvalidateRegion(INT32 iLeft, INT32 iTop, INT32 iRight, INT32 iBottom)
 	}
 }
 
+void AddRegionEx(INT32 iLeft, INT32 iTop, INT32 iRight, INT32 iBottom)
+{
+	AddToGivenRegionsList(iLeft, iTop, iRight, iBottom, DirtyRegionsEx, guiDirtyRegionExCount);
+}
+}
 
-static void AddRegionEx(INT32 iLeft, INT32 iTop, INT32 iRight, INT32 iBottom);
+void InvalidateRegion(INT32 iLeft, INT32 iTop, INT32 iRight, INT32 iBottom)
+{
+	AddToGivenRegionsList(iLeft, iTop, iRight, iBottom, DirtyRegions, guiDirtyRegionCount);
+}
+
 
 
 void InvalidateRegionEx(INT32 iLeft, INT32 iTop, INT32 iRight, INT32 iBottom)
@@ -331,33 +340,6 @@ void InvalidateRegionEx(INT32 iLeft, INT32 iTop, INT32 iRight, INT32 iBottom)
 	else
 	{
 		AddRegionEx(iLeft, iTop, iRight, iBottom);
-	}
-}
-
-
-static void AddRegionEx(INT32 iLeft, INT32 iTop, INT32 iRight, INT32 iBottom)
-{
-	if (guiDirtyRegionExCount < MAX_DIRTY_REGIONS)
-	{
-		// DO SOME PRELIMINARY CHECKS FOR VALID RECTS
-		if (iLeft < 0) iLeft = 0;
-		if (iTop  < 0) iTop  = 0;
-
-		if (iRight  > SCREEN_WIDTH)  iRight  = SCREEN_WIDTH;
-		if (iBottom > SCREEN_HEIGHT) iBottom = SCREEN_HEIGHT;
-
-		if (iRight - iLeft <= 0) return;
-		if (iBottom - iTop <= 0) return;
-
-		DirtyRegionsEx[guiDirtyRegionExCount].x = iLeft;
-		DirtyRegionsEx[guiDirtyRegionExCount].y = iTop;
-		DirtyRegionsEx[guiDirtyRegionExCount].w = iRight  - iLeft;
-		DirtyRegionsEx[guiDirtyRegionExCount].h = iBottom - iTop;
-		guiDirtyRegionExCount++;
-	}
-	else
-	{
-		InvalidateScreen();
 	}
 }
 
@@ -445,12 +427,7 @@ static void ScrollJA2Background(INT16 sScrollXIncrement, INT16 sScrollYIncrement
 	SDL_FillRect(Dest, NULL, 0);
 #endif
 
-	{
-		SurfaceUniquePtr Source(SDL_CreateRGBSurfaceWithFormat(0,
-			ScreenBuffer->w, ScreenBuffer->h, 0, ScreenBuffer->format->format));
-		SDL_BlitSurface(ScreenBuffer, nullptr, Source.get(), nullptr);
-		SDL_BlitSurface(Source.get(), &SrcRect, Dest, &DstRect);
-	}
+	SDL_BlitSurface(Dest, &SrcRect, Dest, &DstRect);
 
 	for (UINT i = 0; i < NumStrips; i++)
 	{
@@ -483,13 +460,6 @@ void RefreshScreen(void)
 	if (!ScreenTexture) return;
 
 	const BOOLEAN scrolling = (gsScrollXIncrement != 0 || gsScrollYIncrement != 0);
-
-	auto const now = std::chrono::steady_clock::now();
-	if (!scrolling && now - LastRefresh < TimeBetweenRefreshScreens)
-	{
-		return;
-	}
-	LastRefresh = now;
 
 	SDL_BlitSurface(FrameBuffer, &MouseBackground, ScreenBuffer, &MouseBackground);
 
@@ -548,8 +518,7 @@ void RefreshScreen(void)
 		gfIgnoreScrollDueToCenterAdjust = FALSE;
 	}
 
-	SGPPoint cursorPos;
-	GetCursorPos(cursorPos);
+	auto const cursorPos{ GetCursorPos() };
 	SDL_Rect src;
 	src.x = 0;
 	src.y = 0;
@@ -568,6 +537,8 @@ void RefreshScreen(void)
 	SDL_UpdateTexture(ScreenTexture, &ScreenTextureUpdateRect,
 	                  SrcPixels, ScreenBuffer->pitch);
 
+	SDL_RenderClear(GameRenderer);
+
 	if (ScaleQuality == VideoScaleQuality::NEAR_PERFECT) {
 		SDL_SetRenderTarget(GameRenderer, ScaledScreenTexture);
 		SDL_RenderCopy(GameRenderer, ScreenTexture, nullptr, nullptr);
@@ -584,6 +555,23 @@ void RefreshScreen(void)
 	gfForceFullScreenRefresh = FALSE;
 	guiDirtyRegionCount = 0;
 	guiDirtyRegionExCount = 0;
+}
+
+
+// This is a semi-private function that is supposed to be called only
+// by GameLoop(). This is why is has external linkage but is not
+// declared in Video.h.
+void RefreshScreenCapped()
+{
+	static std::chrono::steady_clock::time_point LastRefresh;
+
+	auto const now{ std::chrono::steady_clock::now() };
+	if (gsScrollXIncrement != 0 || gsScrollYIncrement != 0 ||
+	    now - LastRefresh >= TimeBetweenRefreshScreens)
+	{
+		LastRefresh = now;
+		RefreshScreen();
+	}
 }
 
 
@@ -655,21 +643,11 @@ void InitializeVideoSurfaceManager(void)
 
 void ShutdownVideoSurfaceManager(void)
 {
-	SLOGD("Shutting down the Video Surface manager");
-
 	// Delete primary viedeo surfaces
 	DeletePrimaryVideoSurfaces();
 
 	while (gpVSurfaceHead)
 	{
 		delete gpVSurfaceHead;
-	}
-}
-
-
-void HandleWindowEvent(SDL_Event const& evt)
-{
-	if (evt.window.event == SDL_WINDOWEVENT_RESIZED) {
-		SDL_RenderClear(GameRenderer);
 	}
 }

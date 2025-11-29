@@ -48,16 +48,6 @@ Observable<> OnDealerInventoryUpdated;
 static void AdjustCertainDealersInventory(void);
 static void InitializeOneArmsDealer(ArmsDealerID);
 
-const DealerModel* GetDealer(UINT8 dealerID)
-{
-	if (dealerID >= NUM_ARMS_DEALERS)
-	{
-		ST::string err = ST::format("Invalid Dealer ID: {}", dealerID);
-		throw std::runtime_error(err.to_std_string());
-	}
-	return GCM->getDealer(dealerID);
-}
-
 void InitAllArmsDealers()
 {
 	//Memset all dealers' status tables to zeroes
@@ -70,9 +60,9 @@ void InitAllArmsDealers()
 	}
 
 	//Initialize the initial status & inventory for each of the arms dealers
-	for (ArmsDealerID ubArmsDealer = ARMS_DEALER_FIRST; ubArmsDealer < NUM_ARMS_DEALERS; ++ubArmsDealer)
+	for (auto dealer : GCM->getDealers())
 	{
-		InitializeOneArmsDealer( ubArmsDealer );
+		InitializeOneArmsDealer( dealer->dealerID );
 	}
 
 	//make sure certain items are in stock and certain limits are respected
@@ -85,7 +75,6 @@ static void ArmsDealerGetsFreshStock(ArmsDealerID, UINT16 usItemIndex, UINT8 ubN
 
 static void InitializeOneArmsDealer(ArmsDealerID const ubArmsDealer)
 {
-	UINT16 usItemIndex;
 	UINT8  ubNumItems=0;
 
 
@@ -93,19 +82,21 @@ static void InitializeOneArmsDealer(ArmsDealerID const ubArmsDealer)
 	std::fill_n(gArmsDealersInventory[ ubArmsDealer ], static_cast<size_t>(MAXITEMS), DEALER_ITEM_HEADER{});
 
 
+	auto dealer = GCM->getDealer(ubArmsDealer);
 	//Reset the arms dealers cash on hand to the default initial value
-	gArmsDealerStatus[ ubArmsDealer ].uiArmsDealersCash = GetDealer(ubArmsDealer)->initialCash;
+	gArmsDealerStatus[ ubArmsDealer ].uiArmsDealersCash = dealer->initialCash;
 
 	//if the arms dealer isn't supposed to have any items (includes all repairmen)
-	if( GetDealer(ubArmsDealer)->hasFlag(ArmsDealerFlag::HAS_NO_INVENTORY) )
+	if( dealer->hasFlag(ArmsDealerFlag::HAS_NO_INVENTORY) )
 	{
 		return;
 	}
 
 
 	//loop through all the item types
-	for( usItemIndex = 1; usItemIndex < MAXITEMS; usItemIndex++ )
+	for (auto item : GCM->getItems())
 	{
+		const auto usItemIndex = item->getItemIndex();
 		//Can the item be sold by the arms dealer
 		if( CanDealerTransactItem( ubArmsDealer, usItemIndex, FALSE ) )
 		{
@@ -130,15 +121,15 @@ void ShutDownArmsDealers()
 	UINT16 usItemIndex;
 
 	// loop through all the dealers
-	for (ArmsDealerID ubArmsDealer = ARMS_DEALER_FIRST; ubArmsDealer < NUM_ARMS_DEALERS; ++ubArmsDealer)
+	for (auto dealer : GCM->getDealers())
 	{
 
-		//loop through all the item types
+		//loop through all the special items
 		for( usItemIndex = 1; usItemIndex < MAXITEMS; usItemIndex++ )
 		{
-			if (gArmsDealersInventory[ ubArmsDealer ][ usItemIndex ].SpecialItem.size() > 0)
+			if (gArmsDealersInventory[ dealer->dealerID ][ usItemIndex ].SpecialItem.size() > 0)
 			{
-				FreeSpecialItemArray( &gArmsDealersInventory[ ubArmsDealer ][ usItemIndex ] );
+				FreeSpecialItemArray( &gArmsDealersInventory[ dealer->dealerID ][ usItemIndex ] );
 			}
 		}
 	}
@@ -172,11 +163,11 @@ void SaveArmsDealerInventoryToSaveGameFile(HWFILE const f)
 	}
 
 	// Save special items
-	for (ArmsDealerID dealer = ARMS_DEALER_FIRST; dealer != NUM_ARMS_DEALERS; ++dealer)
+	for (auto dealer : GCM->getDealers())
 	{
 		for (UINT16 item_idx = 1; item_idx != MAXITEMS; ++item_idx)
 		{
-			DEALER_ITEM_HEADER const& di = gArmsDealersInventory[dealer][item_idx];
+			DEALER_ITEM_HEADER const& di = gArmsDealersInventory[dealer->dealerID][item_idx];
 			if (di.SpecialItem.size() == 0) continue;
 			f->write(di.SpecialItem.data(), sizeof(DEALER_SPECIAL_ITEM) * di.SpecialItem.size());
 		}
@@ -228,11 +219,11 @@ void LoadArmsDealerInventoryFromSavedGameFile(HWFILE const f, UINT32 const saveg
 	if (savegame_version < 55) InitializeOneArmsDealer(ARMS_DEALER_MANNY);
 
 	// Load special items
-	for (ArmsDealerID dealer = ARMS_DEALER_FIRST; dealer != NUM_ARMS_DEALERS; ++dealer)
+	for (auto dealer : GCM->getDealers())
 	{
 		for (UINT16 item_idx = 1; item_idx != MAXITEMS; ++item_idx)
 		{
-			DEALER_ITEM_HEADER& di = gArmsDealersInventory[dealer][item_idx];
+			DEALER_ITEM_HEADER& di = gArmsDealersInventory[dealer->dealerID][item_idx];
 			if (di.SpecialItem.size() == 0) continue;
 			f->read(di.SpecialItem.data(), sizeof(DEALER_SPECIAL_ITEM) * di.SpecialItem.size());
 		}
@@ -264,24 +255,26 @@ void DailyUpdateOfArmsDealersInventory()
 // Once a day, loop through each dealer's inventory items and possibly sell some
 static void SimulateArmsDealerCustomer(void)
 {
-	UINT16 usItemIndex;
 	UINT8  ubItemsSold=0;
 	UINT8  ubElement;
 	SPECIAL_ITEM_INFO SpclItemInfo;
 
 	//loop through all the arms dealers
-	for (ArmsDealerID ubArmsDealer = ARMS_DEALER_FIRST; ubArmsDealer < NUM_ARMS_DEALERS; ++ubArmsDealer)
+	for (auto dealer : GCM->getDealers())
 	{
+		auto ubArmsDealer = dealer->dealerID;
+
 		if( gArmsDealerStatus[ ubArmsDealer ].fOutOfBusiness )
 			continue;
 
 		//if the arms dealer isn't supposed to have any items (includes all repairmen)
-		if( GetDealer(ubArmsDealer)->hasFlag(ArmsDealerFlag::HAS_NO_INVENTORY ))
+		if( dealer->hasFlag(ArmsDealerFlag::HAS_NO_INVENTORY ))
 			continue;
 
 		//loop through all items of the same type
-		for( usItemIndex = 1; usItemIndex < MAXITEMS; usItemIndex++ )
+		for (auto item : GCM->getItems())
 		{
+			const auto usItemIndex = item->getItemIndex();
 			//if there are some of these in stock
 			if( gArmsDealersInventory[ ubArmsDealer ][ usItemIndex ].ubTotalItems > 0)
 			{
@@ -326,7 +319,6 @@ static void SimulateArmsDealerCustomer(void)
 
 void DailyCheckOnItemQuantities()
 {
-	UINT16  usItemIndex;
 	UINT8   ubMaxSupply;
 	UINT8   ubNumItems;
 	UINT32  uiArrivalDay;
@@ -334,22 +326,26 @@ void DailyCheckOnItemQuantities()
 	UINT8   ubReorderDays;
 
 	//loop through all the arms dealers
-	for (ArmsDealerID ubArmsDealer = ARMS_DEALER_FIRST; ubArmsDealer < NUM_ARMS_DEALERS; ++ubArmsDealer)
+	for (auto dealer : GCM->getDealers())
 	{
+		auto ubArmsDealer = dealer->dealerID;
+
 		if( gArmsDealerStatus[ ubArmsDealer ].fOutOfBusiness )
 			continue;
 
 		//Reset the arms dealers cash on hand to the default initial value
-		gArmsDealerStatus[ ubArmsDealer ].uiArmsDealersCash = GetDealer(ubArmsDealer)->initialCash;
+		gArmsDealerStatus[ ubArmsDealer ].uiArmsDealersCash = dealer->initialCash;
 
 		//if the arms dealer isn't supposed to have any items (includes all repairmen)
-		if( GetDealer(ubArmsDealer)->hasFlag(ArmsDealerFlag::HAS_NO_INVENTORY ))
+		if( dealer->hasFlag(ArmsDealerFlag::HAS_NO_INVENTORY ))
 			continue;
 
 
 		//loop through all items of the same type
-		for( usItemIndex = 1; usItemIndex < MAXITEMS; usItemIndex++ )
+		for (auto item : GCM->getItems())
 		{
+			const auto usItemIndex = item->getItemIndex();
+
 			//if the dealer can sell the item type
 			if( CanDealerTransactItem( ubArmsDealer, usItemIndex, FALSE ) )
 			{
@@ -499,7 +495,6 @@ void RemoveRandomItemFromArmsDealerInventory(ArmsDealerID, UINT16 usItemIndex, U
 
 static void LimitArmsDealersInventory(ArmsDealerID const ubArmsDealer, UINT32 uiDealerItemType, UINT8 ubMaxNumberOfItemType)
 {
-	UINT16 usItemIndex=0;
 	UINT32 uiItemsToRemove=0;
 	SPECIAL_ITEM_INFO SpclItemInfo;
 
@@ -515,8 +510,9 @@ static void LimitArmsDealersInventory(ArmsDealerID const ubArmsDealer, UINT32 ui
 		return;
 
 	//loop through all items of the same class and count the number in stock
-	for( usItemIndex = 1; usItemIndex < MAXITEMS; usItemIndex++ )
-	{
+	for (auto item : GCM->getItems()) {
+		const auto usItemIndex = item->getItemIndex();
+
 		//if there is some items in stock
 		if( gArmsDealersInventory[ ubArmsDealer ][ usItemIndex ].ubTotalItems > 0)
 		{
@@ -556,7 +552,7 @@ static void LimitArmsDealersInventory(ArmsDealerID const ubArmsDealer, UINT32 ui
 			{
 				if ( uiRandomChoice <= ubNumberOfAvailableItem[ uiIndex ] )
 				{
-					usItemIndex = usAvailableItem[ uiIndex ];
+					const auto usItemIndex = usAvailableItem[ uiIndex ];
 					if ( uiDealerItemType == ARMS_DEALER_AMMO )
 					{
 						// remove all of them, since each ammo item counts as only one "item" here
@@ -633,7 +629,6 @@ static void LimitArmsDealersInventory(ArmsDealerID const ubArmsDealer, UINT32 ui
 
 static void GuaranteeAtLeastOneItemOfType(ArmsDealerID const ubArmsDealer, UINT32 uiDealerItemType)
 {
-	UINT16 usItemIndex;
 	UINT8  ubChance;
 	UINT16 usAvailableItem[ MAXITEMS ] = { NOTHING };
 	UINT8  ubChanceForAvailableItem[ MAXITEMS ] = { 0 };
@@ -647,8 +642,9 @@ static void GuaranteeAtLeastOneItemOfType(ArmsDealerID const ubArmsDealer, UINT3
 		return;
 
 	//loop through all items of the same type
-	for( usItemIndex = 1; usItemIndex < MAXITEMS; usItemIndex++ )
-	{
+	for (auto item : GCM->getItems()) {
+		const auto usItemIndex = item->getItemIndex();
+
 		//if the item is of the same dealer item type
 		if( uiDealerItemType & GetArmsDealerItemTypeFromItemNumber( usItemIndex ) )
 		{
@@ -859,8 +855,6 @@ static UINT32 GetArmsDealerItemTypeFromItemNumber(UINT16 usItem)
 
 BOOLEAN IsMercADealer( UINT8 ubMercID )
 {
-	UINT8 cnt;
-
 	// Manny is not actually a valid dealer unless a particular event sets that fact
 	if( ( ubMercID == MANNY ) && !CheckFact( FACT_MANNY_IS_BARTENDER, 0 ) )
 	{
@@ -868,9 +862,9 @@ BOOLEAN IsMercADealer( UINT8 ubMercID )
 	}
 
 	//loop through the list of arms dealers
-	for( cnt=0; cnt<NUM_ARMS_DEALERS; cnt++ )
+	for( auto dealer : GCM->getDealers() )
 	{
-		if( GetDealer(cnt)->profileID == ubMercID )
+		if( dealer->profileID == ubMercID )
 			return( TRUE );
 	}
 	return( FALSE );
@@ -880,10 +874,10 @@ BOOLEAN IsMercADealer( UINT8 ubMercID )
 ArmsDealerID GetArmsDealerIDFromMercID(UINT8 const ubMercID)
 {
 	//loop through the list of arms dealers
-	for (ArmsDealerID cnt = ARMS_DEALER_FIRST; cnt < NUM_ARMS_DEALERS; ++cnt)
+	for (auto dealer : GCM -> getDealers())
 	{
-		if( GetDealer(cnt)->profileID == ubMercID )
-			return( cnt );
+		if( dealer->profileID == ubMercID )
+			return( dealer->dealerID );
 	}
 
 	return ARMS_DEALER_INVALID;
@@ -891,13 +885,13 @@ ArmsDealerID GetArmsDealerIDFromMercID(UINT8 const ubMercID)
 
 
 
-ArmsDealerType GetTypeOfArmsDealer(UINT8 ubDealerID)
+ArmsDealerType GetTypeOfArmsDealer(ArmsDealerID ubDealerID)
 {
-	if (ubDealerID >= NUM_ARMS_DEALERS)
+	if (ubDealerID < 0 || ubDealerID >= NUM_ARMS_DEALERS)
 	{
 		return ArmsDealerType::NOT_VALID_DEALER;
 	}
-	return GetDealer(ubDealerID)->type;
+	return GCM->getDealer(ubDealerID)->type;
 }
 
 
@@ -911,7 +905,6 @@ BOOLEAN RepairmanIsFixingItemsButNoneAreDoneYet( UINT8 ubProfileID )
 {
 	BOOLEAN fHaveOnlyUnRepairedItems=FALSE;
 	UINT8   ubElement;
-	UINT16  usItemIndex;
 
 	ArmsDealerID const bArmsDealer = GetArmsDealerIDFromMercID( ubProfileID );
 	if (bArmsDealer == ARMS_DEALER_INVALID) return FALSE;
@@ -921,8 +914,9 @@ BOOLEAN RepairmanIsFixingItemsButNoneAreDoneYet( UINT8 ubProfileID )
 		return( FALSE );
 
 	//loop through the dealers inventory and check if there are only unrepaired items
-	for( usItemIndex = 1; usItemIndex < MAXITEMS; usItemIndex++ )
-	{
+	for (auto item : GCM->getItems()) {
+		const auto usItemIndex = item->getItemIndex();
+
 		//if there is some items in stock
 		if( gArmsDealersInventory[ bArmsDealer ][ usItemIndex ].ubTotalItems )
 		{
@@ -979,7 +973,7 @@ BOOLEAN CanDealerTransactItem(ArmsDealerID const ubArmsDealer, UINT16 const usIt
 			break;
 
 		case ARMS_DEALER_BUYS_SELLS:
-			if (GetDealer(ubArmsDealer)->hasFlag(ArmsDealerFlag::BUYS_EVERYTHING))
+			if (GCM->getDealer(ubArmsDealer)->hasFlag(ArmsDealerFlag::BUYS_EVERYTHING))
 			{
 				if ( fPurchaseFromPlayer )
 				{
@@ -998,7 +992,7 @@ BOOLEAN CanDealerTransactItem(ArmsDealerID const ubArmsDealer, UINT16 const usIt
 			return( CanDealerRepairItem( ubArmsDealer, usItemIndex ) );
 
 		default:
-			AssertMsg(FALSE, ST::format("CanDealerTransactItem(), type of dealer {}. AM 0.", GetDealer(ubArmsDealer)->type));
+			AssertMsg(FALSE, ST::format("CanDealerTransactItem(), type of dealer {}. AM 0.", GCM->getDealer(ubArmsDealer)->type));
 			return(FALSE);
 	}
 
@@ -1018,7 +1012,7 @@ BOOLEAN CanDealerRepairItem(ArmsDealerID const ubArmsDealer, UINT16 const usItem
 		return(FALSE);
 	}
 
-	auto dealer = GetDealer(ubArmsDealer);
+	auto dealer = GCM->getDealer(ubArmsDealer);
 	if (dealer->type == ArmsDealerType::ARMS_DEALER_REPAIRS)
 	{
 		if (dealer->hasFlag(ArmsDealerFlag::REPAIRS_ELECTRONICS))
@@ -1121,9 +1115,10 @@ static UINT8 DetermineDealerItemCondition(ArmsDealerID const ubArmsDealer, UINT1
 	// if it's a damagable item, and not a liquid (those are always sold full)
 	if ( ( GCM->getItem(usItemIndex)->getFlags() & ITEM_DAMAGEABLE ) && !ItemContainsLiquid( usItemIndex ) )
 	{
+		auto dealer = GCM->getDealer(ubArmsDealer);
 		// if he ONLY has used items, or 50% of the time if he carries both used & new items
-		if ( ( GetDealer(ubArmsDealer)->hasFlag(ArmsDealerFlag::ONLY_USED_ITEMS) ) ||
-			( ( GetDealer(ubArmsDealer)->hasFlag(ArmsDealerFlag::SOME_USED_ITEMS) ) && ( Random( 100 ) < 50 ) ) )
+		if ( ( dealer->hasFlag(ArmsDealerFlag::ONLY_USED_ITEMS) ) ||
+			( ( dealer->hasFlag(ArmsDealerFlag::SOME_USED_ITEMS) ) && ( Random( 100 ) < 50 ) ) )
 		{
 			// make the item a used one
 			ubCondition = (UINT8)(20 + Random( 60 ));
@@ -1159,11 +1154,11 @@ static UINT8 CountActiveSpecialItemsInArmsDealersInventory(ArmsDealerID, UINT16 
 UINT32 CountDistinctItemsInArmsDealersInventory(ArmsDealerID const ubArmsDealer)
 {
 	UINT32	uiNumOfItems=0;
-	UINT16	usItemIndex;
 
 
-	for( usItemIndex = 1; usItemIndex < MAXITEMS; usItemIndex++ )
-	{
+	for (auto item : GCM->getItems()) {
+		const auto usItemIndex = item->getItemIndex();
+
 		//if there are any items
 		if( gArmsDealersInventory[ ubArmsDealer ][ usItemIndex ].ubTotalItems > 0 )
 		{
@@ -1221,7 +1216,6 @@ static UINT8 CountSpecificItemsRepairDealerHasInForRepairs(ArmsDealerID, UINT16 
 
 UINT16 CountTotalItemsRepairDealerHasInForRepairs(ArmsDealerID const ubArmsDealer)
 {
-	UINT16	usItemIndex;
 	UINT16	usHowManyInForRepairs = 0;
 
 	//if the dealer is not a repair dealer, no need to count, return 0
@@ -1229,8 +1223,8 @@ UINT16 CountTotalItemsRepairDealerHasInForRepairs(ArmsDealerID const ubArmsDeale
 		return( 0 );
 
 	//loop through the dealers inventory and count the number of items in for repairs
-	for( usItemIndex=0; usItemIndex < MAXITEMS; usItemIndex++ )
-	{
+	for (auto item : GCM->getItems()) {
+		const auto usItemIndex = item->getItemIndex();
 		usHowManyInForRepairs += CountSpecificItemsRepairDealerHasInForRepairs( ubArmsDealer, usItemIndex );
 	}
 
@@ -1649,7 +1643,6 @@ void RemoveSpecialItemFromArmsDealerInventoryAtElement(ArmsDealerID const ubArms
 
 BOOLEAN AddDeadArmsDealerItemsToWorld(SOLDIERTYPE const* const pSoldier)
 {
-	UINT16 usItemIndex;
 	UINT8  ubElement;
 	UINT8  ubHowManyMaxAtATime;
 	UINT8  ubLeftToDrop;
@@ -1672,8 +1665,9 @@ BOOLEAN AddDeadArmsDealerItemsToWorld(SOLDIERTYPE const* const pSoldier)
 
 	//loop through all the items in the dealer's inventory, and drop them all where the dealer was set up.
 
-	for( usItemIndex = 1; usItemIndex < MAXITEMS; usItemIndex++ )
-	{
+	for (auto item : GCM->getItems()) {
+		const auto usItemIndex = item->getItemIndex();
+
 		//if the dealer has any items of this type
 		if( gArmsDealersInventory[ bArmsDealer ][ usItemIndex ].ubTotalItems > 0)
 		{
@@ -1890,7 +1884,6 @@ static void GiveItemToArmsDealerforRepair(ArmsDealerID const ubArmsDealer, UINT1
 static UINT32 WhenWillRepairmanBeAllDoneRepairing(ArmsDealerID const ubArmsDealer)
 {
 	UINT32 uiWhenFree;
-	UINT16 usItemIndex;
 	UINT8  ubElement;
 
 	Assert( DoesDealerDoRepairs( ubArmsDealer ) );
@@ -1899,8 +1892,9 @@ static UINT32 WhenWillRepairmanBeAllDoneRepairing(ArmsDealerID const ubArmsDeale
 	uiWhenFree = GetWorldTotalMin();
 
 	//loop through the dealers inventory
-	for( usItemIndex = 1; usItemIndex < MAXITEMS; usItemIndex++ )
-	{
+	for (auto item : GCM->getItems()) {
+		const auto usItemIndex = item->getItemIndex();
+
 		//if there is some items in stock
 		if( gArmsDealersInventory[ ubArmsDealer ][ usItemIndex ].ubTotalItems > 0 )
 		{
@@ -1996,7 +1990,7 @@ static UINT32 CalculateSimpleItemRepairTime(ArmsDealerID const ubArmsDealer, UIN
 	// For a repairman, his BUY modifier controls his REPAIR SPEED (1.0 means minutes to repair = price in $)
 	// with a REPAIR SPEED of 1.0, typical gun price of $2000, and a REPAIR COST of 0.5 this works out to 16.6 hrs
 	// for a full 100% status repair...  Not bad.
-	uiTimeToRepair = (UINT32)(uiRepairCost * GetDealer(ubArmsDealer)->repairSpeed);
+	uiTimeToRepair = (UINT32)(uiRepairCost * GCM->getDealer(ubArmsDealer)->repairSpeed);
 
 	// repairs on electronic items take twice as long if the guy doesn't have the skill
 	// for dealers, this means anyone but Fredo the Electronics guy takes twice as long (but doesn't charge double)
@@ -2049,7 +2043,7 @@ static UINT32 CalculateSimpleItemRepairCost(ArmsDealerID const ubArmsDealer, UIN
 
 	// figure out the full value of the item, modified by this dealer's personal Sell (i.e. repair cost) modifier
 	// don't use CalcShopKeeperItemPrice - we want FULL value!!!
-	uiItemCost = (UINT32)(GCM->getItem(usItemIndex)->getPrice() * GetDealer(ubArmsDealer)->repairCost);
+	uiItemCost = (UINT32)(GCM->getItem(usItemIndex)->getPrice() * GCM->getDealer(ubArmsDealer)->repairCost);
 
 	// get item's repair ease, for each + point is 10% easier, each - point is 10% harder to repair
 	sRepairCostAdj = 100 - ( 10 * GCM->getItem(usItemIndex)->getRepairEase() );
@@ -2361,7 +2355,7 @@ BOOLEAN ItemIsARocketRifle(INT16 sItemIndex)
 
 static BOOLEAN GetArmsDealerShopHours(ArmsDealerID const ubArmsDealer, UINT32* const puiOpeningTime, UINT32* const puiClosingTime)
 {
-	SOLDIERTYPE* const pSoldier = FindSoldierByProfileID(GetDealer(ubArmsDealer)->profileID);
+	SOLDIERTYPE* const pSoldier = FindSoldierByProfileID(GCM->getDealer(ubArmsDealer)->profileID);
 	if ( pSoldier == NULL )
 	{
 		return( FALSE );

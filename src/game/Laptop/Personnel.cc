@@ -4,6 +4,7 @@
 #include "Laptop.h"
 #include "MercPortrait.h"
 #include "Personnel.h"
+#include "Object_Cache.h"
 #include "VObject.h"
 #include "Debug.h"
 #include "WordWrap.h"
@@ -237,12 +238,12 @@ static const INT16 pers_stat_y[] =
 	405
 };
 
-
-static SGPVObject* guiSCREEN;
-static SGPVObject* guiTITLE;
-static SGPVObject* guiDEPARTEDTEAM;
-static SGPVObject* guiCURRENTTEAM;
-static SGPVObject* guiPersonnelInventory;
+namespace {
+cache_key_t const guiSCREEN { LAPTOPDIR "/personnelwindow.sti" };
+cache_key_t const guiDEPARTEDTEAM{ LAPTOPDIR "/departed.sti" };
+cache_key_t const guiCURRENTTEAM{ LAPTOPDIR "/currentteam.sti" };
+cache_key_t const guiPersonnelInventory{ LAPTOPDIR "/personnel_inventory.sti" };
+}
 
 static struct
 {
@@ -289,8 +290,6 @@ static void CreateDestroyMouseRegionsForPersonnelPortraits(BOOLEAN create);
 static void CreateDestroyStartATMButton(BOOLEAN create);
 static void CreatePersonnelButtons(void);
 static void SelectFirstDisplayedMerc(void);
-static void LoadPersonnelGraphics(void);
-static void LoadPersonnelScreenBackgroundGraphics(void);
 static void SetPersonnelButtonStates(void);
 
 
@@ -301,14 +300,8 @@ void EnterPersonnel(void)
 	uiCurrentInventoryIndex = 0;
 	guiSliderPosition = 0;
 
-	// load graphics for screen
-	LoadPersonnelGraphics();
-
 	// show atm panel
 	CreateDestroyStartATMButton(TRUE);
-
-	// load personnel
-	LoadPersonnelScreenBackgroundGraphics();
 
 	SelectFirstDisplayedMerc();
 
@@ -380,26 +373,11 @@ void HandlePersonnel(void)
 }
 
 
-static void LoadPersonnelGraphics(void)
-{
-	// load graphics needed for personnel screen
-
-	// title bar
-	guiTITLE = AddVideoObjectFromFile(LAPTOPDIR "/programtitlebar.sti");
-
-	// the background grpahics
-	guiSCREEN = AddVideoObjectFromFile(LAPTOPDIR "/personnelwindow.sti");
-
-	guiPersonnelInventory = AddVideoObjectFromFile(LAPTOPDIR "/personnel_inventory.sti");
-}
-
-
 static void RemovePersonnelGraphics(void)
 {
 	// delete graphics needed for personnel screen
-	DeleteVideoObject(guiSCREEN);
-	DeleteVideoObject(guiTITLE);
-	DeleteVideoObject(guiPersonnelInventory);
+	RemoveVObject(guiSCREEN);
+	RemoveVObject(guiPersonnelInventory);
 }
 
 
@@ -419,7 +397,7 @@ void RenderPersonnel(void)
 	// re-renders personnel screen
 	// render main background
 
-	BltVideoObject(FRAME_BUFFER, guiTITLE,  0, LAPTOP_SCREEN_UL_X, LAPTOP_SCREEN_UL_Y -  2);
+	BltVideoObject(FRAME_BUFFER, guiTITLEBARLAPTOP, 0, LAPTOP_SCREEN_UL_X, LAPTOP_SCREEN_UL_Y - 2);
 	BltVideoObject(FRAME_BUFFER, guiSCREEN, 0, LAPTOP_SCREEN_UL_X, LAPTOP_SCREEN_UL_Y + 22);
 
 	// render personnel screen background
@@ -868,23 +846,11 @@ static void RenderPersonnelScreenBackground(void)
 }
 
 
-static void LoadPersonnelScreenBackgroundGraphics(void)
-{
-	// will load the graphics for the personeel screen background
-
-	// departed bar
-	guiDEPARTEDTEAM = AddVideoObjectFromFile(LAPTOPDIR "/departed.sti");
-
-	// current bar
-	guiCURRENTTEAM = AddVideoObjectFromFile(LAPTOPDIR "/currentteam.sti");
-}
-
-
 static void DeletePersonnelScreenBackgroundGraphics(void)
 {
 	// delete background V/O's
-	DeleteVideoObject(guiCURRENTTEAM);
-	DeleteVideoObject(guiDEPARTEDTEAM);
+	RemoveVObject(guiCURRENTTEAM);
+	RemoveVObject(guiDEPARTEDTEAM);
 }
 
 
@@ -1430,6 +1396,31 @@ static void DisplayCostOfCurrentTeam(void)
 }
 
 
+// Get the value of an attribute from either a MERCPROFILESTRUCT
+// or a SOLDIERTYPE.
+template<typename T>
+INT8 Attribute(T const& who, int attributeIndex)
+{
+	switch (attributeIndex)
+	{
+		case  0: return who.bLifeMax;
+		case  1: return who.bAgility;
+		case  2: return who.bDexterity;
+		case  3: return who.bStrength;
+		case  4: return who.bLeadership;
+		case  5: return who.bWisdom;
+		case  6: return who.bExpLevel;
+		case  7: return who.bMarksmanship;
+		case  8: return who.bMechanical;
+		case  9: return who.bExplosive;
+		case 10: return who.bMedical;
+		default:
+			AssertMsg(false, "invalid attribute index");
+			return 0;
+	}
+}
+
+
 static void DisplayTeamStats(void)
 {
 	INT16 sX;
@@ -1458,106 +1449,60 @@ static void DisplayTeamStats(void)
 		// row header
 		MPrint(PERS_STAT_LIST_X, y, pPersonnelTeamStatsStrings[stat]);
 
-		ST::string min_name;
-		ST::string max_name;
-		INT32 min_val           = 100;
-		INT32 max_val           = 0;
+		ST::string const * min_name{};
+		ST::string const * max_name{};
+		INT8 min_val{ 100 };
+		INT8 max_val{   0 };
 		INT32 sum_val           = 0;
 		INT32 count             = 0;
+
+		auto compare{ [&](INT8 val, ST::string const& name)
+		{
+			if (min_val >= val)
+			{
+				min_name = &name;
+				min_val  = val;
+			}
+			if (max_val <= val)
+			{
+				max_name = &name;
+				max_val = val;
+			}
+			sum_val += val;
+			++count;
+		} };
+
 		if (fCurrentTeamMode)
 		{
 			CFOR_EACH_PERSONNEL(s)
 			{
 				if (s->bLife <= 0 || AM_A_ROBOT(s)) continue;
 
-				INT32 val; // XXX HACK000E
-				switch (stat)
-				{
-					case  0: val = s->bLifeMax;      break;
-					case  1: val = s->bAgility;      break;
-					case  2: val = s->bDexterity;    break;
-					case  3: val = s->bStrength;     break;
-					case  4: val = s->bLeadership;   break;
-					case  5: val = s->bWisdom;       break;
-					case  6: val = s->bExpLevel;     break;
-					case  7: val = s->bMarksmanship; break;
-					case  8: val = s->bMechanical;   break;
-					case  9: val = s->bExplosive;    break;
-					case 10: val = s->bMedical;      break;
-
-					default: abort(); // HACK000E
-				}
-				if (min_val >= val)
-				{
-					min_name = s->name;
-					min_val  = val;
-				}
-				if (max_val <= val)
-				{
-					max_name = s->name;
-					max_val = val;
-				}
-				sum_val += val;
-				++count;
+				compare(Attribute(*s, stat), s->name);
 			}
 		}
 		else
 		{
-			for (UINT CurrentList = 0; CurrentList < 3; ++CurrentList)
+			for (auto * const CurrentListValue : {
+				LaptopSaveInfo.ubDeadCharactersList,
+				LaptopSaveInfo.ubLeftCharactersList,
+				LaptopSaveInfo.ubOtherCharactersList })
 			{
-				const INT16* CurrentListValue; // XXX HACK000E
-				switch (CurrentList)
-				{
-					case 0: CurrentListValue = LaptopSaveInfo.ubDeadCharactersList;  break;
-					case 1: CurrentListValue = LaptopSaveInfo.ubLeftCharactersList;  break;
-					case 2: CurrentListValue = LaptopSaveInfo.ubOtherCharactersList; break;
-
-					default: abort(); // HACK000E
-				}
-
 				for (UINT32 i = 0; i < 256; i++)
 				{
 					const INT32 id = CurrentListValue[i];
 					if (id == -1) continue;
 
-					INT32 val; // XXX HACK000E
 					MERCPROFILESTRUCT const& p = GetProfile(id);
-					switch (stat)
-					{
-						case  0: val = p.bLifeMax;      break;
-						case  1: val = p.bAgility;      break;
-						case  2: val = p.bDexterity;    break;
-						case  3: val = p.bStrength;     break;
-						case  4: val = p.bLeadership;   break;
-						case  5: val = p.bWisdom;       break;
-						case  6: val = p.bExpLevel;     break;
-						case  7: val = p.bMarksmanship; break;
-						case  8: val = p.bMechanical;   break;
-						case  9: val = p.bExplosive;    break;
-						case 10: val = p.bMedical;      break;
-
-						default: abort(); // HACK000E
-					}
-					if (min_val >= val)
-					{
-						min_name = p.zNickname;
-						min_val  = val;
-					}
-					if (max_val <= val)
-					{
-						max_name = p.zNickname;
-						max_val = val;
-					}
-					sum_val += val;
-					++count;
+					compare(Attribute(p, stat), p.zNickname);
 				}
 			}
 		}
 
 		if (count == 0) continue;
 
-		MPrint(PERS_STAT_LOWEST_X,  y, min_name);
-		MPrint(PERS_STAT_HIGHEST_X, y, max_name);
+		MPrint(PERS_STAT_LOWEST_X,  y, *min_name);
+		MPrint(PERS_STAT_HIGHEST_X, y, *max_name);
 
 		ST::string val_str;
 
@@ -1943,17 +1888,12 @@ static void EnableDisableDeparturesButtons(void)
 static void DisplayDepartedCharName(MERCPROFILESTRUCT const& p, const INT32 iState)
 {
 	// get merc's nickName, assignment, and sector location info
-	INT16 sX, sY;
 
 	SetFontAttributes(CHAR_NAME_FONT, PERS_TEXT_FONT_COLOR);
+	CenterAlign const alignment{ CHAR_NAME_LOC_WIDTH };
 
-	ST::string name = p.zNickname;
-	FindFontCenterCoordinates(CHAR_NAME_LOC_X, 0, CHAR_NAME_LOC_WIDTH, 0, name, CHAR_NAME_FONT, &sX, &sY);
-	MPrint(sX, CHAR_NAME_Y, name);
-
-	ST::string state_txt = pPersonnelDepartedStateStrings[iState];
-	FindFontCenterCoordinates(CHAR_NAME_LOC_X, 0, CHAR_NAME_LOC_WIDTH, 0, state_txt, CHAR_NAME_FONT, &sX, &sY);
-	MPrint(sX, CHAR_LOC_Y, state_txt);
+	MPrint(CHAR_NAME_LOC_X, CHAR_NAME_Y, p.zNickname, alignment);
+	MPrint(CHAR_NAME_LOC_X, CHAR_LOC_Y, pPersonnelDepartedStateStrings[iState], alignment);
 }
 
 

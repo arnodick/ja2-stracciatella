@@ -6,7 +6,6 @@
 #include "History.h"
 #include "Quests.h"
 #include "Soldier_Control.h"
-#include "VObject.h"
 #include "Debug.h"
 #include "WordWrap.h"
 #include "Cursors.h"
@@ -16,6 +15,7 @@
 #include "Message.h"
 #include "LaptopSave.h"
 #include "Button_System.h"
+#include "Object_Cache.h"
 #include "VSurface.h"
 
 #include "ContentManager.h"
@@ -44,9 +44,7 @@ struct HistoryUnit
 #define TOP_DIVLINE_Y			(STD_SCREEN_Y + 101)
 #define TITLE_X				(STD_SCREEN_X + 140)
 #define TITLE_Y				(STD_SCREEN_Y + 33 )
-#define PAGE_SIZE			22
 #define RECORD_Y			TOP_DIVLINE_Y
-#define RECORD_HISTORY_WIDTH		200
 #define PAGE_NUMBER_X			TOP_X+20
 #define PAGE_NUMBER_Y			TOP_Y+33
 #define HISTORY_DATE_X			PAGE_NUMBER_X+85
@@ -60,7 +58,7 @@ struct HistoryUnit
 #define RECORD_HEADER_Y			(STD_SCREEN_Y + 90)
 
 
-#define NUM_RECORDS_PER_PAGE		PAGE_SIZE
+#define NUM_RECORDS_PER_PAGE		(22)
 #define SIZE_OF_HISTORY_FILE_RECORD	( sizeof( UINT8 ) + sizeof( UINT8 ) + sizeof( UINT32 ) + sizeof( UINT16 ) + sizeof( UINT16 ) + sizeof( UINT8 ) + sizeof( UINT8 ) )
 
 // button positions
@@ -69,15 +67,22 @@ struct HistoryUnit
 #define BTN_Y				(STD_SCREEN_Y + 53 )
 
 // graphics handles
-static SGPVObject* guiTITLE;
-static SGPVObject* guiTOP;
-static SGPVObject* guiLONGLINE;
-static SGPVObject* guiSHADELINE;
+namespace {
+// top portion of the screen background
+cache_key_t const guiTOP{ LAPTOPDIR "/historywindow.sti" };
+
+// shaded line
+cache_key_t const guiSHADELINE{ LAPTOPDIR "/historylines.sti" };
+
+// black divider line - long ( 480 length)
+cache_key_t const guiLONGLINE{ LAPTOPDIR "/divisionline480.sti" };
+
 
 enum{
 	PREV_PAGE_BUTTON=0,
 	NEXT_PAGE_BUTTON,
 };
+}
 
 // the page flipping buttons
 static GUIButtonRef giHistoryButton[2];
@@ -123,15 +128,11 @@ void GameInitHistory()
 
 
 static void CreateHistoryButtons(void);
-static void LoadHistory(void);
 static void SetHistoryButtonStates(void);
 
 
 void EnterHistory()
 {
-	// load the graphics
-	LoadHistory( );
-
 	// create History buttons
 	CreateHistoryButtons( );
 
@@ -197,38 +198,19 @@ void RenderHistory( void )
 }
 
 
-static void LoadHistory(void)
-{
-	// load History video objects into memory
-
-	// title bar
-	guiTITLE = AddVideoObjectFromFile(LAPTOPDIR "/programtitlebar.sti");
-
-	// top portion of the screen background
-	guiTOP = AddVideoObjectFromFile(LAPTOPDIR "/historywindow.sti");
-
-	// shaded line
-	guiSHADELINE = AddVideoObjectFromFile(LAPTOPDIR "/historylines.sti");
-
-	// black divider line - long ( 480 length)
-	guiLONGLINE = AddVideoObjectFromFile(LAPTOPDIR "/divisionline480.sti");
-}
-
-
 static void RemoveHistory(void)
 {
 	// delete history video objects from memory
-	DeleteVideoObject(guiLONGLINE);
-	DeleteVideoObject(guiTOP);
-	DeleteVideoObject(guiTITLE);
-	DeleteVideoObject(guiSHADELINE);
+	RemoveVObject(guiLONGLINE);
+	RemoveVObject(guiTOP);
+	RemoveVObject(guiSHADELINE);
 }
 
 
 static void RenderHistoryBackGround(void)
 {
 	// render generic background for history system
-	BltVideoObject(FRAME_BUFFER, guiTITLE, 0, TOP_X, TOP_Y -  2);
+	BltVideoObject(FRAME_BUFFER, guiTITLEBARLAPTOP, 0, TOP_X, TOP_Y - 2);
 	BltVideoObject(FRAME_BUFFER, guiTOP,   0, TOP_X, TOP_Y + 22);
 }
 
@@ -379,20 +361,20 @@ static void DisplayHistoryListHeaders(void)
 	// this procedure will display the headers to each column in History
 	SetFontAttributes(HISTORY_TEXT_FONT, FONT_BLACK, NO_SHADOW);
 
-	INT16 usX;
-	INT16 usY;
-
 	// the date header
-	FindFontCenterCoordinates(RECORD_DATE_X + 5,0,RECORD_DATE_WIDTH,0, pHistoryHeaders[0], HISTORY_TEXT_FONT,&usX, &usY);
-	MPrint(usX, RECORD_HEADER_Y, pHistoryHeaders[0]);
+	int x{ RECORD_DATE_X + 5 };
+	MPrint(x, RECORD_HEADER_Y, pHistoryHeaders[0], CenterAlign(RECORD_DATE_WIDTH));
 
-	// the date header
-	FindFontCenterCoordinates(RECORD_DATE_X + RECORD_DATE_WIDTH + 5,0,RECORD_LOCATION_WIDTH,0, pHistoryHeaders[ 3 ], HISTORY_TEXT_FONT,&usX, &usY);
-	MPrint(usX, RECORD_HEADER_Y, pHistoryHeaders[3]);
+	// Location header
+	x += RECORD_DATE_WIDTH;
+	MPrint(x, RECORD_HEADER_Y, pHistoryHeaders[3], CenterAlign(RECORD_LOCATION_WIDTH));
 
 	// event header
-	FindFontCenterCoordinates(RECORD_DATE_X + RECORD_DATE_WIDTH + RECORD_LOCATION_WIDTH + 5,0,RECORD_LOCATION_WIDTH,0, pHistoryHeaders[ 3 ], HISTORY_TEXT_FONT,&usX, &usY);
-	MPrint(usX, RECORD_HEADER_Y, pHistoryHeaders[4]);
+	x += RECORD_LOCATION_WIDTH;
+	// 471 is the width in pixels of one row (the width of guiSHADELINE index 0).
+	constexpr int RECORD_EVENT_WIDTH{ 471 - RECORD_DATE_WIDTH - RECORD_LOCATION_WIDTH };
+	MPrint(x, RECORD_HEADER_Y, pHistoryHeaders[4], CenterAlign(RECORD_EVENT_WIDTH));
+
 	// reset shadow
 	SetFontShadow(DEFAULT_SHADOW);
 }

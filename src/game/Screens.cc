@@ -1,8 +1,6 @@
 #include "Auto_Resolve.h"
-#include "Credits.h"
 #include "EditScreen.h"
 #include "Fade_Screen.h"
-#include "GameInitOptionsScreen.h"
 #include "GameScreen.h"
 #include "Intro.h"
 #include "JAScreens.h"
@@ -15,6 +13,7 @@
 #include "Quest_Debug_System.h"
 #include "SaveLoadScreen.h"
 #include "Screens.h"
+#include "ScreenIDs.h"
 #include "ShopKeeper_Interface.h"
 
 
@@ -32,7 +31,7 @@ Screens const GameScreens[] =
 	{ MapScreenInit,        MapScreenHandle,             MapScreenShutdown        },
 	{ LaptopScreenInit,     LaptopScreenHandle,          LaptopScreenShutdown     },
 	{ NULL,                 LoadSaveScreenHandle,        NULL                     },
-	{ NULL,                 NULL,                        NULL                     }, // was MapUtilityScreen
+	{ nullptr,              HandleScreen<MAPUTILITY_SCREEN>, nullptr              },
 	{ NULL,                 FadeScreenHandle,            NULL                     },
 	{ NULL,                 MessageBoxScreenHandle,      MessageBoxScreenShutdown },
 	{ NULL,                 MainMenuScreenHandle,        NULL                     },
@@ -41,10 +40,10 @@ Screens const GameScreens[] =
 	{ NULL,                 OptionsScreenHandle,         NULL                     },
 	{ ShopKeeperScreenInit, ShopKeeperScreenHandle,      ShopKeeperScreenShutdown },
 	{ NULL,                 SexScreenHandle,             NULL                     },
-	{ NULL,                 GameInitOptionsScreenHandle, NULL                     },
+	{ nullptr,              HandleScreen<GAME_INIT_OPTIONS_SCREEN>, nullptr       },
 	{ NULL,                 NULL,                        NULL                     },
 	{ NULL,                 IntroScreenHandle,           NULL                     },
-	{ NULL,                 CreditScreenHandle,          NULL                     },
+	{ nullptr,              HandleScreen<CREDIT_SCREEN>, nullptr                  },
 	{ QuestDebugScreenInit, QuestDebugScreenHandle,      NULL                     }
 };
 

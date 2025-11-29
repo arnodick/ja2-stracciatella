@@ -1,11 +1,24 @@
 #include "ItemModel.h"
-
+#include <functional>
 #include <utility>
 
 
+namespace {
+auto deserializeHelper(ItemModel::InitData const& initData,
+	char const * propertyName,
+	decltype(&BinaryData::getItemName) getterMethod)
+{
+	auto result{ initData.json.getOptionalString(propertyName) };
+	if (result.empty()) {
+		result = std::invoke(getterMethod, initData.strings,
+		                     initData.json.GetUInt("itemIndex"));
+	}
+	return result;
+}
+}
 
 ItemModel::ItemModel(uint16_t itemIndex,
-			ST::string internalName,
+			ST::string&& internalName,
 			uint32_t usItemClass,
 			uint8_t classIndex,
 			ItemCursor cursor) :
@@ -27,15 +40,15 @@ ItemModel::ItemModel(uint16_t itemIndex,
 }
 
 ItemModel::ItemModel(uint16_t   itemIndex,
-			ST::string internalName,
-			ST::string shortName,
-			ST::string name,
-			ST::string description,
+			ST::string&& internalName,
+			ST::string&& shortName,
+			ST::string&& name,
+			ST::string&& description,
 			uint32_t   usItemClass,
 			uint8_t    ubClassIndex,
 			ItemCursor ubCursor,
-			InventoryGraphicsModel inventoryGraphics_,
-			TilesetTileIndexModel tileGraphic_,
+			InventoryGraphicsModel&& inventoryGraphics_,
+			TilesetTileIndexModel&& tileGraphic_,
 			uint8_t    ubWeight,
 			uint8_t    ubPerPocket,
 			uint16_t   usPrice,
@@ -45,10 +58,10 @@ ItemModel::ItemModel(uint16_t   itemIndex,
 			uint16_t   fFlags) : inventoryGraphics(std::move(inventoryGraphics_)), tileGraphic(tileGraphic_)
 {
 	this->itemIndex             = itemIndex;
-	this->internalName          = internalName;
-	this->shortName             = shortName;
-	this->name                  = name;
-	this->description           = description;
+	this->internalName          = std::move(internalName);
+	this->shortName             = std::move(shortName);
+	this->name                  = std::move(name);
+	this->description           = std::move(description);
 	this->usItemClass           = usItemClass;
 	this->ubClassIndex          = ubClassIndex;
 	this->ubCursor              = ubCursor;
@@ -125,7 +138,7 @@ void ItemModel::serializeFlags(JsonObject &obj) const
 	if(getFlags() & ITEM_INSEPARABLE)         { obj.set("bInseparable", true);    }
 }
 
-uint32_t ItemModel::deserializeFlags(JsonObject &obj) const
+uint16_t ItemModel::deserializeFlags(const JsonObject &obj)
 {
 	uint32_t flags = 0;
 	if(obj.getOptionalBool("bDamageable"))        { flags |= ITEM_DAMAGEABLE;             }
@@ -148,7 +161,7 @@ uint32_t ItemModel::deserializeFlags(JsonObject &obj) const
 }
 
 /** Check if the given attachment can be attached to the item. */
-bool ItemModel::canBeAttached(uint16_t attachment) const
+bool ItemModel::canBeAttached(const GamePolicy* policy, const ItemModel* attachment) const
 {
 	return false;
 }
@@ -175,64 +188,52 @@ JsonValue ItemModel::serialize() const
 	return obj.toValue();
 }
 
-ST::string ItemModel::deserializeShortName(const JsonObject &obj, const VanillaItemStrings& vanillaItemStrings) {
-	uint16_t itemIndex = obj.GetUInt("itemIndex");
-	ST::string shortName = vanillaItemStrings.getShortName(itemIndex);
-	if (!obj.getOptionalString("shortName").empty()) {
-		shortName = obj.getOptionalString("shortName");
-	}
-	return shortName;
+ST::string ItemModel::deserializeShortName(InitData const& initData)
+{
+	return deserializeHelper(initData, "shortName", &BinaryData::getItemShortName);
 }
 
-ST::string ItemModel::deserializeName(const JsonObject &obj, const VanillaItemStrings& vanillaItemStrings) {
-	uint16_t itemIndex = obj.GetUInt("itemIndex");
-	ST::string name = vanillaItemStrings.getName(itemIndex);
-	if (!obj.getOptionalString("name").empty()) {
-		name = obj.getOptionalString("name");
-	}
-	return name;
+ST::string ItemModel::deserializeName(InitData const& initData)
+{
+	return deserializeHelper(initData, "name", &BinaryData::getItemName);
 }
 
-ST::string ItemModel::deserializeDescription(const JsonObject &obj, const VanillaItemStrings& vanillaItemStrings) {
-	uint16_t itemIndex = obj.GetUInt("itemIndex");
-	ST::string description = vanillaItemStrings.getDescription(itemIndex);
-	if (!obj.getOptionalString("description").empty()) {
-		description = obj.getOptionalString("description");
-	}
-	return description;
+ST::string ItemModel::deserializeDescription(InitData const& initData)
+{
+	return deserializeHelper(initData, "description", &BinaryData::getItemDescription);
 }
 
-const ItemModel* ItemModel::deserialize(const JsonValue &json, const VanillaItemStrings& vanillaItemStrings)
+const ItemModel* ItemModel::deserialize(const JsonValue &json, const BinaryData& vanillaItemStrings)
 {
 	auto obj = json.toObject();
+	InitData const initData{ obj, vanillaItemStrings };
 	uint16_t itemIndex = obj.GetUInt("itemIndex");
 	ST::string internalName = obj.GetString("internalName");
 	auto inventoryGraphics = InventoryGraphicsModel::deserialize(obj["inventoryGraphics"]);
 	auto tileGraphic = TilesetTileIndexModel::deserialize(obj["tileGraphic"]);
 
-	auto shortName = ItemModel::deserializeShortName(obj, vanillaItemStrings);
-	auto name = ItemModel::deserializeName(obj, vanillaItemStrings);
-	auto description = ItemModel::deserializeDescription(obj, vanillaItemStrings);
+	auto shortName = ItemModel::deserializeShortName(initData);
+	auto name = ItemModel::deserializeName(initData);
+	auto description = ItemModel::deserializeDescription(initData);
+	auto flags = ItemModel::deserializeFlags(obj);
 
-	auto* item = new ItemModel(
+	return new ItemModel(
 		itemIndex,
-		internalName,
-		shortName,
-		name,
-		description,
+		std::move(internalName),
+		std::move(shortName),
+		std::move(name),
+		std::move(description),
 		obj.GetUInt("usItemClass"),
 		obj.GetUInt("ubClassIndex"),
 		(ItemCursor)obj.GetUInt("ubCursor"),
-		inventoryGraphics,
-		tileGraphic,
+		std::move(inventoryGraphics),
+		std::move(tileGraphic),
 		obj.GetUInt("ubWeight"),
 		obj.GetUInt("ubPerPocket"),
 		obj.GetUInt("usPrice"),
 		obj.GetUInt("ubCoolness"),
 		obj.GetInt("bReliability"),
 		obj.GetInt("bRepairEase"),
-		0
+		flags
 	);
-	item->fFlags = item->deserializeFlags(obj);
-	return item;
 }

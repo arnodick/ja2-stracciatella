@@ -1,3 +1,5 @@
+#include "ArmourModel.h"
+#include "JA2Types.h"
 #include "AI.h"
 #include "Animation_Control.h"
 #include "OppList.h"
@@ -24,6 +26,7 @@
 
 #include "CalibreModel.h"
 #include "ContentManager.h"
+#include "ExplosiveModel.h"
 #include "GameInstance.h"
 #include "WeaponModels.h"
 #include "policy/GamePolicy.h"
@@ -43,40 +46,21 @@
 
 void LoadWeaponIfNeeded(SOLDIERTYPE *pSoldier)
 {
-	UINT16 usInHand;
-	INT8 bPayloadPocket;
+	UINT16 usInHand = pSoldier->inv[HANDPOS].usItem;
+	auto item = GCM->getItem(usInHand, ItemSystem::nothrow);
+	if (!item || !item->isWeapon()) {
+		return;
+	}
 
-	usInHand = pSoldier->inv[HANDPOS].usItem;
+	auto weapon = item->asWeapon();
+	if (!weapon->shootsExplosiveCalibre()) {
+		return;
+	}
 
-	// if he's got a MORTAR in his hand, make sure he has a MORTARSHELL avail.
-	if (usInHand == MORTAR)
+	INT8 bPayloadPocket = FindLaunchable( pSoldier, usInHand );
+	if (bPayloadPocket == NO_SLOT)
 	{
-		bPayloadPocket = FindObj( pSoldier, MORTAR_SHELL );
-		if (bPayloadPocket == NO_SLOT)
-		{
-			return;	// no shells, can't fire the MORTAR
-		}
-	}
-	// if he's got a GL in his hand, make sure he has some type of GRENADE avail.
-	else if (usInHand == GLAUNCHER)
-	{
-		bPayloadPocket = FindGLGrenade( pSoldier );
-		if (bPayloadPocket == NO_SLOT)
-		{
-			return;	// no grenades, can't fire the GLAUNCHER
-		}
-	}
-	else if (usInHand == TANK_CANNON)
-	{
-		bPayloadPocket = FindLaunchable( pSoldier, TANK_CANNON );
-		if (bPayloadPocket == NO_SLOT)
-		{
-			return;
-		}
-	}
-	else
-	{
-		// regular hand-thrown grenade in hand, nothing to load!
+		// no ammo, can't fire
 		return;
 	}
 
@@ -374,99 +358,59 @@ static void CalcBestThrow(SOLDIERTYPE* pSoldier, ATTACKTYPE* pBestThrow)
 {
 	// September 9, 1998: added code for LAWs (CJC)
 	UINT8 ubLoop2;
-	INT32 iAttackValue;
-	INT32 iHitRate, iThreatValue, iTotalThreatValue,iOppThreatValue[MAXMERCS];
-	INT16 sGridNo, sEndGridNo, sFriendTile[MAXMERCS], sOpponentTile[MAXMERCS];
+	INT32 iOppThreatValue[MAXMERCS];
+	INT16 sEndGridNo, sFriendTile[MAXMERCS], sOpponentTile[MAXMERCS];
 	INT8  bFriendLevel[MAXMERCS], bOpponentLevel[MAXMERCS];
-	INT32 iEstDamage;
 	UINT8 ubFriendCnt = 0;
 	UINT8 ubOpponentCnt = 0;
 	SOLDIERTYPE* opponents[MAXMERCS];
 	UINT8 ubRawAPCost,ubMaxPossibleAimTime;
-	UINT8 ubChanceToHit,ubChanceToGetThrough,ubChanceToReallyHit;
-	UINT32 uiPenalty;
-	UINT8 ubSearchRange;
-	UINT16 usOppDist;
-	BOOLEAN fFriendsNearby;
-	UINT16 usInHand, usGrenade;
-	UINT8 ubOppsInRange, ubOppsAdjacent;
-	BOOLEAN fSkipLocation;
+	UINT8 ubChanceToHit,ubChanceToGetThrough;
 	INT8  bPayloadPocket;
-	INT8  bMaxLeft,bMaxRight,bMaxUp,bMaxDown,bXOffset,bYOffset;
-	INT8  bPersOL, bPublOL;
 	static INT16 sExcludeTile[100]; // This array is for storing tiles that we have
 	UINT8 ubNumExcludedTiles = 0;		// already considered, to prevent duplication of effort
 	INT32 iTossRange;
 	UINT8 ubSafetyMargin = 0;
-	UINT8 ubDiff;
 	INT8  bEndLevel;
 
-	usInHand = pSoldier->inv[HANDPOS].usItem;
-	usGrenade = NOTHING;
+	UINT16 const usInHand{ pSoldier->inv[HANDPOS].usItem };
+	UINT16 usGrenade{ NOTHING };
 
-	if ( EXPLOSIVE_GUN( usInHand ) )
+	auto weapon = GCM->getWeapon(usInHand);
+	if (EXPLOSIVE_GUN(usInHand) && weapon)
 	{
-		iTossRange = GCM->getWeapon( usInHand )->usRange / CELL_X_SIZE;
+		iTossRange = weapon->usRange / CELL_X_SIZE;
 	}
 	else
 	{
 		iTossRange = CalcMaxTossRange( pSoldier, usInHand, TRUE );
 	}
 
-	// if he's got a MORTAR in his hand, make sure he has a MORTARSHELL avail.
-	if (usInHand == MORTAR)
-	{
-		bPayloadPocket = FindObj( pSoldier, MORTAR_SHELL );
+	if (weapon && weapon->shootsExplosiveCalibre()) {
+		bPayloadPocket = FindLaunchable( pSoldier, usInHand );
 		if (bPayloadPocket == NO_SLOT)
 		{
-			return;	// no shells, can't fire the MORTAR
+			return;	// no ammo, can't fire
 		}
-		ubSafetyMargin = Explosive[ GCM->getItem(MORTAR_SHELL)->getClassIndex() ].ubRadius;
-	}
-	// if he's got a GL in his hand, make sure he has some type of GRENADE avail.
-	else if (usInHand == GLAUNCHER)
-	{
-		// use up pocket 2 first, they get left as drop items
-		bPayloadPocket = FindGLGrenade( pSoldier );
-		if (bPayloadPocket == NO_SLOT)
-		{
-			return;	// no grenades, can't fire the GLAUNCHER
-		}
-		ubSafetyMargin = Explosive[ GCM->getItem(pSoldier->inv[ bPayloadPocket ].usItem)->getClassIndex() ].ubRadius;
-		usGrenade = pSoldier->inv[ bPayloadPocket ].usItem;
+		usGrenade = pSoldier->inv[bPayloadPocket].usItem;
+		ubSafetyMargin = GCM->getExplosive(usGrenade)->getSafetyMargin();
 	}
 	else if (usInHand == ROCKET_LAUNCHER)
 	{
 		// put in hand
 		bPayloadPocket = HANDPOS;
 		// as C1
-		ubSafetyMargin = Explosive[ GCM->getItem(C1)->getClassIndex() ].ubRadius;
-	}
-	else if (usInHand == TANK_CANNON)
-	{
-		bPayloadPocket = FindObj( pSoldier, TANK_SHELL );
-		if (bPayloadPocket == NO_SLOT)
-		{
-			return;	// no grenades, can't fire the GLAUNCHER
-		}
-		ubSafetyMargin = Explosive[ GCM->getItem(TANK_SHELL)->getClassIndex() ].ubRadius;
-
+		ubSafetyMargin = GCM->getExplosive(C1)->getBlastEffect()->radius;
 	}
 	else
 	{
 		// else it's a plain old grenade, now in his hand
 		bPayloadPocket = HANDPOS;
-		ubSafetyMargin = Explosive[ GCM->getItem(pSoldier->inv[ bPayloadPocket ].usItem)->getClassIndex() ].ubRadius;
+		ubSafetyMargin = GCM->getExplosive(pSoldier->inv[ bPayloadPocket ].usItem)->getSafetyMargin();
 		usGrenade = pSoldier->inv[ bPayloadPocket ].usItem;
-
-		if (usGrenade == BREAK_LIGHT)
-		{
-			// JA2Gold: light isn't as nasty as explosives
-			ubSafetyMargin /= 2;
-		}
 	}
 
-	ubDiff = SoldierDifficultyLevel( pSoldier );
+	auto const ubDiff{ SoldierDifficultyLevel(pSoldier) };
 
 	// make a list of tiles one's friends are positioned in
 	FOR_EACH_MERC(i)
@@ -520,11 +464,11 @@ static void CalcBestThrow(SOLDIERTYPE* pSoldier, ATTACKTYPE* pBestThrow)
 		}
 
 
-		bPersOL = pSoldier->bOppList[pOpponent->ubID];
+		auto const bPersOL{ pSoldier->bOppList[pOpponent->ubID] };
 
 		if ((usInHand == MORTAR) || (usInHand == GLAUNCHER))
 		{
-			bPublOL = gbPublicOpplist[pSoldier->bTeam][pOpponent->ubID];
+			auto const bPublOL{ gbPublicOpplist[pSoldier->bTeam][pOpponent->ubID] };
 			// allow long range firing, where target doesn't PERSONALLY see opponent
 			if ((bPersOL != SEEN_CURRENTLY) && (bPublOL != SEEN_CURRENTLY))
 			{
@@ -660,27 +604,25 @@ static void CalcBestThrow(SOLDIERTYPE* pSoldier, ATTACKTYPE* pBestThrow)
 	for (UINT8 ubLoop = 0; ubLoop < ubOpponentCnt; ++ubLoop)
 	{
 		// search all tiles within 2 squares of this opponent
-		ubSearchRange = MAX_TOSS_SEARCH_DIST;
+		constexpr INT8 ubSearchRange = MAX_TOSS_SEARCH_DIST;
 
 		// determine maximum horizontal limits
 		//bMaxLeft  = std::min(ubSearchRange,(sOpponentTile[ubLoop] % MAXCOL));
-		bMaxLeft = ubSearchRange;
+		constexpr INT8 bMaxLeft = ubSearchRange;
 		//bMaxRight = std::min(ubSearchRange,MAXCOL - ((sOpponentTile[ubLoop] % MAXCOL) + 1));
-		bMaxRight = ubSearchRange;
+		constexpr INT8 bMaxRight = ubSearchRange;
 
 		// determine maximum vertical limits
-		bMaxUp   = ubSearchRange;
-		bMaxDown = ubSearchRange;
+		constexpr INT8 bMaxUp   = ubSearchRange;
+		constexpr INT8 bMaxDown = ubSearchRange;
 
 		// evaluate every tile for its opponent-damaging potential
-		for (bYOffset = -bMaxUp; bYOffset <= bMaxDown; bYOffset++)
+		for (INT8 bYOffset = -bMaxUp; bYOffset <= bMaxDown; ++bYOffset)
 		{
-			for (bXOffset = -bMaxLeft; bXOffset <= bMaxRight; bXOffset++)
+			for (INT8 bXOffset = -bMaxLeft; bXOffset <= bMaxRight; ++bXOffset)
 			{
-				//HandleMyMouseCursor(KEYBOARDALSO);
-
 				// calculate the next potential gridno near this opponent
-				sGridNo = sOpponentTile[ubLoop] + bXOffset + (MAXCOL * bYOffset);
+				GridNo const sGridNo = sOpponentTile[ubLoop] + bXOffset + (MAXCOL * bYOffset);
 
 				// this shouldn't ever happen
 				if ((sGridNo < 0) || (sGridNo >= GRIDSIZE))
@@ -726,19 +668,11 @@ static void CalcBestThrow(SOLDIERTYPE* pSoldier, ATTACKTYPE* pBestThrow)
 					}
 				}
 
-				fSkipLocation = FALSE;
 				// Check to see if we have considered this tile before:
-				for (ubLoop2 = 0; ubLoop2 < ubNumExcludedTiles; ubLoop2++)
+				if (std::find(sExcludeTile, sExcludeTile + ubNumExcludedTiles, sGridNo)
+					!= sExcludeTile + ubNumExcludedTiles)
 				{
-					if (sExcludeTile[ubLoop2] == sGridNo)
-					{
-						// already checked!
-						fSkipLocation = TRUE;
-						break;
-					}
-				}
-				if (fSkipLocation)
-				{
+					// already checked!
 					continue;
 				}
 
@@ -750,8 +684,7 @@ static void CalcBestThrow(SOLDIERTYPE* pSoldier, ATTACKTYPE* pBestThrow)
 					continue;              // next gridno
 
 				// check whether there are any friends standing near this gridno
-				fFriendsNearby = FALSE;
-
+				bool fFriendsNearby{ false };
 				for (ubLoop2 = 0; ubLoop2 < ubFriendCnt; ubLoop2++)
 				{
 					if ( (bFriendLevel[ubLoop2] == bOpponentLevel[ubLoop]) && ( PythSpacesAway(sFriendTile[ubLoop2],sGridNo) <= ubSafetyMargin ) )
@@ -765,25 +698,25 @@ static void CalcBestThrow(SOLDIERTYPE* pSoldier, ATTACKTYPE* pBestThrow)
 					continue;      // this location is no good, move along now
 
 				// Well this place shows some promise, evaluate its "damage potential"
-				iTotalThreatValue = 0;
-				ubOppsInRange = 0;
-				ubOppsAdjacent = 0;
+				int iTotalThreatValue = 0;
+				UINT8 ubOppsInRange = 0;
+				UINT8 ubOppsAdjacent = 0;
 				// skip this location unless it's right on top of an enemy or
 				// adjacent to more than 1
-				fSkipLocation = TRUE;
+				bool fSkipLocation{ true };
 
 				for (ubLoop2 = 0; ubLoop2 < ubOpponentCnt; ubLoop2++)
 				{
-					usOppDist = PythSpacesAway( sOpponentTile[ubLoop2], sGridNo );
+					auto const usOppDist{ PythSpacesAway( sOpponentTile[ubLoop2], sGridNo ) };
 
 					// if this opponent is close enough to the target gridno
 					if (usOppDist <= 3)
 					{
 						// start with this opponents base threat value
-						iThreatValue = iOppThreatValue[ubLoop2];
+						auto const iThreatValue{ iOppThreatValue[ubLoop2] };
 
 						// estimate how much damage this tossed item would do to him
-						iEstDamage = EstimateThrowDamage(pSoldier, bPayloadPocket, opponents[ubLoop2], sGridNo);
+						auto iEstDamage{ EstimateThrowDamage(pSoldier, bPayloadPocket, opponents[ubLoop2], sGridNo) };
 
 						if (usOppDist)
 						{
@@ -870,7 +803,7 @@ static void CalcBestThrow(SOLDIERTYPE* pSoldier, ATTACKTYPE* pBestThrow)
 							// rate "chance of hitting" according to how far away this is from the target
 							// but keeping in mind that we don't want to hit far, subtract 1 from the radius here
 							// to penalize being far from the target
-							uiPenalty = 100 * PythSpacesAway( sGridNo, sEndGridNo ) / (ubSafetyMargin - 1);
+							int const uiPenalty{ 100 * PythSpacesAway( sGridNo, sEndGridNo ) / (ubSafetyMargin - 1) };
 							if ( uiPenalty < 100 )
 							{
 								ubChanceToGetThrough = 100 - (UINT8) uiPenalty;
@@ -930,10 +863,10 @@ static void CalcBestThrow(SOLDIERTYPE* pSoldier, ATTACKTYPE* pBestThrow)
 					}
 				}
 
-				iHitRate = (pSoldier->bActionPoints * ubChanceToHit) / (ubRawAPCost + ubMaxPossibleAimTime);
+				int const iHitRate{ (pSoldier->bActionPoints * ubChanceToHit) / (ubRawAPCost + ubMaxPossibleAimTime) };
 
 				// calculate chance to REALLY hit: throw accurately AND get past cover
-				ubChanceToReallyHit = (ubChanceToHit * ubChanceToGetThrough) / 100;
+				UINT8 const ubChanceToReallyHit = (ubChanceToHit * ubChanceToGetThrough) / 100;
 
 				// if we can't REALLY hit at all
 				if (ubChanceToReallyHit == 0)
@@ -942,7 +875,7 @@ static void CalcBestThrow(SOLDIERTYPE* pSoldier, ATTACKTYPE* pBestThrow)
 				// calculate the combined "attack value" for this opponent
 				// maximum possible attack value here should be about 140 million
 				// typical attack value here should be about 500 thousand
-				iAttackValue = (iHitRate * ubChanceToReallyHit * iTotalThreatValue) / 1000;
+				int const iAttackValue{ (iHitRate * ubChanceToReallyHit * iTotalThreatValue) / 1000 };
 
 				// unlike SHOOTing and STABbing, find strictly the highest attackValue
 				if (iAttackValue > pBestThrow->iAttackValue)
@@ -1374,8 +1307,10 @@ static INT32 EstimateShotDamage(SOLDIERTYPE* pSoldier, SOLDIERTYPE* pOpponent, U
 	// if opponent is wearing a helmet
 	if (pOpponent->inv[HELMETPOS].usItem)
 	{
-		iHeadProt += (INT32) Armour[GCM->getItem(pOpponent->inv[HELMETPOS].usItem)->getClassIndex()].ubProtection *
-				(INT32) pOpponent->inv[HELMETPOS].bStatus[0] / 100;
+		auto helmet = GCM->getArmour(pOpponent->inv[HELMETPOS].usItem);
+		if (helmet) {
+			iHeadProt += (INT32) helmet->getProtection() * (INT32) pOpponent->inv[HELMETPOS].bStatus[0] / 100;
+		}
 	}
 
 	// if opponent is wearing a protective vest
@@ -1384,8 +1319,10 @@ static INT32 EstimateShotDamage(SOLDIERTYPE* pSoldier, SOLDIERTYPE* pOpponent, U
 		// monster spit and knives ignore kevlar vests
 		if (pOpponent->inv[VESTPOS].usItem)
 		{
-			iTorsoProt += (INT32) Armour[GCM->getItem(pOpponent->inv[VESTPOS].usItem)->getClassIndex()].ubProtection *
-					(INT32) pOpponent->inv[VESTPOS].bStatus[0] / 100;
+			auto vest = GCM->getArmour(pOpponent->inv[VESTPOS].usItem);
+			if (vest) {
+				iTorsoProt += (INT32) vest->getProtection() * (INT32) pOpponent->inv[VESTPOS].bStatus[0] / 100;
+			}
 		}
 	}
 
@@ -1393,8 +1330,10 @@ static INT32 EstimateShotDamage(SOLDIERTYPE* pSoldier, SOLDIERTYPE* pOpponent, U
 	bPlatePos = FindAttachment( &(pOpponent->inv[VESTPOS]), CERAMIC_PLATES );
 	if (bPlatePos != -1)
 	{
-		iTorsoProt += (INT32) Armour[GCM->getItem(pOpponent->inv[VESTPOS].usAttachItem[bPlatePos])->getClassIndex()].ubProtection *
-				(INT32) pOpponent->inv[VESTPOS].bAttachStatus[bPlatePos] / 100;
+		auto plates = GCM->getArmour(pOpponent->inv[VESTPOS].usAttachItem[bPlatePos]);
+		if (plates) {
+			iTorsoProt += (INT32) plates->getProtection() * (INT32) pOpponent->inv[VESTPOS].bAttachStatus[bPlatePos] / 100;
+		}
 	}
 
 
@@ -1403,8 +1342,10 @@ static INT32 EstimateShotDamage(SOLDIERTYPE* pSoldier, SOLDIERTYPE* pOpponent, U
 	{	// monster spit and knives ignore kevlar leggings
 		if (pOpponent->inv[LEGPOS].usItem)
 		{
-			iLegProt += (INT32) Armour[GCM->getItem(pOpponent->inv[LEGPOS].usItem)->getClassIndex()].ubProtection *
-					(INT32) pOpponent->inv[LEGPOS].bStatus[0] / 100;
+			auto leggings = GCM->getArmour(pOpponent->inv[LEGPOS].usItem);
+			if (leggings) {
+				iLegProt += (INT32) leggings->getProtection() * (INT32) pOpponent->inv[LEGPOS].bStatus[0] / 100;
+			}
 		}
 	}
 
@@ -1446,8 +1387,9 @@ static INT32 EstimateShotDamage(SOLDIERTYPE* pSoldier, SOLDIERTYPE* pOpponent, U
 			case CREATURE_OLD_MALE_SPIT: gas = SMALL_CREATURE_GAS;      break;
 			default:                     gas = VERY_SMALL_CREATURE_GAS; break;
 		}
-		const EXPLOSIVETYPE* const e = &Explosive[GCM->getItem(gas)->getClassIndex()];
-		iDamage += e->ubDamage * NumMercsCloseTo(pOpponent->sGridNo, e->ubRadius) * 3 / 2;
+		auto e = GCM->getExplosive(gas);
+		auto smokeEffect = e->getSmokeEffect();
+		iDamage += smokeEffect->smokeEffect->getDamage() * NumMercsCloseTo(pOpponent->sGridNo, smokeEffect->maxRadius) * 3 / 2;
 	}
 
 	if (iDamage < 1)
@@ -1459,10 +1401,10 @@ static INT32 EstimateShotDamage(SOLDIERTYPE* pSoldier, SOLDIERTYPE* pOpponent, U
 
 static INT32 EstimateThrowDamage(SOLDIERTYPE* pSoldier, UINT8 ubItemPos, SOLDIERTYPE* pOpponent, INT16 sGridno)
 {
-	UINT8 ubExplosiveIndex;
-	INT32 iExplosDamage, iBreathDamage, iArmourAmount, iDamage = 0;
+	INT32 iExplosDamage = 0, iBreathDamage = 0, iArmourAmount = 0, iDamage = 0;
 	INT8  bSlot;
 
+	const ExplosiveModel* explosive = nullptr;
 	switch ( pSoldier->inv[ ubItemPos ].usItem )
 	{
 		case GL_SMOKE_GRENADE:
@@ -1472,10 +1414,10 @@ static INT32 EstimateThrowDamage(SOLDIERTYPE* pSoldier, UINT8 ubItemPos, SOLDIER
 			// too high
 			return( 5 );
 		case ROCKET_LAUNCHER:
-			ubExplosiveIndex = GCM->getItem(C1)->getClassIndex();
+			explosive = GCM->getExplosive(C1);
 			break;
 		default:
-			ubExplosiveIndex = GCM->getItem(pSoldier->inv[ubItemPos].usItem)->getClassIndex();
+			explosive = GCM->getExplosive(pSoldier->inv[ubItemPos].usItem);
 			break;
 	}
 
@@ -1486,10 +1428,21 @@ static INT32 EstimateThrowDamage(SOLDIERTYPE* pSoldier, UINT8 ubItemPos, SOLDIER
 	}
 
 
-	iExplosDamage = ( ( (INT32) Explosive[ ubExplosiveIndex ].ubDamage ) * 3) / 2;
-	iBreathDamage = ( ( (INT32) Explosive[ ubExplosiveIndex ].ubStunDamage ) * 5) / 4;
+	auto blastEffect = explosive->getBlastEffect();
+	auto stunEffect = explosive->getStunEffect();
+	auto smokeEffect = explosive->getSmokeEffect();
+	if (blastEffect) {
+		iExplosDamage = ( ( (INT32) blastEffect->damage ) * 3) / 2;
+	}
+	if (stunEffect) {
+		iBreathDamage = ( ( (INT32) stunEffect->breathDamage ) * 5) / 4;
+	}
+	if (smokeEffect) {
+		iExplosDamage += ( ( (INT32) smokeEffect->smokeEffect->getDamage() ) * 3) / 2;
+		iBreathDamage += ( ( (INT32) smokeEffect->smokeEffect->getBreathDamage() ) * 5) / 4;
+	}
 
-	if ( Explosive[ ubExplosiveIndex ].ubType == EXPLOSV_TEARGAS || Explosive[ ubExplosiveIndex ].ubType == EXPLOSV_MUSTGAS )
+	if ( smokeEffect && (smokeEffect->smokeEffect->getDamage() || smokeEffect->smokeEffect->getBreathDamage()) )
 	{
 		// if target gridno is outdoors (where tear gas lasts only 1-2 turns)
 		if (gpWorldLevelData[sGridno].ubTerrainID != FLAT_FLOOR)

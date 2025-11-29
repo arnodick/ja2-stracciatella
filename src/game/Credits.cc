@@ -1,4 +1,3 @@
-#include "Credits.h"
 #include "Cursors.h"
 #include "Debug.h"
 #include "Directories.h"
@@ -7,13 +6,14 @@
 #include "Input.h"
 #include "Local.h"
 #include "MouseSystem.h"
+#include "Object_Cache.h"
 #include "Random.h"
 #include "Render_Dirty.h"
+#include "ScreenIDs.h"
 #include "SysUtil.h"
 #include "Text.h"
 #include "Timer_Control.h"
 #include "Types.h"
-#include "VObject.h"
 #include "VSurface.h"
 #include "Video.h"
 #include "WordWrap.h"
@@ -138,8 +138,10 @@ static MOUSE_REGION gCrdtMouseRegions[NUM_PEOPLE_IN_CREDITS];
 
 static BOOLEAN g_credits_active;
 
-static SGPVObject* guiCreditBackGroundImage;
-static SGPVObject* guiCreditFaces;
+namespace {
+cache_key_t const guiCreditBackGroundImage{ INTERFACEDIR "/credits.sti" };
+cache_key_t const guiCreditFaces{ INTERFACEDIR "/credit faces.sti" };
+}
 
 static CRDT_NODE* g_credits_head;
 static CRDT_NODE* g_credits_tail;
@@ -170,7 +172,7 @@ static void GetCreditScreenUserInput(void);
 static void HandleCreditScreen(void);
 
 
-ScreenID CreditScreenHandle(void)
+template<> ScreenID HandleScreen<CREDIT_SCREEN>()
 {
 	if (!g_credits_active)
 	{
@@ -198,9 +200,6 @@ static void SelectCreditFaceMovementRegionCallBack(MOUSE_REGION* pRegion, UINT32
 static BOOLEAN EnterCreditsScreen(void)
 try
 {
-	guiCreditBackGroundImage = AddVideoObjectFromFile(INTERFACEDIR "/credits.sti");
-	guiCreditFaces           = AddVideoObjectFromFile(INTERFACEDIR "/credit faces.sti");
-
 	guiCreditScreenActiveFont  = FONT12ARIAL;
 	gubCreditScreenActiveColor = FONT_MCOLOR_DKWHITE;
 	guiCreditScreenTitleFont   = FONT14ARIAL;
@@ -250,8 +249,8 @@ static void DeleteFirstNode(void);
 
 static void ExitCreditScreen(void)
 {
-	DeleteVideoObject(guiCreditBackGroundImage);
-	DeleteVideoObject(guiCreditFaces);
+	RemoveVObject(guiCreditBackGroundImage);
+	RemoveVObject(guiCreditFaces);
 
 	while (g_credits_head != NULL) DeleteFirstNode();
 
@@ -537,9 +536,9 @@ static void SelectCreditFaceMovementRegionCallBack(MOUSE_REGION* pRegion, UINT32
 static void InitCreditEyeBlinking(void)
 {
 	const UINT32 now = GetJA2Clock();
-	FOR_EACH(CreditFace, f, gCreditFaces)
+	for (auto & f : gCreditFaces)
 	{
-		f->uiLastBlinkTime = now + Random(f->sBlinkFreq * 2);
+		f.uiLastBlinkTime = now + Random(f.sBlinkFreq * 2);
 	}
 }
 
@@ -547,9 +546,8 @@ static void InitCreditEyeBlinking(void)
 static void HandleCreditEyeBlinking()
 {
 	UINT16 gfx = 0;
-	FOR_EACHX(CreditFace, i, gCreditFaces, gfx += 3)
+	for (auto & f : gCreditFaces)
 	{
-		CreditFace&  f   = *i;
 		UINT32 const now = GetJA2Clock();
 		if (now - f.uiLastBlinkTime > f.sBlinkFreq)
 		{
@@ -567,6 +565,8 @@ static void HandleCreditEyeBlinking()
 
 			f.uiEyesClosedTime = 0;
 		}
+
+		gfx += 3;
 	}
 }
 

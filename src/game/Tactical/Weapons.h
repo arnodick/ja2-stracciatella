@@ -3,7 +3,6 @@
 
 #include "Item_Types.h"
 #include "JA2Types.h"
-#include "Sound_Control.h"
 
 struct CalibreModel;
 
@@ -62,8 +61,7 @@ enum
 	ARMOURCLASS_VEST,
 	ARMOURCLASS_LEGGINGS,
 	ARMOURCLASS_PLATE,
-	ARMOURCLASS_MONST,
-	ARMOURCLASS_VEHICLE
+	ARMOURCLASS_MONST
 };
 
 enum
@@ -81,18 +79,6 @@ enum
 	AMMO_HEAT,
 	AMMO_SLEEP_DART,
 	AMMO_FLAME,
-};
-
-enum
-{
-	EXPLOSV_NORMAL,
-	EXPLOSV_STUN,
-	EXPLOSV_TEARGAS,
-	EXPLOSV_MUSTGAS,
-	EXPLOSV_FLARE,
-	EXPLOSV_NOISE,
-	EXPLOSV_SMOKE,
-	EXPLOSV_CREATUREGAS,
 };
 
 #define AMMO_DAMAGE_ADJUSTMENT_BUCKSHOT( x )	(x / 4)
@@ -142,24 +128,6 @@ enum
 #define AIM_PENALTY_BLIND			80
 #define AIM_PENALTY_FIRING_UP			25
 
-struct ARMOURTYPE
-{
-	UINT8 ubArmourClass;
-	UINT8 ubProtection;
-	UINT8 ubDegradePercent;
-};
-
-struct EXPLOSIVETYPE
-{
-	UINT8 ubType; // type of explosive
-	UINT8 ubDamage; // damage value
-	UINT8 ubStunDamage; // stun amount / 100
-	UINT8 ubRadius; // radius of effect
-	UINT8 ubVolume; // sound radius of explosion
-	UINT8 ubVolatility; // maximum chance of accidental explosion
-	UINT8 ubAnimationID; // Animation enum to use
-};
-
 enum class FireWeaponResult
 {
 	FAILED, FIRED, FIREABLE, JAMMED, UNJAMMED
@@ -167,10 +135,8 @@ enum class FireWeaponResult
 
 //GLOBALS
 
-extern ARMOURTYPE    const Armour[];
-extern EXPLOSIVETYPE const Explosive[];
-
 INT8 EffectiveArmour(const OBJECTTYPE* pObj);
+INT8 ExplosiveEffectiveArmour(const OBJECTTYPE* pObj);
 extern INT8 ArmourVersusExplosivesPercent( SOLDIERTYPE * pSoldier );
 FireWeaponResult FireWeapon(SOLDIERTYPE * pSoldier, GridNo sTargetGridNo);
 void WeaponHit(SOLDIERTYPE* target, UINT16 usWeaponIndex, INT16 sDamage, INT16 sBreathLoss, UINT16 usDirection, INT16 sXPos, INT16 sYPos, INT16 sZPos, INT16 sRange, SOLDIERTYPE* attacker, UINT8 ubSpecial, UINT8 ubHitLocation);
@@ -211,6 +177,5 @@ UINT16 GunRange(OBJECTTYPE const&);
 
 extern BOOLEAN gfNextFireJam;
 extern BOOLEAN gfNextShotKills;
-extern BOOLEAN gfReportHitChances;
 
 #endif

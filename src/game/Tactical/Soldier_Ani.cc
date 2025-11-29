@@ -859,8 +859,7 @@ BOOLEAN AdjustToNextAnimationFrame( SOLDIERTYPE *pSoldier )
 						// Update UI
 						DirtyMercPanelInterface( pSoldier, DIRTYLEVEL2 );
 
-						delete pSoldier->pTempObject;
-						pSoldier->pTempObject = NULL;
+						ClearTempObject(pSoldier);
 
 						delete pSoldier->pThrowParams;
 						pSoldier->pThrowParams = NULL;
@@ -2236,8 +2235,7 @@ no_cry:
 							AutoPlaceObject( pSoldier, pSoldier->pTempObject, TRUE );
 						}
 
-						delete pSoldier->pTempObject;
-						pSoldier->pTempObject = NULL;
+						ClearTempObject(pSoldier);
 					}
 				}
 					break;
@@ -2317,8 +2315,7 @@ no_cry:
 						AddItemToPool(pSoldier->sPendingActionData2, pSoldier->pTempObject, VISIBLE, pSoldier->bLevel, 0, -1);
 						NotifySoldiersToLookforItems( );
 
-						delete pSoldier->pTempObject;
-						pSoldier->pTempObject = NULL;
+						ClearTempObject(pSoldier);
 					}
 					break;
 
@@ -2558,8 +2555,8 @@ static BOOLEAN ShouldMercSayHappyWithGunQuote(SOLDIERTYPE* pSoldier)
 
 static void SayBuddyWitnessedQuoteFromKill(SOLDIERTYPE* pKillerSoldier, INT16 sGridNo, INT8 bLevel)
 {
-	INT8  bBuddyIndex[ 20 ] = { -1 };
-	INT8  bTempBuddyIndex;
+	BuddySlot  bBuddyIndex[ 20 ] = { BUDDY_NOT_FOUND };
+	BuddySlot  bTempBuddyIndex;
 	UINT8 ubNumMercs = 0;
 	UINT8 ubChosenMerc;
 	INT16 sDistVisible = FALSE;
@@ -2579,30 +2576,34 @@ static void SayBuddyWitnessedQuoteFromKill(SOLDIERTYPE* pKillerSoldier, INT16 sG
 			// Are we a buddy of killer?
 			bTempBuddyIndex = WhichBuddy(s->ubProfile, pKillerSoldier->ubProfile);
 
-			if ( bTempBuddyIndex != -1 )
+			if ( bTempBuddyIndex != BUDDY_NOT_FOUND )
 			{
 				switch( bTempBuddyIndex )
 				{
-					case 0:
+					case BUDDY_SLOT1:
 						if (s->usQuoteSaidExtFlags & SOLDIER_QUOTE_SAID_BUDDY_1_WITNESSED)
 						{
 							continue;
 						}
 						break;
 
-					case 1:
+					case BUDDY_SLOT2:
 						if (s->usQuoteSaidExtFlags & SOLDIER_QUOTE_SAID_BUDDY_2_WITNESSED)
 						{
 							continue;
 						}
 						break;
 
-					case 2:
+					case LEARNED_TO_LIKE_SLOT:
 						if (s->usQuoteSaidExtFlags & SOLDIER_QUOTE_SAID_BUDDY_3_WITNESSED)
 						{
 							continue;
 						}
 						break;
+
+					default:
+						// C++23: std::unreachable();
+						continue;
 				}
 
 				// TO LOS check to killed
@@ -2640,17 +2641,17 @@ static void SayBuddyWitnessedQuoteFromKill(SOLDIERTYPE* pKillerSoldier, INT16 sG
 			UINT16 usQuoteNum; // XXX HACK000E
 			switch( bBuddyIndex[ ubChosenMerc ] )
 			{
-				case 0:
+				case BUDDY_SLOT1:
 					usQuoteNum = QUOTE_BUDDY_1_GOOD;
 					chosen->usQuoteSaidExtFlags |= SOLDIER_QUOTE_SAID_BUDDY_1_WITNESSED;
 					break;
 
-				case 1:
+				case BUDDY_SLOT2:
 					usQuoteNum = QUOTE_BUDDY_2_GOOD;
 					chosen->usQuoteSaidExtFlags |= SOLDIER_QUOTE_SAID_BUDDY_2_WITNESSED;
 					break;
 
-				case 2:
+				case LEARNED_TO_LIKE_SLOT:
 					usQuoteNum = QUOTE_LEARNED_TO_LIKE_WITNESSED;
 					chosen->usQuoteSaidExtFlags |= SOLDIER_QUOTE_SAID_BUDDY_3_WITNESSED;
 					break;

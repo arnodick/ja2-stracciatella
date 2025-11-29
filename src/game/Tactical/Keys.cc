@@ -439,11 +439,11 @@ BOOLEAN AttemptToUntrapDoor( SOLDIERTYPE * pSoldier, DOOR * pDoor )
 	// See if we measure up to the task.
 	if ( pDoor->ubTrapID == EXPLOSION  )
 	{
-		iResult = SkillCheck( pSoldier, DISARM_TRAP_CHECK, (INT8) (pDoor->ubTrapLevel * 7) );
+		iResult = SkillCheck( pSoldier, DISARM_TRAP_CHECK, static_cast<int8_t>(-pDoor->ubTrapLevel * 7) );
 	}
 	else
 	{
-		iResult = SkillCheck( pSoldier, DISARM_ELECTRONIC_TRAP_CHECK, (INT8) (pDoor->ubTrapLevel * 7) );
+		iResult = SkillCheck( pSoldier, DISARM_ELECTRONIC_TRAP_CHECK, static_cast<int8_t>(-pDoor->ubTrapLevel * 7) );
 	}
 
 	if (iResult > 0)
@@ -472,7 +472,7 @@ BOOLEAN ExamineDoorForTraps( SOLDIERTYPE * pSoldier, DOOR * pDoor )
 	}
 	else
 	{
-		if (pDoor->bPerceivedTrapped == DOOR_PERCEIVED_TRAPPED)
+		if (pDoor->bPerceivedTrapped == DOOR_PROVED_TRAPPED)
 		{
 			return( TRUE );
 		}
@@ -485,7 +485,7 @@ BOOLEAN ExamineDoorForTraps( SOLDIERTYPE * pSoldier, DOOR * pDoor )
 			}
 			else
 			{
-				pDoor->bPerceivedTrapped = DOOR_PERCEIVED_TRAPPED;
+				pDoor->bPerceivedTrapped = DOOR_PROVED_TRAPPED;
 				return( TRUE );
 			}
 		}
@@ -645,7 +645,7 @@ BOOLEAN AttemptToBlowUpLock( SOLDIERTYPE * pSoldier, DOOR * pDoor )
 
 		// Not sure if this makes sense, but the explosive is small.
 		// Double the damage here as we are damaging a lock rather than a person
-		if (pDoor->damageLock(Explosive[GCM->getItem(SHAPED_CHARGE)->getClassIndex()].ubDamage * 2))
+		if (pDoor->damageLock(GCM->getExplosive(SHAPED_CHARGE)->getBlastEffect()->damage * 2))
 		{
 			// Lock destroyed, award experience points?
 			return( TRUE );
@@ -769,26 +769,37 @@ void TrashDoorTable()
 	DoorTable.clear();
 }
 
-void UpdateDoorPerceivedValue( DOOR *pDoor )
+void UpdateDoorPerceivedValue( DOOR *pDoor, int action )
 {
-	if ( pDoor->fLocked )
-	{
+	if ( pDoor->fLocked ) {
 		pDoor->bPerceivedLocked = DOOR_PERCEIVED_LOCKED;
-	}
-	else if ( !pDoor->fLocked )
-	{
+	} else if ( !pDoor->fLocked ) {
 		pDoor->bPerceivedLocked = DOOR_PERCEIVED_UNLOCKED;
 	}
 
-	if (pDoor->ubTrapID != NO_TRAP)
-	{
-		pDoor->bPerceivedTrapped = DOOR_PERCEIVED_TRAPPED;
+	if (action == HANDLE_DOOR_UNTRAP) {
+		if (pDoor->ubTrapID == NO_TRAP) {
+			pDoor->bPerceivedTrapped = DOOR_PROVED_UNTRAPPED;
+		} else {
+			if (pDoor->ubTrapID == SILENT_ALARM) {
+				if (pDoor->bPerceivedTrapped != DOOR_PROVED_TRAPPED) {
+					pDoor->bPerceivedTrapped = DOOR_PERCEIVED_UNTRAPPED;
+				}
+			} else {
+				pDoor->bPerceivedTrapped = DOOR_PROVED_TRAPPED;
+			}
+		}
+	} else if (action == HANDLE_DOOR_EXAMINE) {
+		pDoor->bPerceivedTrapped = DOOR_PROVED_TRAPPED;
+	} else {
+		if (pDoor->ubTrapID == SILENT_ALARM || pDoor->ubTrapID == NO_TRAP) {
+			if (pDoor->bPerceivedTrapped != DOOR_PROVED_TRAPPED) {
+				pDoor->bPerceivedTrapped = DOOR_PERCEIVED_UNTRAPPED;
+			}
+		} else {
+			pDoor->bPerceivedTrapped = DOOR_PROVED_TRAPPED;
+		}
 	}
-	else
-	{
-		pDoor->bPerceivedTrapped = DOOR_PERCEIVED_UNTRAPPED;
-	}
-
 }
 
 

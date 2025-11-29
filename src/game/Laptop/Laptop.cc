@@ -6,6 +6,7 @@
 #include "LoadSaveData.h"
 #include "Local.h"
 #include "Map_Screen_Interface.h"
+#include "Object_Cache.h"
 #include "Timer.h"
 #include "Timer_Control.h"
 #include "VObject.h"
@@ -221,9 +222,6 @@ BOOLEAN fShowBookmarkInfo = FALSE;
 //GLOBAL FOR WHICH SCREEN TO EXIT TO FOR LAPTOP
 static ScreenID guiExitScreen = MAP_SCREEN;
 
-// Laptop screen graphic handle
-static SGPVObject* guiLAPTOP;
-
 static BOOLEAN fNewWWW = TRUE;
 
 //Used to store the site to go to after the 'rain delay' message
@@ -232,18 +230,21 @@ extern UINT32 guiRainLoop;
 
 static INT32 giRainDelayInternetSite = -1;
 
+namespace {
+// Laptop screen graphic handle
+cache_key_t const guiLAPTOP{ LAPTOPDIR "/laptop3.sti" };
 
 // the laptop icons
-static SGPVObject* guiBOOKHIGH;
-static SGPVObject* guiBOOKMARK;
-static SGPVObject* guiGRAPHWINDOW;
-static SGPVObject* guiGRAPHBAR;
+cache_key_t const guiDOWNLOADTOP{ LAPTOPDIR "/downloadtop.sti" };
+cache_key_t const guiDOWNLOADMID{ LAPTOPDIR "/downloadmid.sti" };
+cache_key_t const guiDOWNLOADBOT{ LAPTOPDIR "/downloadbot.sti" };
+cache_key_t const guiBOOKMARK{ LAPTOPDIR "/webpages.sti" };
+cache_key_t const guiBOOKHIGH{ LAPTOPDIR "/hilite.sti" };
+cache_key_t const guiGRAPHWINDOW{ LAPTOPDIR "/graphwindow.sti" };
+cache_key_t const guiGRAPHBAR{ LAPTOPDIR "/graphsegment.sti" };
+cache_key_t const guiLIGHTS{ LAPTOPDIR "/lights.sti" };
+}
 SGPVObject* guiLaptopBACKGROUND;
-static SGPVObject* guiDOWNLOADTOP;
-static SGPVObject* guiDOWNLOADMID;
-static SGPVObject* guiDOWNLOADBOT;
-static SGPVObject* guiTITLEBARLAPTOP;
-static SGPVObject* guiLIGHTS;
 SGPVObject* guiTITLEBARICONS;
 static SGPVSurface* guiDESKTOP;
 
@@ -415,9 +416,7 @@ static void EnterLaptopInitLaptopPages(void);
 static void InitLaptopOpenQueue(void);
 static void InitalizeSubSitesList(void);
 static BOOLEAN IsItRaining(void);
-static void LoadBookmark(void);
 static void LoadDesktopBackground(void);
-static void LoadLoadPending(void);
 static void RenderLapTopImage(void);
 
 
@@ -471,17 +470,8 @@ static void EnterLaptop(void)
 	// sub page
 	giCurrentSubPage = 0;
 
-	// load the laptop graphic and add it
-	guiLAPTOP = AddVideoObjectFromFile(LAPTOPDIR "/laptop3.sti");
-
 	// background for panel
 	guiLaptopBACKGROUND = AddVideoObjectFromFile(LAPTOPDIR "/taskbar.sti");
-
-	// background for panel
-	guiTITLEBARLAPTOP = AddVideoObjectFromFile(LAPTOPDIR "/programtitlebar.sti");
-
-	// lights for power and HD
-	guiLIGHTS = AddVideoObjectFromFile(LAPTOPDIR "/lights.sti");
 
 	// icons for title bars
 	guiTITLEBARICONS = AddVideoObjectFromFile(LAPTOPDIR "/icons.sti");
@@ -525,9 +515,7 @@ static void EnterLaptop(void)
 
 
 	gfShowBookmarks = FALSE;
-	LoadBookmark();
 	SetBookMark(AIM_BOOKMARK);
-	LoadLoadPending();
 
 	DrawDeskTopBackground();
 
@@ -596,10 +584,10 @@ void ExitLaptop(void)
 	fLoadPendingFlag = FALSE;
 
 
-	DeleteVideoObject(guiLAPTOP);
+	RemoveVObject(guiLAPTOP);
 	DeleteVideoObject(guiLaptopBACKGROUND);
-	DeleteVideoObject(guiTITLEBARLAPTOP);
-	DeleteVideoObject(guiLIGHTS);
+	RemoveVObject(guiTITLEBARLAPTOP);
+	RemoveVObject(guiLIGHTS);
 	DeleteVideoObject(guiTITLEBARICONS);
 	DeleteVideoObject(guiEmailWarning);
 
@@ -739,7 +727,7 @@ static void RenderLaptop(void)
 }
 
 
-static void InitTitleBarMaximizeGraphics(const SGPVObject* uiBackgroundGraphic, const ST::string& str, const SGPVObject* uiIconGraphic, UINT16 usIconGraphicIndex);
+static void InitTitleBarMaximizeGraphics(cache_key_t const uiBackgroundGraphic, const ST::string& str, const SGPVObject* uiIconGraphic, UINT16 usIconGraphicIndex);
 static void SetSubSiteAsVisted(void);
 
 
@@ -1631,17 +1619,6 @@ void SetBookMark(INT32 iBookId)
 }
 
 
-static void LoadBookmark(void)
-{
-	// grab download bars too
-	guiDOWNLOADTOP = AddVideoObjectFromFile(LAPTOPDIR "/downloadtop.sti");
-	guiDOWNLOADMID = AddVideoObjectFromFile(LAPTOPDIR "/downloadmid.sti");
-	guiDOWNLOADBOT = AddVideoObjectFromFile(LAPTOPDIR "/downloadbot.sti");
-	guiBOOKMARK    = AddVideoObjectFromFile(LAPTOPDIR "/webpages.sti");
-	guiBOOKHIGH    = AddVideoObjectFromFile(LAPTOPDIR "/hilite.sti");
-}
-
-
 static void DisplayBookMarks(void)
 {
 	// check if we are maximizing or minimizing.. if so, do not display
@@ -1657,19 +1634,17 @@ static void DisplayBookMarks(void)
 	INT32 const h  = BOOK_HEIGHT + 6;
 	INT32 const sy = BOOK_TOP_Y + 6 + h;
 	INT32       y  = sy;
+	HCenterVCenterAlign const alignment{ BOOK_WIDTH - 3, h };
 	for (INT32 i = 0;; ++i)
 	{
 		bool              const highlighted = iHighLightBookLine == i;
-		SGPVObject const* const vo          = highlighted ? guiBOOKHIGH : guiBOOKMARK;
+		auto * const vo{ highlighted ? guiBOOKHIGH : guiBOOKMARK };
 		BltVideoObject(FRAME_BUFFER, vo, 0, BOOK_X, y);
 
 		SetFontForeground(highlighted ? FONT_WHITE : FONT_BLACK);
 		INT32          const idx = LaptopSaveInfo.iBookMarkList[i];
-		ST::string txt = pBookMarkStrings[idx != -1 ? idx : CANCEL_STRING];
-		INT16                sX;
-		INT16                sY;
-		FindFontCenterCoordinates(BOOK_X + 3, y + 2, BOOK_WIDTH - 3, h, txt, BOOK_FONT, &sX, &sY);
-		MPrint(sX, sY, txt);
+		MPrint(BOOK_X + 3, y + 2,
+			pBookMarkStrings[idx != -1 ? idx : CANCEL_STRING], alignment);
 		y += h;
 		if (idx == -1) break;
 	}
@@ -1683,11 +1658,11 @@ static void DisplayBookMarks(void)
 
 static void DeleteBookmark(void)
 {
-	DeleteVideoObject(guiBOOKHIGH);
-	DeleteVideoObject(guiBOOKMARK);
-	DeleteVideoObject(guiDOWNLOADTOP);
-	DeleteVideoObject(guiDOWNLOADMID);
-	DeleteVideoObject(guiDOWNLOADBOT);
+	RemoveVObject(guiBOOKHIGH);
+	RemoveVObject(guiBOOKMARK);
+	RemoveVObject(guiDOWNLOADTOP);
+	RemoveVObject(guiDOWNLOADMID);
+	RemoveVObject(guiDOWNLOADBOT);
 }
 
 
@@ -1859,15 +1834,6 @@ static void BookmarkMvtCallBack(MOUSE_REGION* pRegion, UINT32 iReason)
 }
 
 
-static void LoadLoadPending(void)
-{
-	// function will load the load pending graphics
-	// reuse bookmark
-	// load graph window and bar
-	guiGRAPHWINDOW = AddVideoObjectFromFile(LAPTOPDIR "/graphwindow.sti");
-	guiGRAPHBAR    = AddVideoObjectFromFile(LAPTOPDIR "/graphsegment.sti");
-}
-
 static void DisplayLoadPending(void)
 {
 	// this function will display the load pending and return if the load is done
@@ -1956,11 +1922,8 @@ static void DisplayLoadPending(void)
 	SetFontAttributes(DOWNLOAD_FONT, FONT_WHITE, NO_SHADOW);
 
 	// reload or download?
-	ST::string str = (fFastLoadFlag ? pDownloadString[1] : pDownloadString[0]);
-	INT16 sXPosition = 0;
-	INT16 sYPosition = 0;
-	FindFontCenterCoordinates(328, 0, 446 - 328, 0, str, DOWNLOAD_FONT, &sXPosition, &sYPosition);
-	MPrint(STD_SCREEN_X + sXPosition, DOWN_STRING_Y, str);
+	MPrint(STD_SCREEN_X + 328, DOWN_STRING_Y,
+		pDownloadString[fFastLoadFlag ? 1 : 0], CenterAlign(446 - 328));
 
 	BltVideoObject(FRAME_BUFFER, guiGRAPHWINDOW, 0, LAPTOP_WINDOW_X, LAPTOP_WINDOW_Y);
 
@@ -1988,8 +1951,8 @@ static void DeleteLoadPending(void)
 {
 	// this funtion will delete the load pending graphics
 	// reuse bookmark
-	DeleteVideoObject(guiGRAPHBAR);
-	DeleteVideoObject(guiGRAPHWINDOW);
+	RemoveVObject(guiGRAPHBAR);
+	RemoveVObject(guiGRAPHWINDOW);
 }
 
 
@@ -2198,10 +2161,8 @@ void WebPageTileBackground(const UINT8 ubNumX, const UINT8 ubNumY, const UINT16 
 }
 
 
-static void InitTitleBarMaximizeGraphics(const SGPVObject* uiBackgroundGraphic, const ST::string& str, const SGPVObject* uiIconGraphic, UINT16 usIconGraphicIndex)
+static void InitTitleBarMaximizeGraphics(cache_key_t const uiBackgroundGraphic, const ST::string& str, const SGPVObject* uiIconGraphic, UINT16 usIconGraphicIndex)
 {
-	Assert(uiBackgroundGraphic);
-
 	// Create a background video surface to blt the title bar onto
 	guiTitleBarSurface = AddVideoSurface(LAPTOP_TITLE_BAR_WIDTH + LAPTOP_TITLE_BAR_ICON_OFFSET_X,
 						LAPTOP_TITLE_BAR_HEIGHT + LAPTOP_TITLE_BAR_ICON_OFFSET_Y, PIXEL_DEPTH);
@@ -2851,7 +2812,7 @@ void HandleKeyBoardShortCutsForLapTop(UINT16 usEvent, UINT32 usParam, UINT16 usK
 void RenderWWWProgramTitleBar(void)
 {
 	// will render the title bar for the www program
-	BltVideoObjectOnce(FRAME_BUFFER, LAPTOPDIR "/programtitlebar.sti", 0, LAPTOP_SCREEN_UL_X, LAPTOP_SCREEN_UL_Y - 2);
+	BltVideoObject(FRAME_BUFFER, guiTITLEBARLAPTOP, 0, LAPTOP_SCREEN_UL_X, LAPTOP_SCREEN_UL_Y - 2);
 
 	// now slapdown text
 	SetFontAttributes(FONT14ARIAL, FONT_WHITE);

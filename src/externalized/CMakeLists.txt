@@ -1,27 +1,31 @@
-add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/army")
-add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/content")
-add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/internals")
-add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/json")
-add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/mercs")
-add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/policy")
-add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/scripting")
-add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/strategic")
-add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/strings")
-add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/tileset")
-add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/tactical")
-add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/ui")
+add_and_include_subdirectory("army")
+add_and_include_subdirectory("content")
+add_and_include_subdirectory("internals")
+add_and_include_subdirectory("json")
+add_and_include_subdirectory("mercs")
+add_and_include_subdirectory("policy")
+add_and_include_subdirectory("scripting")
+add_and_include_subdirectory("strategic")
+add_and_include_subdirectory("strings")
+add_and_include_subdirectory("tileset")
+add_and_include_subdirectory("tactical")
+add_and_include_subdirectory("ui")
 
 file(GLOB LOCAL_JA2_HEADERS ${CMAKE_CURRENT_SOURCE_DIR}/*.h)
 set(LOCAL_JA2_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/AmmoTypeModel.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/ArmourModel.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/CalibreModel.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/DealerModel.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/DealerInventory.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/DefaultContentManager.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/ExplosionAnimationModel.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/ExplosiveModel.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/GraphicModel.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/InventoryGraphicsModel.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/ItemModel.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/JsonUtility.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/ExplosiveCalibreModel.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/LoadingScreenModel.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/MagazineModel.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/ModPackContentManager.cc
@@ -43,14 +47,15 @@ if (WITH_UNITTESTS)
     )
 endif()
 
+set_property(
+    SOURCE ${LOCAL_JA2_SOURCES}
+    DIRECTORY ${CMAKE_SOURCE_DIR}
+    PROPERTY UNITY_GROUP "externalized"
+)
+
 set(JA2_SOURCES
     ${JA2_SOURCES}
     ${LOCAL_JA2_HEADERS}
     ${LOCAL_JA2_SOURCES}
-    PARENT_SCOPE
-)
-set(JA2_INCLUDES
-    ${JA2_INCLUDES}
-    ${CMAKE_CURRENT_SOURCE_DIR}
     PARENT_SCOPE
 )

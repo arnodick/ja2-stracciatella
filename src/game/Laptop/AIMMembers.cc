@@ -1,5 +1,6 @@
 #include "Cursors.h"
 #include "Directories.h"
+#include "EDT.h"
 #include "EMail.h"
 #include "Font.h"
 #include "HImage.h"
@@ -13,6 +14,7 @@
 #include "Timer_Control.h"
 #include "SysUtil.h"
 #include "Soldier_Profile.h"
+#include "Soldier_Profile_Type.h"
 #include "Soldier_Control.h"
 #include "Interface_Items.h"
 #include "WordWrap.h"
@@ -46,18 +48,15 @@
 #include "ScreenIDs.h"
 #include "Font_Control.h"
 
-#include "game/GameRes.h"
 #include "ContentManager.h"
 #include "GameInstance.h"
-#include "policy/GamePolicy.h"
+#include "GamePolicy.h"
+#include "GameRes.h"
 
 #include <string_theory/format>
 #include <string_theory/string>
 
 #include <stdexcept>
-
-
-#define MERCBIOSFILENAME			BINARYDATADIR "/aimbios.edt"
 
 
 
@@ -92,7 +91,6 @@
 #define SIZE_MERC_ADDITIONAL_INFO		160
 
 #define MERC_ANNOYED_WONT_CONTACT_TIME_MINUTES	6 * 60
-#define NUMBER_HATED_MERCS_ONTEAM		3
 
 
 #define STATS_X					IMAGE_OFFSET_X + 121
@@ -255,8 +253,6 @@
 #define VC_NUM_FUZZ_LINES			10
 #define VC_NUM_STRAIGHT_LINES			9
 
-#define VC_ANSWER_IMAGE_DELAY			100
-
 
 #define QUOTE_FIRST_ATTITUDE_TIME		3000
 #define QUOTE_ATTITUDE_TIME			10000
@@ -269,7 +265,6 @@
 #define QUOTE_MERC_BUSY	6
 
 #define TEXT_POPUP_WINDOW_Y			(STD_SCREEN_Y + 255 + LAPTOP_SCREEN_WEB_DELTA_Y)
-#define TEXT_POPUP_STRING_SIZE			512
 
 #define MINIMUM_TALKING_TIME_FOR_MERC		1500
 
@@ -303,9 +298,6 @@ static SGPVObject* guiStats;
 static SGPVObject* guiPrice;
 static SGPVObject* guiPortrait;
 static SGPVObject* guiWeaponBox;
-//UINT32  guiVideoFace;
-//UINT32 guiContactButton;
-static SGPVObject* guiVideoConfPopup;
 static SGPVObject* guiVideoConfTerminal;
 static SGPVObject* guiPopUpBox;
 static SGPVSurface* guiVideoFaceBackground;
@@ -464,9 +456,6 @@ void EnterAIMMembers()
 	// load the WeaponBox graphic and add it
 	guiWeaponBox = AddVideoObjectFromFile(LAPTOPDIR "/weaponbox.sti");
 
-	// load the videoconf Popup graphic and add it
-	guiVideoConfPopup = AddVideoObjectFromFile(LAPTOPDIR "/videoconfpopup.sti");
-
 	// load the video conf terminal graphic and add it
 	guiVideoConfTerminal = AddVideoObjectFromFile(LAPTOPDIR "/videoconfterminal.sti");
 
@@ -559,7 +548,6 @@ void ExitAIMMembers()
 	DeleteVideoObject(guiPrice);
 	DeleteVideoObject(guiPortrait);
 	DeleteVideoObject(guiWeaponBox);
-	DeleteVideoObject(guiVideoConfPopup);
 	DeleteVideoObject(guiVideoConfTerminal);
 	DeleteVideoObject(guiBWSnow);
 	DeleteVideoObject(guiFuzzLine);
@@ -810,9 +798,6 @@ static void SelectFaceMovementRegionCallBack(MOUSE_REGION* pRegion, UINT32 iReas
 }
 
 
-static void LoadMercBioInfo(UINT8 ubIndex, ST::string& pInfoString, ST::string& pAddInfo);
-
-
 static void UpdateMercInfo(void)
 {
 	//Display the salaries
@@ -838,26 +823,20 @@ static void UpdateMercInfo(void)
 			DisplayWrappedString(AIM_MEDICAL_DEPOSIT_X, AIM_MEDICAL_DEPOSIT_Y, AIM_MEDICAL_DEPOSIT_WIDTH, 2, AIM_FONT12ARIAL, AIM_M_COLOR_DYNAMIC_TEXT, sMedicalString, FONT_MCOLOR_BLACK, CENTER_JUSTIFIED);
 	}
 
-	ST::string MercInfoString;
-	ST::string AdditionalInfoString;
-	LoadMercBioInfo( gbCurrentSoldier, MercInfoString, AdditionalInfoString);
-	if( MercInfoString[0] != 0)
+	EDTFile biosfile{ EDTFile::AIMBIOS };
+	auto const MercInfoString{ biosfile.at(gbCurrentSoldier, 0) };
+	auto const AdditionalInfoString{ biosfile.at(gbCurrentSoldier, 1) };
+
+	if (!MercInfoString.empty())
 	{
 		DisplayWrappedString(AIM_MERC_INFO_X, AIM_MERC_INFO_Y, AIM_MERC_INFO_WIDTH, 2, AIM_M_FONT_DYNAMIC_TEXT, AIM_FONT_MCOLOR_WHITE, MercInfoString, FONT_MCOLOR_BLACK, LEFT_JUSTIFIED);
 	}
-	if( AdditionalInfoString[0] != 0)
+
+	if (!AdditionalInfoString.empty())
 	{
 		DrawTextToScreen(CharacterInfo[AIM_MEMBER_ADDTNL_INFO], AIM_MERC_ADD_X, AIM_MERC_ADD_Y, 0, AIM_M_FONT_STATIC_TEXT, AIM_M_COLOR_STATIC_TEXT, FONT_MCOLOR_BLACK, LEFT_JUSTIFIED);
 		DisplayWrappedString(AIM_MERC_ADD_INFO_X, AIM_MERC_ADD_INFO_Y, AIM_MERC_INFO_WIDTH, 2, AIM_M_FONT_DYNAMIC_TEXT, AIM_FONT_MCOLOR_WHITE, AdditionalInfoString, FONT_MCOLOR_BLACK, LEFT_JUSTIFIED);
 	}
-}
-
-
-static void LoadMercBioInfo(UINT8 ubIndex, ST::string& pInfoString, ST::string& pAddInfo)
-{
-	UINT32 uiStartSeekAmount = (SIZE_MERC_BIO_INFO + SIZE_MERC_ADDITIONAL_INFO) * ubIndex;
-	pInfoString = GCM->loadEncryptedString(MERCBIOSFILENAME, uiStartSeekAmount, SIZE_MERC_BIO_INFO);
-	pAddInfo = GCM->loadEncryptedString(MERCBIOSFILENAME, uiStartSeekAmount + SIZE_MERC_BIO_INFO, SIZE_MERC_ADDITIONAL_INFO);
 }
 
 
@@ -1037,7 +1016,7 @@ catch (...) { /* XXX ignore */ }
 static void DisplayDots(UINT16 usNameX, UINT16 usNameY, UINT16 usStatX, const ST::string& pString);
 
 
-static void DrawStatColoured(UINT16 x, UINT16 y, const ST::string stat, INT32 val, UINT8 colour)
+static void DrawStatColoured(UINT16 x, UINT16 y, const ST::string& stat, INT32 val, UINT8 colour)
 {
 	DrawTextToScreen(stat, x, y, 0, AIM_M_FONT_STATIC_TEXT, AIM_M_COLOR_STATIC_TEXT, FONT_MCOLOR_BLACK, LEFT_JUSTIFIED);
 	DisplayDots(x, y, x + STAT_NAME_WIDTH, stat);
@@ -1066,7 +1045,7 @@ static void DisplayMercStats(MERCPROFILESTRUCT const& p)
 	DrawStat(x1, LEADERSHIP_Y, str_stat_leadership, p.bLeadership);
 	DrawStat(x1, WISDOM_Y,     str_stat_wisdom,     p.bWisdom    );
 
-	//Second column in stats box.  Exp.Level, Markmanship, mechanical, explosive, medical
+	//Second column in stats box.  Exp.Level, Marksmanship, mechanical, explosive, medical
 	const UINT16 x2 = STATS_SECOND_COL;
 	DrawStatColoured(x2, EXPLEVEL_Y,    str_stat_exp_level,    p.bExpLevel, FONT_MCOLOR_WHITE);
 	DrawStat(        x2, MARKSMAN_Y,    str_stat_marksmanship, p.bMarksmanship);
@@ -1796,11 +1775,11 @@ static BOOLEAN CanMercBeHired(void)
 		return FALSE;
 	}
 
-	INT const buddy = GetFirstBuddyOnTeam(p);
+	BuddySlot const buddy = GetFirstBuddyOnTeam(p);
 
 	// loop through the list of people the merc hates
 	UINT16 join_quote = QUOTE_NONE;
-	for (UINT8 i = 0; i < NUMBER_HATED_MERCS_ONTEAM; ++i)
+	for (UINT8 i = HATED_SLOT1; i < NUM_HATED_SLOTS; ++i)
 	{
 		//see if someone the merc hates is on the team
 		INT8 const bMercID = p.bHated[i];
@@ -1813,19 +1792,21 @@ static BOOLEAN CanMercBeHired(void)
 		switch (buddy)
 		{
 			UINT16 quote;
-			case 0: quote = QUOTE_JOINING_CAUSE_BUDDY_1_ON_TEAM;               goto join_buddy;
-			case 1: quote = QUOTE_JOINING_CAUSE_BUDDY_2_ON_TEAM;               goto join_buddy;
-			case 2: quote = QUOTE_JOINING_CAUSE_LEARNED_TO_LIKE_BUDDY_ON_TEAM; goto join_buddy;
+			case BUDDY_SLOT1:          quote = QUOTE_JOINING_CAUSE_BUDDY_1_ON_TEAM;               goto join_buddy;
+			case BUDDY_SLOT2:          quote = QUOTE_JOINING_CAUSE_BUDDY_2_ON_TEAM;               goto join_buddy;
+			case LEARNED_TO_LIKE_SLOT: quote = QUOTE_JOINING_CAUSE_LEARNED_TO_LIKE_BUDDY_ON_TEAM; goto join_buddy;
 join_buddy:
 				InitVideoFaceTalking(pid, quote);
 				return TRUE;
+			case BUDDY_NOT_FOUND: break;
+			default: /* std::unreachable(); */ break;
 		}
 
 		// the merc doesnt like anybody on the team
 		UINT16 quote;
 		switch (i)
 		{
-			case 0:
+			case HATED_SLOT1:
 				if (p.bHatedTime[i] >= 24)
 				{
 					join_quote = QUOTE_PERSONALITY_BIAS_WITH_MERC_1;
@@ -1834,7 +1815,7 @@ join_buddy:
 				quote = QUOTE_HATE_MERC_1_ON_TEAM;
 				break;
 
-			case 1:
+			case HATED_SLOT2:
 				if (p.bHatedTime[i] >= 24)
 				{
 					join_quote = QUOTE_PERSONALITY_BIAS_WITH_MERC_2;
@@ -1852,7 +1833,7 @@ join_buddy:
 		return FALSE;
 	}
 
-	if (buddy >= 0) return TRUE;
+	if (buddy != BUDDY_NOT_FOUND) return TRUE;
 
 	// Check the players Death rate
 	if (MercThinksDeathRateTooHigh(p))

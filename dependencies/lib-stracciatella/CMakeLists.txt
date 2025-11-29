@@ -6,10 +6,11 @@ set(STRACCIATELLA_LIB "${STRACCIATELLA_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}st
 set(STRACCIATELLA_BIN_ja2-resource-pack "${STRACCIATELLA_DIR}/bin/ja2-resource-pack${CMAKE_EXECUTABLE_SUFFIX}")
 
 # find cargo and rustc
-file(READ "${CMAKE_SOURCE_DIR}/rust-toolchain" MIN_RUST_VERSION)
+file(READ "${CMAKE_SOURCE_DIR}/min-rust-version" MIN_RUST_VERSION)
 string(STRIP "${MIN_RUST_VERSION}" MIN_RUST_VERSION)
 find_package(Cargo ${MIN_RUST_VERSION} REQUIRED)
 find_package(Rustc ${MIN_RUST_VERSION} REQUIRED)
+
 if (MINGW)
     set(RUSTC_STATICLIB_PREFIX "lib")
     set(RUSTC_STATICLIB_SUFFIX ".a")
@@ -66,7 +67,14 @@ configure_file(
 )
 
 # build
-set(OUT_PROFILE "$<$<CONFIG:Debug>:debug>$<$<NOT:$<CONFIG:Debug>>:release>") # XXX only use this where generator expressions are supported
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    set(OUT_PROFILE "debug")
+elseif(CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+    set(OUT_PROFILE "release-with-debug")
+else()
+    set(OUT_PROFILE "release")
+endif()
+
 set(OUT_DIR "${CARGO_BUILD_TARGET_DIR}/${CARGO_BUILD_TARGET}/${OUT_PROFILE}")
 set(OUT_LIB "${OUT_DIR}/${RUSTC_STATICLIB_PREFIX}stracciatella_c_api${RUSTC_STATICLIB_SUFFIX}")
 set(OUT_BIN_ja2-resource-pack "${OUT_DIR}/ja2-resource-pack${RUSTC_BIN_SUFFIX}")
@@ -108,9 +116,9 @@ if (UNIX AND NOT MINGW AND NOT ANDROID)
         set(ADDITIONAL_LIBS dl pthread)
     endif()
 elseif(MINGW)
-    set(ADDITIONAL_LIBS bcrypt ws2_32 shell32 advapi32 userenv gcc_eh pthread)
+    set(ADDITIONAL_LIBS bcrypt ws2_32 shell32 advapi32 userenv gcc_eh pthread ntdll)
 elseif(MSVC)
-    set(ADDITIONAL_LIBS bcrypt ws2_32 shell32 advapi32 userenv)
+    set(ADDITIONAL_LIBS bcrypt ws2_32 shell32 advapi32 userenv ntdll)
 else()
     set(ADDITIONAL_LIBS)
 endif()
@@ -156,6 +164,7 @@ function (add_cargo_clippy_target target command)
 endfunction()
 add_cargo_target(cargo-build-debug "cargo build --verbose ${CARGO_WORKSPACE_FLAGS}")
 add_cargo_target(cargo-build-release "cargo build --verbose --release ${CARGO_WORKSPACE_FLAGS}")
+add_cargo_target(cargo-build-release-with-debug "cargo build --verbose --profile release-with-debug ${CARGO_WORKSPACE_FLAGS}")
 add_cargo_target(cargo-fmt "cargo fmt --verbose")
 add_cargo_target(cargo-test-debug "cargo test --verbose")
 add_cargo_target(cargo-test-release "cargo test --verbose --release")

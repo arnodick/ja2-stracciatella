@@ -9,22 +9,25 @@ pub mod android;
 pub mod dir;
 pub mod slf;
 
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 use std::fmt;
 use std::io;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use json_patch::Patch;
 use log::{info, warn};
+use serde_json::Value;
 
+use crate::EngineOptions;
 use crate::fs;
+use crate::json;
 use crate::mods::ModManager;
 use crate::mods::ModPath;
 use crate::unicode::Nfc;
 use crate::vfs::dir::DirFs;
 use crate::vfs::slf::SlfFs;
-use crate::EngineOptions;
 
 pub trait VfsFile:
     io::Read + io::Seek + io::Write + fmt::Debug + fmt::Display + Send + Sync
@@ -39,10 +42,12 @@ pub trait VfsFile:
 }
 
 pub trait VfsLayer: fmt::Debug + fmt::Display + Send + Sync {
-    // Opens a file in the VFS Layer
+    /// Opens a file in the VFS Layer
     fn open(&self, file_path: &Nfc) -> io::Result<Box<dyn VfsFile>>;
+    /// Checks if a file exists in the VFS Layer
+    fn exists(&self, file_path: &Nfc) -> io::Result<bool>;
     // Lists a directory in the VFS Layer
-    fn read_dir(&self, file_path: &Nfc) -> io::Result<HashSet<Nfc>>;
+    fn read_dir(&self, file_path: &Nfc) -> io::Result<BTreeSet<Nfc>>;
     /// Lists files with a specific extension in a directory in the VFS Layer
     ///
     /// The extension has to be specified without a dot (e.g. "slf")
@@ -50,7 +55,7 @@ pub trait VfsLayer: fmt::Debug + fmt::Display + Send + Sync {
         &self,
         file_path: &Nfc,
         extension: &Nfc,
-    ) -> io::Result<HashSet<Nfc>> {
+    ) -> io::Result<BTreeSet<Nfc>> {
         let extension = Nfc::caseless(&format!(".{}", extension));
         Ok(self
             .read_dir(file_path)?
@@ -63,7 +68,7 @@ pub trait VfsLayer: fmt::Debug + fmt::Display + Send + Sync {
 /// A virtual filesystem that mounts other filesystems.
 #[derive(Debug, Default)]
 pub struct Vfs {
-    /// List of entries.
+    /// List of VFS layers ordered from highest to lowest priority.
     pub entries: Vec<Arc<dyn VfsLayer + Send + Sync>>,
 }
 
@@ -86,7 +91,8 @@ impl Vfs {
         Vfs::default()
     }
 
-    /// Adds an overlay filesystem backed by a filesystem directory.
+    /// Adds a filesystem layer backed by a filesystem directory.
+    /// The added layer will have lowest priority.
     pub fn add_dir(&mut self, path: &Path) -> Result<Arc<dyn VfsLayer>, VfsInitError> {
         let dir_fs = DirFs::new(path).map_err(|error| VfsInitError {
             path: path.to_owned(),
@@ -96,7 +102,8 @@ impl Vfs {
         Ok(dir_fs)
     }
 
-    /// Adds an overlay filesystem backed by a SLF file.
+    /// Adds a filesystem layer backed by a SLF file.
+    /// The added layer will have lowest priority.
     pub fn add_slf(&mut self, file: Box<dyn VfsFile>) -> Result<Arc<dyn VfsLayer>, VfsInitError> {
         let path = PathBuf::from(format!("{}", file));
         let slf_fs = SlfFs::new(file).map_err(|error| VfsInitError { path, error })?;
@@ -104,7 +111,8 @@ impl Vfs {
         Ok(slf_fs)
     }
 
-    /// Adds an overlay filesystem backed by android assets
+    /// Adds a filesystem layer backed by android assets.
+    /// The added layer will have lowest priority.
     #[cfg(target_os = "android")]
     pub fn add_android_assets(&mut self, path: &Path) -> Result<Arc<dyn VfsLayer>, VfsInitError> {
         let asset_manager_fs =
@@ -116,7 +124,8 @@ impl Vfs {
         Ok(asset_manager_fs)
     }
 
-    /// Adds an overlay for all SLF files in dir
+    /// Adds layers for all SLF files in the passed in layer.
+    /// The added layer will have lowest priority.
     pub fn add_slf_files_from(
         &mut self,
         layer: Arc<dyn VfsLayer>,
@@ -183,17 +192,25 @@ impl Vfs {
             true,
         );
         if one_dot_thirteen_marker.exists() {
-            log::error!("The game directory seems to be modified by a 1.13 installation, the game might crash at any point in time.")
+            log::error!(
+                "The game directory seems to be modified by a 1.13 installation, the game might crash at any point in time."
+            )
         }
 
+        // First is home data dir (does not need to exist)
         let home_data_dir = fs::resolve_existing_components(
             &PathBuf::from(DATA_DIR),
             Some(&engine_options.stracciatella_home),
             true,
         );
+        if home_data_dir.exists() {
+            let layer = self.add_dir(&home_data_dir)?;
+            // home data dir can include slf files
+            self.add_slf_files_from(layer, false)?;
+        }
 
         // Add mod directories
-        for mod_id in engine_options.mods.iter() {
+        for mod_id in engine_options.mods.iter().rev() {
             let mod_path = mod_manager
                 .get_mod_by_id(mod_id)
                 .map(|m| m.path())
@@ -221,13 +238,6 @@ impl Vfs {
             }
         }
 
-        // Next is home data dir (does not need to exist)
-        if home_data_dir.exists() {
-            let layer = self.add_dir(&home_data_dir)?;
-            // home data dir can include slf files
-            self.add_slf_files_from(layer, false)?;
-        }
-
         // Next is externalized data dir (required)
         #[cfg(not(target_os = "android"))]
         let externalized_layer = {
@@ -253,35 +263,149 @@ impl Vfs {
             self.add_editor_slf_layer(externalized_layer)?;
         }
 
-        // Print VFS order to console
-        for (index, v) in self.entries.iter().enumerate() {
-            info!(
-                "VFS item with priority {}: {}",
-                self.entries.len() - index,
-                v
-            );
+        // Print VFS layer to console
+        for (index, v) in self.entries.iter().rev().enumerate() {
+            info!("VFS layer {}: {}", index + 1, v);
         }
 
         Ok(())
+    }
+
+    /// Opens a file in a specific VFS layer given by its index
+    pub fn open_in_layer(
+        &self,
+        layer_index: usize,
+        file_path: &Nfc,
+    ) -> io::Result<Box<dyn VfsFile>> {
+        if let Some(layer) = self.entries.get(layer_index) {
+            let res = layer.open(file_path);
+            if res.is_ok() {
+                log::debug!(
+                    "opened file {} in layer {}",
+                    file_path,
+                    self.entries.len() - layer_index
+                )
+            }
+            res
+        } else {
+            Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "layer index out of range",
+            ))
+        }
+    }
+
+    /// Returns the indexes of the layers that a path exists in
+    /// The resulting vector is ordered by the highest priority layer last
+    pub fn read_layers(&self, path: &Nfc) -> io::Result<Vec<usize>> {
+        let mut result = vec![];
+
+        for (idx, layer) in self.entries.iter().enumerate() {
+            if layer.exists(path)? {
+                result.push(idx);
+            }
+        }
+
+        Ok(result)
+    }
+
+    /// Opens a json file and applies optional patches on higher priority VFS layers
+    pub fn read_patched_json(&self, path: &Nfc) -> io::Result<Value> {
+        if path
+            .as_str()
+            .rsplit('.')
+            .next()
+            .map(|ext| ext.eq_ignore_ascii_case("json"))
+            != Some(true)
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "patched json must end in .json extension",
+            ));
+        }
+        let patch_path =
+            Nfc::caseless_path(&format!("{}.patch.json", &path.as_str()[..path.len() - 5]));
+        let file_layers = self.read_layers(path)?;
+        let highest_prio_file_layer = if let Some(p) = file_layers.first() {
+            Ok(p)
+        } else {
+            Err(io::Error::new(io::ErrorKind::NotFound, "entity not found"))
+        }?;
+        let mut value: Value = {
+            let mut file = self.open_in_layer(*highest_prio_file_layer, path)?;
+            let mut content = String::new();
+            file.read_to_string(&mut content)?;
+            json::de::from_string(&content).map_err(|e| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("failed to deserialize json: {}", e),
+                )
+            })?
+        };
+
+        let patch_layers = self.read_layers(&patch_path)?;
+        // Order patches from lowest to highest priority
+        for patch_layer in patch_layers.iter().rev() {
+            // Ignore patches with lower priority than the highest priority layer
+            if patch_layer > highest_prio_file_layer {
+                continue;
+            }
+
+            let patch_value: Patch = {
+                let mut file = self.open_in_layer(*patch_layer, &patch_path)?;
+                let mut content = String::new();
+                file.read_to_string(&mut content)?;
+                json::de::from_string(&content).map_err(|e| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        format!("failed to deserialize json: {}", e),
+                    )
+                })?
+            };
+
+            json_patch::patch(&mut value, &patch_value).map_err(|e| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("failed to apply patch to json: {}", e),
+                )
+            })?;
+        }
+
+        Ok(value)
     }
 }
 
 impl VfsLayer for Vfs {
     fn open(&self, file_path: &Nfc) -> io::Result<Box<dyn VfsFile>> {
-        for entry in self.entries.iter() {
+        for (layer_index, entry) in self.entries.iter().enumerate() {
             let file_result = entry.open(file_path);
             if let Err(err) = &file_result {
                 if err.kind() == io::ErrorKind::NotFound {
                     continue;
                 }
+            } else {
+                log::debug!(
+                    "opened file {} in layer {}",
+                    file_path,
+                    self.entries.len() - layer_index
+                )
             }
             return file_result;
         }
         Err(io::ErrorKind::NotFound.into())
     }
 
-    fn read_dir(&self, file_path: &Nfc) -> io::Result<HashSet<Nfc>> {
-        let mut entries = HashSet::new();
+    fn exists(&self, file_path: &Nfc) -> io::Result<bool> {
+        for entry in &self.entries {
+            if entry.exists(file_path)? {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
+    fn read_dir(&self, file_path: &Nfc) -> io::Result<BTreeSet<Nfc>> {
+        let mut entries = BTreeSet::new();
         for entry in self.entries.iter() {
             let layer_result = entry.read_dir(file_path);
             if let Err(err) = &layer_result {
@@ -343,7 +467,7 @@ fn map_not_found_to_option<T>(result: io::Result<T>) -> io::Result<Option<T>> {
 
 #[cfg(test)]
 mod tests {
-    use tempfile::{tempdir, TempDir};
+    use tempfile::{TempDir, tempdir};
 
     use crate::{config::EngineOptions, mods::ModManager};
 
@@ -377,7 +501,7 @@ mod tests {
 
         let data_path = engine_options.vanilla_game_dir.join("data");
         std::fs::create_dir(&data_path).expect("create `data` dir");
-        std::fs::write(&data_path.join("empty.slf"), EMPTY_SLF_BYTES).expect("write `empty.slf`");
+        std::fs::write(data_path.join("empty.slf"), EMPTY_SLF_BYTES).expect("write `empty.slf`");
 
         let mut vfs = Vfs::new();
         vfs.init(&engine_options, &mod_manager).unwrap();
@@ -387,7 +511,7 @@ mod tests {
 
         let data_path = engine_options.vanilla_game_dir.join("dAtA");
         std::fs::create_dir(&data_path).expect("create `dAtA` dir");
-        std::fs::write(&data_path.join("empty.slf"), EMPTY_SLF_BYTES).expect("write `empty.slf`");
+        std::fs::write(data_path.join("empty.slf"), EMPTY_SLF_BYTES).expect("write `empty.slf`");
 
         let mut vfs = Vfs::new();
         vfs.init(&engine_options, &mod_manager).unwrap();
@@ -401,7 +525,7 @@ mod tests {
 
         let data_path = engine_options.vanilla_game_dir.join("data");
         std::fs::create_dir(&data_path).expect("create `data` dir");
-        std::fs::write(&data_path.join("empty.slf"), EMPTY_SLF_BYTES).expect("write `empty.slf`");
+        std::fs::write(data_path.join("empty.slf"), EMPTY_SLF_BYTES).expect("write `empty.slf`");
 
         let mut vfs = Vfs::new();
         vfs.init(&engine_options, &mod_manager).unwrap_err();
@@ -412,20 +536,20 @@ mod tests {
         let (mut engine_options, _temp_dir) = create_test_engine_options();
         engine_options.mods = vec!["test-mod".to_owned()];
         // mod directory has to be created before mod_manager is initialized, so it will pick it up as a mod
-        std::fs::create_dir_all(&engine_options.stracciatella_home.join("mods/test-mod/data"))
+        std::fs::create_dir_all(engine_options.stracciatella_home.join("mods/test-mod/data"))
             .expect("create `test-mod/data` dir");
         let mod_manager = ModManager::new_unchecked(&engine_options);
 
         let data_path = engine_options.vanilla_game_dir.join("data");
         std::fs::create_dir(&data_path).expect("create `data` dir");
-        std::fs::write(&data_path.join("empty.slf"), EMPTY_SLF_BYTES).expect("write `empty.slf`");
+        std::fs::write(data_path.join("empty.slf"), EMPTY_SLF_BYTES).expect("write `empty.slf`");
 
         let mut vfs = Vfs::new();
         vfs.init(&engine_options, &mod_manager).unwrap();
 
-        std::fs::remove_dir_all(&engine_options.stracciatella_home.join("mods/test-mod/data"))
+        std::fs::remove_dir_all(engine_options.stracciatella_home.join("mods/test-mod/data"))
             .expect("remove `test-mod/data` dir");
-        std::fs::create_dir_all(&engine_options.stracciatella_home.join("mods/test-mod/dAtA"))
+        std::fs::create_dir_all(engine_options.stracciatella_home.join("mods/test-mod/dAtA"))
             .expect("create `test-mod/dAtA` dir");
 
         let mut vfs = Vfs::new();
@@ -443,7 +567,7 @@ mod tests {
         let vanilla_game_dir = temp_dir.path().join("game_dir");
 
         std::fs::create_dir(&home_dir).expect("home_dir");
-        std::fs::create_dir_all(&assets_dir.join("externalized")).expect("assets_dir");
+        std::fs::create_dir_all(assets_dir.join("externalized")).expect("assets_dir");
         std::fs::create_dir(&vanilla_game_dir).expect("vanilla_game_dir");
 
         engine_options.stracciatella_home = home_dir;

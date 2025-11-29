@@ -6,6 +6,7 @@
 #include "Isometric_Utils.h"
 #include "JAScreens.h"
 #include "Local.h"
+#include "Object_Cache.h"
 #include "Timer_Control.h"
 #include "Types.h"
 #include "MercPortrait.h"
@@ -56,7 +57,6 @@
 #include "Debug.h"
 #include "Items.h"
 #include "UILayout.h"
-#include "CalibreModel.h"
 #include "ContentManager.h"
 #include "DealerModel.h"
 #include "GameInstance.h"
@@ -221,8 +221,7 @@
 #define REPAIR_DELAY_IN_HOURS				6
 
 
-static SGPVObject* guiMainTradeScreenImage;
-static SGPVSurface* guiCornerWhereTacticalIsStillSeenImage; // This image is for where the corner of tactical is still seen through the shop keeper interface
+static cache_key_t const guiMainTradeScreenImage{ INTERFACEDIR "/tradescreen.sti" };
 
 static BOOLEAN gfSKIScreenEntry = TRUE;
 static BOOLEAN gfSKIScreenExit  = FALSE;
@@ -356,7 +355,7 @@ static void BtnSKI_DoneButtonCallback(GUI_BUTTON* btn, UINT32 reason);
 static BUTTON_PICS* guiSKI_DoneButtonImage;
 static GUIButtonRef guiSKI_DoneButton;
 
-static SGPVObject* guiItemCrossOut;
+static cache_key_t const guiItemCrossOut{ INTERFACEDIR "/itemcrossout.sti" };
 
 static BOOLEAN gfDisplayNoRoomMsg = FALSE;
 
@@ -544,9 +543,6 @@ static void EnterShopKeeperInterface(void)
 	// make sure current merc is close enough and eligible to talk to the shopkeeper.
 	AssertMsg(CanMercInteractWithSelectedShopkeeper(GetSelectedMan()), "Selected merc can't interact with shopkeeper.  Send save AM-1");
 
-	// Create a video surface to blt corner of the tactical screen that still shines through
-	guiCornerWhereTacticalIsStillSeenImage = AddVideoSurface(SKI_TACTICAL_BACKGROUND_START_WIDTH, SKI_TACTICAL_BACKGROUND_START_HEIGHT, PIXEL_DEPTH);
-
 	//Clear out all the save background rects
 	EmptyBackgroundRects( );
 
@@ -564,12 +560,6 @@ static void EnterShopKeeperInterface(void)
 	SOLDIERTYPE* const sel = GetSelectedMan();
 	SetCurrentTacticalPanelCurrentMerc(sel);
 	SetSMPanelCurrentMerc(sel);
-
-	// load the Main trade screen backgroiund image
-	guiMainTradeScreenImage = AddVideoObjectFromFile(INTERFACEDIR "/tradescreen.sti");
-
-	// load the Main trade screen background image
-	guiItemCrossOut = AddVideoObjectFromFile(INTERFACEDIR "/itemcrossout.sti");
 
 	//Create an array of all mercs (anywhere!) currently in the player's employ, and load their small faces
 	// This is to support showing of repair item owner's faces even when they're not in the sector, as long as they still work for player
@@ -622,7 +612,7 @@ static void EnterShopKeeperInterface(void)
 	guiSKI_DoneButton = MakeButton(guiSKI_DoneButtonImage, SKI_Text[SKI_TEXT_DONE], SKI_DONE_BUTTON_X,  MSYS_PRIORITY_HIGH + 10, BtnSKI_DoneButtonCallback, SkiMessageBoxText[SKI_DONE_BUTTON_HELP_TEXT]);
 
 	//Blanket the entire screen
-	MSYS_DefineRegion(&gSKI_EntireScreenMouseRegions, 0, 0, SCREEN_WIDTH, 339, MSYS_PRIORITY_HIGH - 2, CURSOR_NORMAL, MSYS_NO_CALLBACK, MSYS_NO_CALLBACK);
+	MSYS_DefineRegion( &gSKI_EntireScreenMouseRegions, 0, 0, SCREEN_WIDTH, INV_INTERFACE_START_Y, MSYS_PRIORITY_HIGH - 2, CURSOR_NORMAL, MSYS_NO_CALLBACK, MSYS_NO_CALLBACK);
 
 	//Create the mouse regions for the inventory slot
 	CreateSkiInventorySlotMouseRegions( );
@@ -788,9 +778,8 @@ static void ExitShopKeeperInterface(void)
 	FreeMouseCursor();
 
 	//Delete the main shopkeep background
-	DeleteVideoObject(guiMainTradeScreenImage);
-	DeleteVideoObject(guiItemCrossOut);
-	DeleteVideoSurface(guiCornerWhereTacticalIsStillSeenImage);
+	RemoveVObject(guiMainTradeScreenImage);
+	RemoveVObject(guiItemCrossOut);
 
 	ShutUpShopKeeper();
 
@@ -967,6 +956,25 @@ static void HandleShopKeeperInterface(void)
 }
 
 
+// areas around the SKI that show the tactical view
+static auto &
+GetTacticalViewRects() {
+	static const SGPBox
+		redrawRects[] = {
+			{
+				SKI_TACTICAL_BACKGROUND_START_X, SKI_TACTICAL_BACKGROUND_START_Y,
+				static_cast<UINT16>( SCREEN_WIDTH - SKI_TACTICAL_BACKGROUND_START_X ), SKI_TACTICAL_BACKGROUND_START_HEIGHT
+			},
+			{
+				0, SKI_TACTICAL_BACKGROUND_START_HEIGHT,
+				SCREEN_WIDTH, static_cast<UINT16>( INV_INTERFACE_START_Y - SKI_TACTICAL_BACKGROUND_START_HEIGHT )
+			}
+		};
+
+	return redrawRects;
+}
+
+
 static void CrossOutUnwantedItems(void);
 static void RestoreTacticalBackGround(void);
 
@@ -1012,14 +1020,10 @@ static void RenderShopKeeperInterface(void)
 	if( gfRenderScreenOnNextLoop )
 	{
 	//	BlitBufferToBuffer(FRAME_BUFFER, guiCornerWhereTacticalIsStillSeenImage, SKI_TACTICAL_BACKGROUND_START_X, SKI_TACTICAL_BACKGROUND_START_Y, SKI_TACTICAL_BACKGROUND_START_WIDTH, SKI_TACTICAL_BACKGROUND_START_HEIGHT);
-		SGPBox const SrcRect =
-		{
-			SKI_TACTICAL_BACKGROUND_START_X,
-			SKI_TACTICAL_BACKGROUND_START_Y,
-			SKI_TACTICAL_BACKGROUND_START_WIDTH,
-			SKI_TACTICAL_BACKGROUND_START_HEIGHT
-		};
-		BltVideoSurface(guiCornerWhereTacticalIsStillSeenImage, guiSAVEBUFFER, 0, 0, &SrcRect);
+
+		for( const SGPBox &curRect : GetTacticalViewRects()) {
+			BltVideoSurface( guiEXTRABUFFER, FRAME_BUFFER, curRect.x, curRect.y, &curRect );
+		}
 
 		gfRenderScreenOnNextLoop = FALSE;
 	}
@@ -1055,7 +1059,9 @@ static void RestoreTacticalBackGround(void)
 
 	//BlitBufferToBuffer(guiCornerWhereTacticalIsStillSeenImage, FRAME_BUFFER, SKI_TACTICAL_BACKGROUND_START_X, SKI_TACTICAL_BACKGROUND_START_Y, SKI_TACTICAL_BACKGROUND_START_WIDTH, SKI_TACTICAL_BACKGROUND_START_HEIGHT);
 
-	BltVideoSurface(FRAME_BUFFER, guiCornerWhereTacticalIsStillSeenImage, SKI_TACTICAL_BACKGROUND_START_X, SKI_TACTICAL_BACKGROUND_START_Y, NULL);
+	for( const SGPBox &curRect : GetTacticalViewRects()) {
+		BltVideoSurface( FRAME_BUFFER, guiEXTRABUFFER, curRect.x, curRect.y, &curRect );
+	}
 
 	InvalidateScreen();
 }
@@ -2155,7 +2161,7 @@ static int RepairmanItemQsortCompare(void const* pArg1, void const* pArg2)
 	Assert(inv_slot1.sSpecialItemElement != -1);
 	Assert(inv_slot2.sSpecialItemElement != -1);
 
-	DEALER_ITEM_HEADER const (& dih)[MAXITEMS] = gArmsDealersInventory[gbSelectedArmsDealerID];
+	const auto& dih = gArmsDealersInventory[gbSelectedArmsDealerID];
 	UINT32             const repair_time1      = dih[inv_slot1.sItemIndex].SpecialItem[inv_slot1.sSpecialItemElement].uiRepairDoneTime;
 	UINT32             const repair_time2      = dih[inv_slot2.sItemIndex].SpecialItem[inv_slot2.sSpecialItemElement].uiRepairDoneTime;
 
@@ -2398,7 +2404,7 @@ static BOOLEAN RepairIsDone(UINT16 usItemIndex, UINT8 ubElement)
 	// if the item is imprinted (by anyone, even player's mercs), and it's the elctronics guy repairing it
 	if (
 		/*( gArmsDealersInventory[ gbSelectedArmsDealerID ][ usItemIndex ].SpecialItem[ ubElement ].Info.ubImprintID == (NO_PROFILE + 1) ) && */
-		GetDealer(gbSelectedArmsDealerID)->hasFlag(ArmsDealerFlag::REPAIRS_ELECTRONICS))
+		GCM->getDealer(gbSelectedArmsDealerID)->hasFlag(ArmsDealerFlag::REPAIRS_ELECTRONICS))
 	{
 		// then reset the imprinting!
 		RepairItem.ItemObject.ubImprintID = NO_PROFILE;
@@ -4701,7 +4707,7 @@ static void EvaluateItemAddedToPlayersOfferArea(INT8 bSlotID, BOOLEAN fFirstOne)
 					}
 
 					// check if it's the first time a rocket rifle is being submitted to the electronics guy
-					if (fRocketRifleWasEvaluated && GetDealer(gbSelectedArmsDealerID)->hasFlag(ArmsDealerFlag::REPAIRS_ELECTRONICS))
+					if (fRocketRifleWasEvaluated && GCM->getDealer(gbSelectedArmsDealerID)->hasFlag(ArmsDealerFlag::REPAIRS_ELECTRONICS))
 					{
 						//if he hasn't yet said his quote
 						if( !( gArmsDealerStatus[ gbSelectedArmsDealerID ].ubSpecificDealerFlags & ARMS_DEALER_FLAG__FREDO_HAS_SAID_ROCKET_RIFLE_QUOTE ) )
@@ -5960,7 +5966,7 @@ static void HandlePossibleRepairDelays(void)
 	// assume there won't be a delay
 	gfStartWithRepairsDelayedQuote = FALSE;
 
-	if (!GetDealer(gbSelectedArmsDealerID)->hasFlag(ArmsDealerFlag::DELAYS_REPAIR)) return;
+	if (!GCM->getDealer(gbSelectedArmsDealerID)->hasFlag(ArmsDealerFlag::DELAYS_REPAIR)) return;
 
 	ARMS_DEALER_STATUS& status = gArmsDealerStatus[gbSelectedArmsDealerID];
 	// because the quotes are so specific, we'll only use them once per game per repairman

@@ -11,18 +11,13 @@
 
 SavedGameStates g_gameStates;
 
-uint32_t SaveStatesSize()
-{
-	auto str = g_gameStates.Serialize().to_std_string();
-	return str.size();
-}
-
-void SaveStatesToSaveGameFile(HWFILE const hFile)
+uint32_t SaveStatesToSaveGameFile(SGPFile & hFile)
 {
 	std::string data = g_gameStates.Serialize().to_std_string();
-	UINT32      len  = data.length();
-	hFile->write(&len, sizeof(UINT32));
-	hFile->write(data.c_str(), len);
+	uint32_t const len{ static_cast<uint32_t>(data.length()) };
+	hFile.write(&len, sizeof(len));
+	hFile.write(data.data(), len);
+	return len;
 }
 
 void LoadStatesFromSaveFile(HWFILE const hFile, SavedGameStates &states)
@@ -141,12 +136,11 @@ void SavedGameStates::Deserialize(const ST::string& s)
 	for (const auto& key : obj.keys())
 	{
 		auto val = obj[key.c_str()];
-		STORABLE_TYPE v = DeserializeStorableType(val);
-		states[key] = v;
+		states[key] = DeserializeStorableType(val);
 	}
 }
 
-ST::string SavedGameStates::Serialize()
+ST::string SavedGameStates::Serialize() const
 {
 	JsonObject obj;
 	for (const auto& entry : states)
@@ -161,7 +155,7 @@ void SavedGameStates::Clear()
 	states.clear();
 }
 
-StateTable SavedGameStates::GetAll()
+StateTable const& SavedGameStates::GetAll() const noexcept
 {
 	return states;
 }
@@ -177,9 +171,8 @@ void AddModInfoToGameStates(SavedGameStates &states) {
 
 		arr.push(obj.toValue());
 	}
-	auto result = arr.toValue().serialize();
 
-	g_gameStates.Set(MODS_KEY, result);
+	states.Set(MODS_KEY, arr.toValue().serialize());
 }
 
 std::vector<std::pair<ST::string, ST::string>> GetModInfoFromGameStates(const SavedGameStates &states) {
@@ -188,15 +181,15 @@ std::vector<std::pair<ST::string, ST::string>> GetModInfoFromGameStates(const Sa
 		auto errorMsg = ST::format("Failed to parse JSON from saved game states for mods: missing `{}` key", MODS_KEY);
 		throw std::runtime_error(errorMsg.c_str());
 	}
-	auto str = states.Get<ST::string>(MODS_KEY);
+	auto && str{ states.Get<ST::string>(MODS_KEY) };
 	auto json = JsonValue::deserialize(str);
 
 	for (auto& modJson : json.toVec()) {
 		auto obj = modJson.toObject();
-		ST::string name = obj.GetString("name");
-		ST::string version = obj.GetString("version");
-
-		mods.push_back(std::pair<ST::string, ST::string>(name, version));
+		mods.emplace_back(
+			obj.GetString("name"),
+			obj.GetString("version")
+		);
 	}
 
 	return mods;

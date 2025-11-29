@@ -812,7 +812,15 @@ static void DisplayFastHelp(MOUSE_REGION* const r)
 	if (x <  0)                x = 0;
 	if (x >= SCREEN_WIDTH - w) x = SCREEN_WIDTH - w - 4;
 
-	INT32 y = r->RegionTopLeftY - h * 3 / 4;
+	int32_t y = r->RegionTopLeftY;
+	if ((r->RegionBottomRightY - r->RegionTopLeftY) < h)
+	{ // case for regions too small for their tall and obstructive tooltips: savegames, effective attributes and others
+		y += -h - 1;
+	}
+	else
+	{
+		y += -h * 3 / 4;
+	}
 	if (y <  0)                 y = 0;
 	if (y >= SCREEN_HEIGHT - h) y = SCREEN_HEIGHT - h - 15;
 
@@ -862,6 +870,16 @@ static UINT32 GetWidthOfString(const ST::utf32_buffer& codepoints)
 				font = bold_font;
 				break;
 
+			case U'^':
+				c    = *++i;
+				font = normal_font;
+				break;
+
+			case U'~':
+				c    = *++i;
+				font = normal_font;
+				break;
+
 			default:
 				font = normal_font;
 				break;
@@ -896,6 +914,18 @@ static void DisplayHelpTokenizedString(const ST::utf32_buffer& codepoints, INT16
 				c = *++i;
 				font       = bold_font;
 				foreground = 146;
+				break;
+
+			case U'^':
+				c = *++i;
+				font       = normal_font;
+				foreground = FONT_LTGREEN;
+				break;
+
+			case U'~':
+				c = *++i;
+				font       = normal_font;
+				foreground = FONT_LTRED;
 				break;
 
 			default:

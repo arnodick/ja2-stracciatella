@@ -3,11 +3,9 @@
 #include "LoadSaveMercProfile.h"
 #include "Overhead_Types.h"
 #include "SGPFile.h"
-#include "Tactical_Save.h"
+#include "Soldier_Profile_Type.h"
 
-#include <string_theory/string>
-
-#include <stdexcept>
+#include <array>
 
 
 /** Calculates soldier profile checksum. */
@@ -34,24 +32,19 @@ UINT32 SoldierProfileChecksum(MERCPROFILESTRUCT const& p)
 
 
 /**
-* Extract merc profile from the binary data.
-* @param encodingCorrection Perform encoding correction - it is necessary for loading strings from the game data files. */
-void ExtractMercProfile(BYTE const* const Src, MERCPROFILESTRUCT& p, bool stracLinuxFormat, UINT32 *checksum,
-			const IEncodingCorrector *fixer)
+* Extract merc profile from the binary data. */
+void ExtractMercProfile(BYTE const* const Src, MERCPROFILESTRUCT& p, bool stracLinuxFormat, UINT32 *checksum, bool const isCorrectlyEncoded)
 {
 	DataReader S{Src};
 
-	if(stracLinuxFormat)
-	{
-		p.zName = S.readUTF32(NAME_LENGTH);
-		p.zNickname = S.readUTF32(NICKNAME_LENGTH);
+	if (isCorrectlyEncoded) {
+		p.zName = S.readString(NAME_LENGTH, stracLinuxFormat);
+		p.zNickname = S.readString(NICKNAME_LENGTH, stracLinuxFormat);
 	}
-	else
-	{
-		p.zName = S.readUTF16(NAME_LENGTH, fixer);
-		p.zNickname = S.readUTF16(NICKNAME_LENGTH, fixer);
+	else {
+		p.zName = S.readUTF16(NAME_LENGTH, false);
+		p.zNickname = S.readUTF16(NICKNAME_LENGTH, false);
 	}
-
 	EXTR_SKIP(S, 28)
 	EXTR_U8(S, p.ubFaceIndex)
 	p.PANTS = S.readUTF8(PaletteRepID_LENGTH, ST::substitute_invalid);
@@ -234,18 +227,11 @@ void ExtractImpProfileFromFile(SGPFile *hFile, INT32 *iProfileId, INT32 *iPortra
 	// read in the profile
 	// not checking the checksum
 	UINT32 checksum;
-	if(fileSize >= MERC_PROFILE_SIZE_STRAC_LINUX)
-	{
-		std::vector<BYTE> data(MERC_PROFILE_SIZE_STRAC_LINUX);
-		hFile->read(data.data(), MERC_PROFILE_SIZE_STRAC_LINUX);
-		ExtractMercProfile(data.data(), p, true, &checksum, NULL);
-	}
-	else
-	{
-		std::vector<BYTE> data(MERC_PROFILE_SIZE);
-		hFile->read(data.data(), MERC_PROFILE_SIZE);
-		ExtractMercProfile(data.data(), p, false, &checksum, NULL);
-	}
+	std::array<BYTE, std::max(MERC_PROFILE_SIZE, MERC_PROFILE_SIZE_STRAC_LINUX)> data;
+	bool const isOldUnixFormat{ fileSize >= MERC_PROFILE_SIZE_STRAC_LINUX };
+	hFile->read(data.data(),
+		isOldUnixFormat ? MERC_PROFILE_SIZE_STRAC_LINUX : MERC_PROFILE_SIZE);
+	ExtractMercProfile(data.data(), p, isOldUnixFormat, &checksum, true);
 }
 
 
@@ -421,21 +407,4 @@ void InjectMercProfileIntoFile(HWFILE const f, MERCPROFILESTRUCT const& p)
 	BYTE Data[716];
 	InjectMercProfile(Data, p);
 	f->write(Data, sizeof(Data));
-}
-
-
-/** Load raw merc profiles.
-* @param f Open file with profile data.
-* @param numProfiles Number of profiles to load
-* @param profiles Array for storing profile data */
-void LoadRawMercProfiles(HWFILE const f, int numProfiles, MERCPROFILESTRUCT *profiles, const IEncodingCorrector *fixer)
-{
-	for (int i = 0; i != numProfiles; ++i)
-	{
-		BYTE data[MERC_PROFILE_SIZE];
-		JA2EncryptedFileRead(f, data, sizeof(data));
-		UINT32 checksum;
-		ExtractMercProfile(data, profiles[i], false, &checksum, fixer);
-		// not checking the checksum
-	}
 }

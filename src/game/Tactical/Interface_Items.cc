@@ -8,9 +8,12 @@
 #include "LoadSaveObjectType.h"
 #include "HImage.h"
 #include "Map_Screen_Interface_Bottom.h"
+#include "Object_Cache.h"
+#include "Soldier_Functions.h"
 #include "Soldier_Macros.h"
 #include "TileDef.h"
 #include "Timer_Control.h"
+#include "Types.h"
 #include "VObject.h"
 #include "SysUtil.h"
 #include "Overhead.h"
@@ -202,13 +205,17 @@ static BOOLEAN gfBadThrowItemCTGH;
 BOOLEAN gfDontChargeAPsToPickup = FALSE;
 static BOOLEAN gbItemPointerLocateGood = FALSE;
 
+namespace {
 // ITEM DESCRIPTION BOX STUFF
-static SGPVObject *guiItemDescBox;
-static SGPVObject *guiMapItemDescBox;
+cache_key_t const guiItemDescBox{ INTERFACEDIR "/infobox.sti" };
+cache_key_t const guiMapItemDescBox{ INTERFACEDIR "/iteminfoc.sti" };
+
+cache_key_t const guiBullet{ INTERFACEDIR "/bullet.sti" };
+cache_key_t const guiMoneyGraphicsForDescBox{ INTERFACEDIR "/info_bil.sti" };
+cache_key_t const guiGoldKeyVO{ INTERFACEDIR "/gold_key_button.sti" };
+}
 static SGPVObject *guiItemGraphic;
 static UINT8 guiItemGraphicIndex;
-static SGPVObject *guiMoneyGraphicsForDescBox;
-static SGPVObject *guiBullet;
 BOOLEAN gfInItemDescBox = FALSE;
 static UINT32 guiCurrentItemDescriptionScreen=0;
 OBJECTTYPE *gpItemDescObject = NULL;
@@ -411,7 +418,7 @@ static INT8 gbCompatibleAmmo[NUM_INV_SLOTS];
 INT8 gbInvalidPlacementSlot[ NUM_INV_SLOTS ];
 static UINT16 us16BPPItemCyclePlacedItemColors[20];
 static SGPVObject* guiBodyInvVO[4][2];
-static SGPVObject* guiGoldKeyVO;
+
 INT8 gbCompatibleApplyItem = FALSE;
 
 
@@ -665,9 +672,6 @@ void InitInvSlotInterface(INV_REGION_DESC const* const pRegionDesc,
 	guiBodyInvVO[3][0] = AddVideoObjectFromFile(INTERFACEDIR "/inventory_figure_female.sti");
 	guiBodyInvVO[3][1] = AddVideoObjectFromFile(INTERFACEDIR "/inventory_figure_female_h.sti");
 
-	// Add gold key graphic
-	guiGoldKeyVO = AddVideoObjectFromFile(INTERFACEDIR "/gold_key_button.sti");
-
 	// Add camo region
 	UINT16 const x = pCamoRegion->uX;
 	UINT16 const y = pCamoRegion->uY;
@@ -771,7 +775,7 @@ void ShutdownInvSlotInterface()
 		FOR_EACH(SGPVObject*, k, *i) DeleteVideoObject(*k);
 	}
 
-	DeleteVideoObject(guiGoldKeyVO);
+	RemoveVObject(guiGoldKeyVO);
 
 	FOR_EACH(MOUSE_REGION, i, gSMInvRegion)
 	{
@@ -1433,7 +1437,7 @@ BOOLEAN HandleCompatibleAmmoUI(const SOLDIERTYPE* pSoldier, INT8 bInvPos, BOOLEA
 					}
 				}
 
-				gubSkiDirtyLevel = SKI_DIRTY_LEVEL1;
+				gubSkiDirtyLevel = SKI_DIRTY_LEVEL2;
 				return( TRUE );
 			}
 		}
@@ -1448,7 +1452,7 @@ BOOLEAN HandleCompatibleAmmoUI(const SOLDIERTYPE* pSoldier, INT8 bInvPos, BOOLEA
 			{
 				pTestObject = &(pSoldier->inv[ bInvPos ]);
 				gpHighLightedItemObject = NULL;
-				gubSkiDirtyLevel = SKI_DIRTY_LEVEL1;
+				gubSkiDirtyLevel = SKI_DIRTY_LEVEL2;
 			}
 		}
 	}
@@ -1693,26 +1697,44 @@ BOOLEAN InItemDescriptionBox( )
 
 void CycleItemDescriptionItem( )
 {
+	// Don't try to cycle through keys in the keyring, because they do not
+	// have a dedicated slot where we could place the new item.
+	if (InKeyRingPopup()) return;
+
 	// Delete old box...
 	DeleteItemDescriptionBox( );
 
 	// Make new item....
-	auto usOldItem = gpItemDescSoldier->inv[HANDPOS].usItem;
+	auto const oldItemIndex = gpItemDescObject->usItem;
+	auto items = GCM->getItems();
+	auto it = std::find_if(items.begin(), items.end(), [oldItemIndex](const ItemModel* item) -> bool {
+		return item->getItemIndex() == oldItemIndex;
+	});
+	if (it == items.end()) {
+		SLOGE("Failed to find current item {} for cycling", oldItemIndex);
+		return;
+	}
 
 	if (_KeyDown(SDLK_END))
 	{
 		// cycle backwards
-		usOldItem = usOldItem > 1 ? usOldItem - 1 : MAXITEMS - 1;
+		it = it == items.begin() ? items.end() - 1 : it - 1;
 	}
 	else
 	{
 		// cycle forwards
-		usOldItem = usOldItem < MAXITEMS - 1 ? usOldItem + 1 : 1;
+		++it;
+		if (it == items.end()) {
+			it = items.begin();
+		}
 	}
 
-	CreateItem(usOldItem, 100, &gpItemDescSoldier->inv[HANDPOS]);
+	const auto newItemIndex = (*it)->getItemIndex();
 
-	InternalInitItemDescriptionBox( &( gpItemDescSoldier->inv[ HANDPOS ] ), INTERFACE_START_X + 214, (INT16)(INV_INTERFACE_START_Y + 1 ), gubItemDescStatusIndex, gpItemDescSoldier );
+	CreateItem(newItemIndex, 100, gpItemDescObject);
+
+	InternalInitItemDescriptionBox(gpItemDescObject, gsInvDescX, gsInvDescY,
+		gubItemDescStatusIndex, gpItemDescSoldier);
 }
 
 
@@ -1724,12 +1746,15 @@ void InitItemDescriptionBox(SOLDIERTYPE* pSoldier, UINT8 ubPosition, INT16 sX, I
 
 void InitKeyItemDescriptionBox(SOLDIERTYPE* const pSoldier, const UINT8 ubPosition, const INT16 sX, const INT16 sY)
 {
-	OBJECTTYPE *pObject;
+	// To be able to display the key we must have create a temporary OBJECTTYPE
+	// from the keyring. Using a static variable is easier and safer than
+	// allocating a new object on the heap.
+	static OBJECTTYPE tempKeyObject;
 
-	AllocateObject( &pObject );
-	CreateKeyObject( pObject, pSoldier->pKeyRing[ ubPosition ].ubNumber ,pSoldier->pKeyRing[ ubPosition ].ubKeyID );
+	auto const keyInRing = pSoldier->pKeyRing[ubPosition];
+	CreateKeyObject(&tempKeyObject, keyInRing.ubNumber, keyInRing.ubKeyID);
 
-	InternalInitItemDescriptionBox(pObject, sX, sY, 0, pSoldier);
+	InternalInitItemDescriptionBox(&tempKeyObject, sX, sY, 0, pSoldier);
 }
 
 
@@ -1861,11 +1886,6 @@ void InternalInitItemDescriptionBox(OBJECTTYPE* const o, const INT16 sX, const I
 		}
 	}
 
-	// Load graphic
-	guiItemDescBox    = AddVideoObjectFromFile(INTERFACEDIR "/infobox.sti");
-	guiMapItemDescBox = AddVideoObjectFromFile(INTERFACEDIR "/iteminfoc.sti");
-	guiBullet         = AddVideoObjectFromFile(INTERFACEDIR "/bullet.sti");
-
 	if (o->usItem != MONEY)
 	{
 		const AttachmentGfxInfo* const agi = (in_map ? &g_map_attachment_info : &g_attachment_info);
@@ -1890,8 +1910,6 @@ void InternalInitItemDescriptionBox(OBJECTTYPE* const o, const INT16 sX, const I
 		gRemoveMoney.uiTotalAmount    = o->uiMoneyAmount;
 		gRemoveMoney.uiMoneyRemaining = o->uiMoneyAmount;
 		gRemoveMoney.uiMoneyRemoving  = 0;
-
-		guiMoneyGraphicsForDescBox = AddVideoObjectFromFile(INTERFACEDIR "/info_bil.sti");
 
 		// Create buttons for the money
 		guiMoneyButtonImage = LoadButtonImage(INTERFACEDIR "/info_bil.sti", 1, 2);
@@ -2214,7 +2232,7 @@ void RenderItemDescriptionBox(void)
 	INT16      const  dx     = gsInvDescX;
 	INT16      const  dy     = gsInvDescY;
 
-	SGPVObject const* const box_gfx = in_map ? guiMapItemDescBox : guiItemDescBox;
+	auto * const box_gfx = in_map ? guiMapItemDescBox : guiItemDescBox;
 	BltVideoObject(guiSAVEBUFFER, box_gfx, 0, dx, dy);
 
 	// Display the money 'separating' border
@@ -2342,7 +2360,7 @@ void RenderItemDescriptionBox(void)
 	{
 		{
 			const WeaponModel * w = GCM->getWeapon(obj.usItem);
-			if (w->calibre->index != NOAMMO)
+			if (w->calibre->index != CalibreModel::NOAMMO)
 			{
 				ST::string name = *w->calibre->getName();
 				pStr += ST::format("{} ", name);
@@ -2704,9 +2722,9 @@ void DeleteItemDescriptionBox( )
 		}
 	}
 
-	DeleteVideoObject(guiItemDescBox);
-	DeleteVideoObject(guiMapItemDescBox);
-	DeleteVideoObject(guiBullet);
+	RemoveVObject(guiItemDescBox);
+	RemoveVObject(guiMapItemDescBox);
+	RemoveVObject(guiBullet);
 	DeleteVideoObject(guiItemGraphic);
 
 	gfInItemDescBox = FALSE;
@@ -2755,15 +2773,6 @@ void DeleteItemDescriptionBox( )
 		fMapPanelDirty = TRUE;
 		fTeamPanelDirty = TRUE;
 		fMapScreenBottomDirty = TRUE;
-	}
-
-	if (InKeyRingPopup())
-	{
-		DeleteKeyObject(gpItemDescObject);
-		gpItemDescObject = NULL;
-		fShowDescriptionFlag = FALSE;
-		fInterfacePanelDirty = DIRTYLEVEL2;
-		return;
 	}
 
 	fShowDescriptionFlag = FALSE;
@@ -3390,8 +3399,7 @@ BOOLEAN HandleItemPointerClick( UINT16 usMapPos )
 					if ( sActionGridNo != -1 && gbItemPointerSrcSlot != NO_SLOT )
 					{
 							// Make a temp object for ammo...
-							gpItemPointerSoldier->pTempObject  = new OBJECTTYPE{};
-							*gpItemPointerSoldier->pTempObject = TempObject;
+							SetTempObject(gpItemPointerSoldier, TempObject);
 
 							// Remove from soldier's inv...
 							RemoveObjs( &( gpItemPointerSoldier->inv[ gbItemPointerSrcSlot ] ), 1 );
@@ -3484,8 +3492,7 @@ BOOLEAN HandleItemPointerClick( UINT16 usMapPos )
 				switch ( gAnimControl[ gpItemPointerSoldier->usAnimState ].ubHeight )
 				{
 					case ANIM_STAND:
-						gpItemPointerSoldier->pTempObject = new OBJECTTYPE{};
-						*gpItemPointerSoldier->pTempObject = *gpItemPointer;
+						SetTempObject(gpItemPointerSoldier, *gpItemPointer);
 						gpItemPointerSoldier->sPendingActionData2 = usMapPos;
 
 						// Turn towards.....gridno
@@ -4012,8 +4019,7 @@ void RenderKeyRingPopup(const BOOLEAN fFullRender)
 		}
 	}
 
-	OBJECTTYPE o;
-	o = OBJECTTYPE{};
+	OBJECTTYPE o{};
 	o.bStatus[0] = 100;
 
 	ETRLEObject const& pTrav = guiItemPopupBoxes->SubregionProperties(0);
